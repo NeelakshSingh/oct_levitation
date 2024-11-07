@@ -28,6 +28,7 @@ class NarrowRingMagnet:
     m: float = 2.25e-3 # kg
     V: float = np.pi*(ro**2 - ri**2)*t # m^3
     dps: float = Constants.Br_neodymium*V/Constants.mu_0 # kg*m^2/s
+    mframe: float = 2.9e-3
 
 class OctomagCalibratedModel:
 

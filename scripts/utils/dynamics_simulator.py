@@ -38,7 +38,8 @@ class DynamicsSimulator:
 
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
-        m = M_FRAME + MAGNET_STACK_SIZE * M_SMALL_MAGNET
+        m = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + \
+            common.NarrowRingMagnet.mframe
         self.sys = ZLevitatingMassSystem(m, B, X0, L_BOUNDS, U_BOUNDS)
 
         self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
@@ -68,6 +69,7 @@ class DynamicsSimulator:
         self.sys.update(self.last_command_recv, self.dt)
         state = self.sys.get_state()
         self.dipole_position = np.array([0, 0, state[0]])
+        self.__tf_msg.header.stamp = rospy.Time.now()
         self.__tf_msg.transform.translation.z = state[0]
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
         self.vicon_pub.publish(self.__tf_msg)
