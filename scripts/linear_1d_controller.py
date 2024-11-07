@@ -11,15 +11,15 @@ from control_utils.msg import VectorStamped
 from geometry_msgs.msg import TransformStamped
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 
-HARDWARE_CONNECTED = True
+HARDWARE_CONNECTED = False
 KP = 1.0
 KI = 0.0
-KD = 0.0
+KD = 1.00513681 # from LQR
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
-MAGNET_TYPE = "wide_ring" # options: "wide_ring", "narrow_ring"
+MAGNET_TYPE = "narrow_ring" # options: "wide_ring", "narrow_ring"
 MAGNET_STACK_SIZE = 1
-DIPOLE_STRENGTH_DICT = {"wide_ring": 0.1, "narrow_ring": 0.1} # per stack unit [si]
+DIPOLE_STRENGTH_DICT = {"wide_ring": 0.1, "narrow_ring": common.NarrowRingMagnet.dps} # per stack unit [si]
 DIPOLE_AXIS = np.array([0, 0, 1])
 
 class Linear1DPositionPIDController:

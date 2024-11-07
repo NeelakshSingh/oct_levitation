@@ -9,8 +9,25 @@ from control_utils.general.utilities import get_actuation_matrix
 from mag_manip import mag_manip
 from geometry_msgs.msg import TransformStamped
 
+from dataclasses import dataclass
+
 
 OCTOMAG_ALL_COILS_ENABLED = [True, True, True, True, True, True, True, True]
+
+@dataclass
+class Constants:
+    g: float = 9.81 # m/s^2
+    mu_0: float = 4*np.pi*1e-7 # T*m/A
+    Br_neodymium: float = 1.2 # T
+
+@dataclass
+class NarrowRingMagnet:
+    t: float = 4.96e-3 # m
+    ri: float = 5.11e-3/2 # m
+    ro: float = 9.95e-3/2 # m
+    m: float = 2.25e-3 # kg
+    V: float = np.pi*(ro**2 - ri**2)*t # m^3
+    dps: float = Constants.Br_neodymium*V/Constants.mu_0 # kg*m^2/s
 
 class OctomagCalibratedModel:
 

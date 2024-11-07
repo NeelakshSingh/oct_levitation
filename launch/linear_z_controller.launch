@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="oct_levitation" type="linear_1d_controller.py" output="screen"/>
+    <node pkg="oct_ctrl" type="safety_filter.py" output="screen"/>
+    <node pkg="oct_levitation" type="dynamics_simulatior.py" output="screen"/>
+</launch>
