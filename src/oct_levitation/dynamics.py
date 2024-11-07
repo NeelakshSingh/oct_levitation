@@ -50,9 +50,7 @@ class ZLevitatingMassSystem(DynamicalSystemInterface):
         self.ubounds = ubounds
 
     def update(self, u: Union[np.ndarray, float], dt: float):
-        self.x = self.x + dt * (self.A @ self.x.reshape(2,1) + self.B * (u - self.m * common.Constants.g))
-        self.x = self.x.flatten()
-        print(self.x)
+        self.x = self.x + dt * (self.A @ self.x.reshape(2,1) + self.B * (u - self.m * common.Constants.g)).flatten()
         self.x = np.clip(self.x, self.lbounds, self.ubounds)
         if self.x[0] > self.ubounds[0]:
             self.x[0] = self.ubounds[0]

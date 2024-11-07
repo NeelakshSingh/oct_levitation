@@ -39,7 +39,7 @@ class DynamicsSimulator:
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
         m = M_FRAME + MAGNET_STACK_SIZE * M_SMALL_MAGNET
-        self.sys = ZLevitatingMassSystem(m, B, X0)
+        self.sys = ZLevitatingMassSystem(m, B, X0, L_BOUNDS, U_BOUNDS)
 
         self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
         self.mag_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
