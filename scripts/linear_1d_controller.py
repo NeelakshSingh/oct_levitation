@@ -3,15 +3,17 @@ import rospy
 import tf2_ros
 
 from time import perf_counter
+from copy import deepcopy
 
 import oct_levitation.common as common
 from oct_levitation.controllers import PID1D
+from oct_levitation.filters import SingleChannelLiveFilter, MultiChannelLiveFilter
 
 from control_utils.msg import VectorStamped
 from geometry_msgs.msg import TransformStamped
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 
-HARDWARE_CONNECTED = True
+HARDWARE_CONNECTED = False
 KP = 1.0
 KI = 0.0
 KD = 1.00513681 # from LQR
@@ -35,7 +37,7 @@ class Linear1DPositionPIDController:
         self.current_pub = rospy.Publisher("/orig_currents", VectorStamped, queue_size=10)
         self.current_msg = VectorStamped()
         self.Ts = 1e-3
-        self.pid = PID1D(KP, KI, KD, INTEGRATOR_WINDUP_LIMIT, CLEGG_INTEGRATOR)
+        rospy.logwarn("HARDWARE_CONNECTED is set to {}".format(HARDWARE_CONNECTED))
         init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)  
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
         self.__tf_buffer = tf2_ros.Buffer()
@@ -49,9 +51,28 @@ class Linear1DPositionPIDController:
         
         rospy.sleep(0.1) # wait for the tf listener to get the first transform
 
-        self.current_timer = rospy.Timer(rospy.Duration(self.Ts), self.current_callback)
+
+        self.d_filter = SingleChannelLiveFilter(
+            N = 3, Wn = 5,
+            btype='low',
+            analog=False,
+            ftype='butter',
+            fs = 1000
+        )
+        self.e_filter = deepcopy(self.d_filter)
+        self.currents_filter = MultiChannelLiveFilter(
+            channels=8,
+            N = 3, 
+            Wn = 80,
+            btype='low',
+            analog=False,
+            ftype='butter',
+            fs = 1000
+        )
+        self.pid = PID1D(KP, KI, KD, INTEGRATOR_WINDUP_LIMIT, CLEGG_INTEGRATOR)
         self.last_time = rospy.Time.now().to_sec()
         self.__first_time = True
+        self.current_timer = rospy.Timer(rospy.Duration(self.Ts), self.current_callback)
 
     def current_callback(self, event):
         if self.__first_time:
@@ -73,6 +94,7 @@ class Linear1DPositionPIDController:
         alloc_mat = np.linalg.pinv(M @ A)
         desired_wrench = np.array([[0, 0, 0, 0, 0, fz]]).T
         desired_currents = alloc_mat @ desired_wrench
+        desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
         self.current_msg.vector = desired_currents.flatten().tolist()
         self.current_msg.header.stamp = rospy.Time.now()

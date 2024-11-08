@@ -1,0 +1,86 @@
+# !/usr/bin/env python3
+
+import rospy
+import rospkg
+import sys
+import numpy as np
+
+from geometry_msgs.msg import WrenchStamped
+
+# from pprint import pprint
+
+rospack = rospkg.RosPack()
+path = rospack.get_path('ati_daq_interface')
+sys.path.append(path)
+
+import oct_levitation.filters as filt
+
+class SubscriberFilter():
+
+    def __init__(self):
+        rospy.init_node("subscriber_filter", anonymous = True)
+
+        self.atift_params = rospy.get_param("~atift")
+        self.filter_params = rospy.get_param("~filter")
+        self.robot_name = self.atift_params["robot_name"] # str
+        self.sensor_frame = self.atift_params["sensor_frame"] # str
+
+        self.filter_type = self.filter_params["type"] # butter, cheby1, cheby2, ellip, bessel
+        self.filter_N = self.filter_params["N"] # order of the filter
+        self.filter_Wn1 = self.filter_params["Wn1"] # critical frequency 1
+        self.filter_Wn2 = self.filter_params["Wn2"] # critical frequency 2
+        self.filter_btype = self.filter_params["btype"] # lowpass, highpass, bandpass, bandstop
+        self.filter_analog = False # bool
+        # self.filter_fs = self.filter_params["filter_fs"] # auto if None
+        self.filter_fs = self.filter_params["fs"]
+        self.filter_sos = self.filter_params["use_sos"] # bool
+        self.filter_rs = self.filter_params["rs"] # stopband attenuation
+        self.filter_rp = self.filter_params["rp"] # ripple in the stopband
+
+        # create the filter
+
+        if self.filter_btype=="band" or self.filter_btype=="bandstop":
+            self.Wn = [self.filter_Wn1, self.filter_Wn2]
+        else:
+            self.Wn = self.filter_Wn1
+
+        self.live_filter = filt.MultiChannelLiveFilter(
+            channels=6,
+            N=self.filter_N,
+            Wn=self.Wn,
+            btype=self.filter_btype,
+            analog=self.filter_analog,
+            rs=self.filter_rs,
+            rp=self.filter_rp,
+            fs=self.filter_fs,
+            use_sos=self.filter_sos,
+            ftype=self.filter_type
+        )
+        
+        self.sub_name = "/"+self.robot_name+"/atift/wrench"
+        self.pub_name = "/"+self.robot_name+"/atift/wrench_filtered"
+        
+        self.ftsub = rospy.Subscriber(self.sub_name, WrenchStamped, callback=self.callback)
+        self.pub = rospy.Publisher(self.pub_name, WrenchStamped, queue_size=10)
+
+    def callback(self, msg):
+        wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z, msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
+        wrench_filtered = self.live_filter(wrench)
+
+        msg_filtered = WrenchStamped()
+        msg_filtered.header.frame_id = self.sensor_frame
+        msg_filtered.header.stamp = msg.header.stamp
+        msg_filtered.wrench.force.x = wrench_filtered[0]
+        msg_filtered.wrench.force.y = wrench_filtered[1]
+        msg_filtered.wrench.force.z = wrench_filtered[2]
+        msg_filtered.wrench.torque.x = wrench_filtered[3]
+        msg_filtered.wrench.torque.y = wrench_filtered[4]
+        msg_filtered.wrench.torque.z = wrench_filtered[5]
+
+        self.pub.publish(msg_filtered)
+
+if __name__ == "__main__":
+
+    subscriber_filter = SubscriberFilter()
+
+    rospy.spin()
