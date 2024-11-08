@@ -36,7 +36,7 @@ class Linear1DPositionPIDController:
         rospy.init_node('linear_1d_controller', anonymous=True)
         self.current_pub = rospy.Publisher("/orig_currents", VectorStamped, queue_size=10)
         self.current_msg = VectorStamped()
-        self.Ts = 1e-3
+        self.Ts = 1/200
         rospy.logwarn("HARDWARE_CONNECTED is set to {}".format(HARDWARE_CONNECTED))
         init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)  
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
@@ -53,21 +53,21 @@ class Linear1DPositionPIDController:
 
 
         self.d_filter = SingleChannelLiveFilter(
-            N = 3, Wn = 5,
+            N = 3, Wn = 45,
             btype='low',
             analog=False,
             ftype='butter',
-            fs = 1000
+            fs = (1/self.Ts)
         )
         self.e_filter = deepcopy(self.d_filter)
         self.currents_filter = MultiChannelLiveFilter(
             channels=8,
             N = 3, 
-            Wn = 80,
+            Wn = 60,
             btype='low',
             analog=False,
             ftype='butter',
-            fs = 1000
+            fs = (1/self.Ts)
         )
         self.pid = PID1D(KP, KI, KD, INTEGRATOR_WINDUP_LIMIT, CLEGG_INTEGRATOR)
         self.last_time = rospy.Time.now().to_sec()
@@ -94,7 +94,7 @@ class Linear1DPositionPIDController:
         alloc_mat = np.linalg.pinv(M @ A)
         desired_wrench = np.array([[0, 0, 0, 0, 0, fz]]).T
         desired_currents = alloc_mat @ desired_wrench
-        desired_currents = self.currents_filter(desired_currents)
+        # desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
         self.current_msg.vector = desired_currents.flatten().tolist()
         self.current_msg.header.stamp = rospy.Time.now()
