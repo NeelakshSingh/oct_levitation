@@ -27,7 +27,7 @@ class DynamicsSimulator:
         self.Ts = 1e-3
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
-        self.vicon_frame = f"vicon/narrow_ring_S{MAGNET_STACK_SIZE}/Origin"
+        self.vicon_frame = f"vicon/small_ring_S{MAGNET_STACK_SIZE}/Origin"
         self.world_frame = "vicon/world"
         self.vicon_pub = rospy.Publisher(self.vicon_frame, TransformStamped, queue_size=10)
 

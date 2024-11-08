@@ -11,17 +11,20 @@ from control_utils.msg import VectorStamped
 from geometry_msgs.msg import TransformStamped
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 
-HARDWARE_CONNECTED = False
+HARDWARE_CONNECTED = True
 KP = 1.0
 KI = 0.0
 KD = 1.00513681 # from LQR
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
-MAGNET_TYPE = "narrow_ring" # options: "wide_ring", "narrow_ring"
+MAGNET_TYPE = "small_ring" # options: "wide_ring", "small_ring"
 VICON_FRAME_TYPE = "carbon_fiber_3_arm_1"
 MAGNET_STACK_SIZE = 1
-DIPOLE_STRENGTH_DICT = {"wide_ring": 0.1, "narrow_ring": common.NarrowRingMagnet.dps} # per stack unit [si]
+DIPOLE_STRENGTH_DICT = {"wide_ring": 0.1, "small_ring": common.NarrowRingMagnet.dps} # per stack unit [si]
 DIPOLE_AXIS = np.array([0, 0, 1])
+TOL = 1e-3
+
+CURRENT_MAX = 3.0 # [A]
 
 class Linear1DPositionPIDController:
 
@@ -33,12 +36,11 @@ class Linear1DPositionPIDController:
         self.current_msg = VectorStamped()
         self.Ts = 1e-3
         self.pid = PID1D(KP, KI, KD, INTEGRATOR_WINDUP_LIMIT, CLEGG_INTEGRATOR)
-        init_hardware_and_shutdown_handler(HARDWARE_CONNECTED, 
-                                           common.OCTOMAG_ALL_COILS_ENABLED)
+        init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)  
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
         self.__tf_buffer = tf2_ros.Buffer()
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
-        self.home_z = 0 # OctoMag origin
+        self.home_z = 0.02 # OctoMag origin
         self.dipole_strength = DIPOLE_STRENGTH_DICT[MAGNET_TYPE] * MAGNET_STACK_SIZE
         self.dipole_axis = DIPOLE_AXIS
         
@@ -48,15 +50,22 @@ class Linear1DPositionPIDController:
         rospy.sleep(0.1) # wait for the tf listener to get the first transform
 
         self.current_timer = rospy.Timer(rospy.Duration(self.Ts), self.current_callback)
+        self.last_time = rospy.Time.now().to_sec()
+        self.__first_time = True
 
     def current_callback(self, event):
+        if self.__first_time:
+            self.__first_time = False
+            self.last_time = rospy.Time.now().to_sec()
+        dt = rospy.Time.now().to_sec() - self.last_time 
+        self.last_time = rospy.Time.now().to_sec()
         # This is where the control loop runs.
         dipole_tf = self.__tf_buffer.lookup_transform(self.vicon_frame, "vicon/world", rospy.Time())
         dipole_position = np.array([dipole_tf.transform.translation.x,
                                     dipole_tf.transform.translation.y,
                                     dipole_tf.transform.translation.z])
-        fz = self.pid.update(self.home_z, dipole_position[2])
-        fz += common.Constants.g * self.dipole_mass
+        fz = self.pid.update(self.home_z, dipole_position[2], dt)
+        fz += common.Constants.g * self.dipole_mass # compensate for gravity
         M = common.get_magnetic_interaction_matrix(dipole_tf, 
                                                    self.dipole_strength,
                                                    self.dipole_axis)
@@ -64,6 +73,7 @@ class Linear1DPositionPIDController:
         alloc_mat = np.linalg.pinv(M @ A)
         desired_wrench = np.array([[0, 0, 0, 0, 0, fz]]).T
         desired_currents = alloc_mat @ desired_wrench
+        desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
         self.current_msg.vector = desired_currents.flatten().tolist()
         self.current_msg.header.stamp = rospy.Time.now()
         self.current_pub.publish(self.current_msg)
