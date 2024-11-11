@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as np_t
 import scipy as sci
 import os
 import wand_calibration as wand
@@ -10,6 +11,7 @@ from mag_manip import mag_manip
 from geometry_msgs.msg import TransformStamped
 
 from dataclasses import dataclass
+from typing import Union, Type
 
 
 OCTOMAG_ALL_COILS_ENABLED = [True, True, True, True, True, True, True, True]
@@ -88,4 +90,11 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
             ])
     return M
 
-    
+def vector_skew_symmetric_matrix(x: np_t.NDArray) -> np_t.NDArray:
+    """
+    This function return the skew-symmetric matrix version of a numpy 3D vector.
+    """
+    assert x.shape == (3,) or x.shape == (3, 1) or x.shape == (1, 3), "Input must be a 3D vector."
+    return np.array([[0, -x[2], x[1]],
+                     [x[2], 0, -x[0]],
+                     [-x[1], x[0], 0]])

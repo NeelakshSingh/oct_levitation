@@ -27,6 +27,7 @@ DIPOLE_AXIS = np.array([0, 0, 1])
 TOL = 1e-3
 
 CURRENT_MAX = 3.0 # [A]
+CURRENT_POLARITY_FLIPPED = False
 
 class Linear1DPositionPIDController:
 
@@ -36,13 +37,13 @@ class Linear1DPositionPIDController:
         rospy.init_node('linear_1d_controller', anonymous=True)
         self.current_pub = rospy.Publisher("/orig_currents", VectorStamped, queue_size=10)
         self.current_msg = VectorStamped()
-        self.Ts = 1/200
+        self.Ts = 1/100
         rospy.logwarn("HARDWARE_CONNECTED is set to {}".format(HARDWARE_CONNECTED))
         init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)  
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
         self.__tf_buffer = tf2_ros.Buffer()
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
-        self.home_z = 0.02 # OctoMag origin
+        self.home_z = 0.0 # OctoMag origin
         self.dipole_strength = DIPOLE_STRENGTH_DICT[MAGNET_TYPE] * MAGNET_STACK_SIZE
         self.dipole_axis = DIPOLE_AXIS
         
@@ -52,24 +53,31 @@ class Linear1DPositionPIDController:
         rospy.sleep(0.1) # wait for the tf listener to get the first transform
 
 
-        self.d_filter = SingleChannelLiveFilter(
-            N = 3, Wn = 45,
-            btype='low',
-            analog=False,
-            ftype='butter',
-            fs = (1/self.Ts)
-        )
-        self.e_filter = deepcopy(self.d_filter)
-        self.currents_filter = MultiChannelLiveFilter(
-            channels=8,
-            N = 3, 
-            Wn = 60,
-            btype='low',
-            analog=False,
-            ftype='butter',
-            fs = (1/self.Ts)
-        )
-        self.pid = PID1D(KP, KI, KD, INTEGRATOR_WINDUP_LIMIT, CLEGG_INTEGRATOR)
+        # self.d_filter = SingleChannelLiveFilter(
+        #     N = 3, Wn = 45,
+        #     btype='low',
+        #     analog=False,
+        #     ftype='butter',
+        #     fs = (1/self.Ts)
+        # )
+        # self.e_filter = deepcopy(self.d_filter)
+        # self.currents_filter = MultiChannelLiveFilter(
+        #     channels=8,
+        #     N = 3, 
+        #     Wn = 60,
+        #     btype='low',
+        #     analog=False,
+        #     ftype='butter',
+        #     fs = (1/self.Ts)
+        # )
+        self.d_filter = None
+        self.e_filter = None
+        self.currents_filter = None
+        self.pid = PID1D(KP, KI, KD, 
+                         INTEGRATOR_WINDUP_LIMIT, 
+                         CLEGG_INTEGRATOR,
+                         publish_states=True,
+                         state_pub_topic="/pid1d_states")
         self.last_time = rospy.Time.now().to_sec()
         self.__first_time = True
         self.current_timer = rospy.Timer(rospy.Duration(self.Ts), self.current_callback)
@@ -96,6 +104,8 @@ class Linear1DPositionPIDController:
         desired_currents = alloc_mat @ desired_wrench
         # desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
+        if CURRENT_POLARITY_FLIPPED:
+            desired_currents = -desired_currents
         self.current_msg.vector = desired_currents.flatten().tolist()
         self.current_msg.header.stamp = rospy.Time.now()
         self.current_pub.publish(self.current_msg)

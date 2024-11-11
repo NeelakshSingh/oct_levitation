@@ -51,11 +51,10 @@ find_package(catkin REQUIRED
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  PID1DState.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -69,12 +68,6 @@ find_package(catkin REQUIRED
 #   FILES
 #   Action1.action
 #   Action2.action
-# )
-
-## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
 # )
 
 ################################################
@@ -98,20 +91,7 @@ find_package(catkin REQUIRED
 # )
 
 ###################################
-## catkin specific configuration ##
-###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if your package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES oct_levitation
-#  CATKIN_DEPENDS other_catkin_pkg
-#  DEPENDS system_lib
-)
+
 
 ###########
 ## Build ##
@@ -166,11 +146,34 @@ include_directories(
 catkin_install_python(PROGRAMS
   scripts/linear_1d_controller.py
   scripts/utils/dynamics_simulator.py
+  scripts/utils/joy_setpoint.py
+  scripts/utils/fft_noise_analysis.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
 ## Installing the python libraries
 catkin_python_setup()
+
+## Generate added messages and services with any dependencies listed here
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other packages containing msgs
+)
+
+## catkin specific configuration ##
+###################################
+## The catkin_package macro generates cmake config files for your package
+## Declare things to be passed to dependent projects
+## INCLUDE_DIRS: uncomment this if your package contains header files
+## LIBRARIES: libraries you create in this project that dependent projects also need
+## CATKIN_DEPENDS: catkin_packages dependent projects also need
+## DEPENDS: system dependencies of this project that dependent projects also need
+catkin_package(
+#  INCLUDE_DIRS include
+#  LIBRARIES oct_levitation
+#  CATKIN_DEPENDS other_catkin_pkg
+#  DEPENDS system_lib
+)
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
