@@ -172,6 +172,21 @@ class SingleChannelLiveFilter(LiveFilter):
         return self._process(x)
 
 
+class SingleChannelMovingAverageFilter(LiveFilter):
+
+    def __init__(self, window_size: int):
+        self.window_size = window_size
+        self.window = deque(maxlen=window_size)
+        self.last_output = None
+
+    def _process(self, x: float):
+        self.window.append(x)
+        self.last_output = np.mean(self.window)
+        return self.last_output
+    
+    def __call__(self, x):
+        return self._process(x)
+
 class MultiChannelLiveFilter(LiveFilter):
     """Multi channel version of the single channel live filter class.
     """

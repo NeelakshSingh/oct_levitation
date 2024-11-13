@@ -1,6 +1,8 @@
 import numpy as np
-import scipy as sci
+import scipy.signal as signal
+import control as ct
 from time import perf_counter
+from scipy.linalg import block_diag
 
 import oct_levitation.common as common
 import oct_levitation.filters as filters
@@ -8,7 +10,14 @@ from oct_levitation.msg import PID1DState
 
 import rospy
 
-class PID1D:
+class ControllerInteface:
+    def __init__(self):
+        raise NotImplementedError
+
+    def update(self, r, y):
+        raise NotImplementedError
+
+class PID1D(ControllerInteface):
     def __init__(self, Kp, Ki, Kd,
                  windup_lim: float = np.inf,
                  clegg_integrator: bool = False,
@@ -60,3 +69,61 @@ class PID1D:
             state_msg.header.stamp = rospy.Time.now()
             self.state_pub.publish(state_msg)
         return u
+    
+class DiscreteIntegralLQR(ControllerInteface):
+
+    def __init__(self,
+                 A: np.ndarray,
+                 B: np.ndarray,
+                 Q: np.ndarray,
+                 R: np.ndarray,
+                 Qi: np.ndarray,
+                 dt: float,
+                 windup_lim: float = np.inf,
+                 clegg_integrator: bool = False):
+        """
+        This controller assumes that the matrices provided are in continuous time.
+        Because then, the discretized system is obtained after augmenting the 
+        state with the error integral.
+
+        Args:
+            A (np.ndarray): The state matrix.
+            B (np.ndarray): The input matrix.
+            Q (np.ndarray): The state cost matrix.
+            R (np.ndarray): The input cost matrix.
+            Qi (np.ndarray): The integral error cost matrix.
+            dt (float): The sampling time for discretization.
+            windup_lim (float, optional): The windup limit for the integral error. Defaults to np.inf.
+            clegg_integrator (bool, optional): Whether to use the Clegg integrator. Defaults to False.
+        """
+        self.A = A
+        self.B = B
+        self.Q = Q
+        self.R = R
+        
+        # Designing a state augmented integral LQR controller
+        A_aug = np.block([[A, np.zeros((A.shape[0], A.shape[0]))],
+                          [np.eye(A.shape[0]), np.zeros((A.shape[0], A.shape[0]))]])
+        B_aug = np.block([[B], [np.zeros((B.shape[0], B.shape[1]))]])
+        Q_aug = block_diag(Q, Qi)
+
+        # Performing an exact ZOH discretization of the augmented system
+        Ad, Bd, Cd, Dd, dt = signal.cont2discrete((A_aug, B_aug, np.eye(A_aug.shape[0]), 0), dt=dt, method='zoh')
+        self.lqr_out = ct.dlqr(Ad, Bd, Q_aug, R)
+        self.K = self.lqr_out[0]
+
+        self.windup_lim = windup_lim
+        self.clegg_integrator = clegg_integrator
+        self.e_integral = np.zeros((A.shape[0], 1))
+        self.e_prev = 0
+
+    def update(self, r, y, dt):
+        e = y - r
+        self.e_integral += e * dt
+        if self.clegg_integrator:
+            if np.sign(e) != np.sign(self.e_prev):
+                self.e_integral = 0
+        e_integral = np.clip(self.e_integral, -self.windup_lim, self.windup_lim)
+        u = -self.K @ np.vstack([e, e_integral])
+        self.e_prev = e
+

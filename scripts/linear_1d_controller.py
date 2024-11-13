@@ -1,6 +1,8 @@
 import numpy as np
 import rospy
 import tf2_ros
+import control as ct
+import scipy.signal as signal
 
 from time import perf_counter
 from copy import deepcopy
@@ -14,9 +16,6 @@ from geometry_msgs.msg import TransformStamped
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 
 HARDWARE_CONNECTED = False
-KP = 1.0
-KI = 0.0
-KD = 1.00513681 # from LQR
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
 MAGNET_TYPE = "small_ring" # options: "wide_ring", "small_ring"
@@ -28,6 +27,22 @@ TOL = 1e-3
 
 CURRENT_MAX = 3.0 # [A]
 CURRENT_POLARITY_FLIPPED = False
+
+# Controller Design
+B_friction = 0.0 # friction coefficient
+m = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + common.NarrowRingMagnet.mframe
+f_controller = 100 # Hz
+T_controller = 1/f_controller
+
+A = np.array([[0, 1], [0, -B_friction/m]])
+B = np.array([[0, 1/m]]).T
+C = np.array([[1, 0]]) # output is position
+Ad, Bd, Cd, Dd, Td = signal.cont2discrete((A, B, C, 0), dt=T_controller, method='zoh')
+Q = np.eye(2)
+R = 1
+K, S, E = ct.dlqr(Ad, Bd, Q, R)
+KP = K[0,0]
+KD = K[0,1]
 
 class Linear1DPositionPIDController:
 
@@ -47,8 +62,7 @@ class Linear1DPositionPIDController:
         self.dipole_strength = DIPOLE_STRENGTH_DICT[MAGNET_TYPE] * MAGNET_STACK_SIZE
         self.dipole_axis = DIPOLE_AXIS
         
-        self.dipole_mass = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + \
-                           common.NarrowRingMagnet.mframe
+        self.dipole_mass = m
         
         rospy.sleep(0.1) # wait for the tf listener to get the first transform
 
