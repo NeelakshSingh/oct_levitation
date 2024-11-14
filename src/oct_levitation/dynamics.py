@@ -1,5 +1,5 @@
 import numpy as np
-import scipy as sci
+import scipy.signal as sig
 import rospy
 import control as ct
 import tf2_ros
@@ -8,7 +8,7 @@ import oct_levitation.common as common
 
 from time import perf_counter
 from geometry_msgs.msg import TransformStamped
-from typing import Union
+from typing import Union, Optional
 
 class DynamicalSystemInterface:
 
@@ -33,6 +33,8 @@ class ZLevitatingMassSystem(DynamicalSystemInterface):
     def __init__(self, 
                  m: float, 
                  b: float,
+                 discretize: bool = True,
+                 dt: Optional[float] = 1e-3,
                  x0: np.ndarray = np.array([0, 0]),
                  lbounds: float = np.array([-np.inf, -np.inf]),
                  ubounds: float = np.array([np.inf, np.inf])):
@@ -42,16 +44,26 @@ class ZLevitatingMassSystem(DynamicalSystemInterface):
         """
         self.m = m
         self.b = b
-        self.A = np.array([[0, 1], [0, -b/m]])
-        self.B = np.array([[0], [1/m]])
+        A = np.array([[0, 1], [0, -b/m]])
+        B = np.array([[0], [1/m]])
+        self.discretize = discretize
+        if discretize:
+            Ad, Bd, Cd, Dd, dt = sig.cont2discrete((A, B, np.eye(2), 0), dt, method='zoh')
+            self.A = Ad
+            self.B = Bd
+        else:
+            self.A = A
+            self.B = B
         self.x0 = x0
         self.x = x0
         self.lbounds = lbounds
         self.ubounds = ubounds
 
-    def update(self, u: Union[np.ndarray, float], dt: float):
-        self.x = self.x + dt * (self.A @ self.x.reshape(2,1) + self.B * (u - self.m * common.Constants.g)).flatten()
-        self.x = np.clip(self.x, self.lbounds, self.ubounds)
+    def update(self, u: Union[np.ndarray, float], dt: Optional[bool]):
+        if self.discretize:
+            self.x = (self.A @ self.x.reshape(2,1) + self.B * (u - self.m * common.Constants.g)).flatten()
+        else:
+            self.x = self.x + dt * (self.A @ self.x.reshape(2,1) + self.B * (u - self.m * common.Constants.g)).flatten()
         if self.x[0] > self.ubounds[0]:
             self.x[0] = self.ubounds[0]
             self.x[1] = 0

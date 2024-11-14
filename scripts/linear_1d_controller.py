@@ -3,19 +3,20 @@ import rospy
 import tf2_ros
 import control as ct
 import scipy.signal as signal
+import oct_levitation.controllers as controllers
 
 from time import perf_counter
 from copy import deepcopy
 
 import oct_levitation.common as common
-from oct_levitation.controllers import PID1D
 from oct_levitation.filters import SingleChannelLiveFilter, MultiChannelLiveFilter
 
 from control_utils.msg import VectorStamped
 from geometry_msgs.msg import TransformStamped
+from std_msgs.msg import Float64
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 
-HARDWARE_CONNECTED = False
+HARDWARE_CONNECTED = True
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
 MAGNET_TYPE = "small_ring" # options: "wide_ring", "small_ring"
@@ -26,7 +27,7 @@ DIPOLE_AXIS = np.array([0, 0, 1])
 TOL = 1e-3
 
 CURRENT_MAX = 3.0 # [A]
-CURRENT_POLARITY_FLIPPED = False
+CURRENT_POLARITY_FLIPPED = True
 
 # Controller Design
 B_friction = 0.0 # friction coefficient
@@ -36,13 +37,10 @@ T_controller = 1/f_controller
 
 A = np.array([[0, 1], [0, -B_friction/m]])
 B = np.array([[0, 1/m]]).T
-C = np.array([[1, 0]]) # output is position
-Ad, Bd, Cd, Dd, Td = signal.cont2discrete((A, B, C, 0), dt=T_controller, method='zoh')
-Q = np.eye(2)
-R = 1
-K, S, E = ct.dlqr(Ad, Bd, Q, R)
-KP = K[0,0]
-KD = K[0,1]
+Q = np.diag([1, 1])
+rho = 0.1
+R = 1*rho
+Qi = np.diag([1, 1]) # Weights for error integral
 
 class Linear1DPositionPIDController:
 
@@ -52,7 +50,6 @@ class Linear1DPositionPIDController:
         rospy.init_node('linear_1d_controller', anonymous=True)
         self.current_pub = rospy.Publisher("/orig_currents", VectorStamped, queue_size=10)
         self.current_msg = VectorStamped()
-        self.Ts = 1/100
         rospy.logwarn("HARDWARE_CONNECTED is set to {}".format(HARDWARE_CONNECTED))
         init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)  
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
@@ -64,51 +61,43 @@ class Linear1DPositionPIDController:
         
         self.dipole_mass = m
         
-        rospy.sleep(0.1) # wait for the tf listener to get the first transform
-
-
-        # self.d_filter = SingleChannelLiveFilter(
-        #     N = 3, Wn = 45,
-        #     btype='low',
-        #     analog=False,
-        #     ftype='butter',
-        #     fs = (1/self.Ts)
-        # )
-        # self.e_filter = deepcopy(self.d_filter)
-        # self.currents_filter = MultiChannelLiveFilter(
-        #     channels=8,
-        #     N = 3, 
-        #     Wn = 60,
-        #     btype='low',
-        #     analog=False,
-        #     ftype='butter',
-        #     fs = (1/self.Ts)
-        # )
+        rospy.sleep(0.1)
         self.d_filter = None
         self.e_filter = None
         self.currents_filter = None
-        self.pid = PID1D(KP, KI, KD, 
-                         INTEGRATOR_WINDUP_LIMIT, 
-                         CLEGG_INTEGRATOR,
-                         publish_states=True,
-                         state_pub_topic="/pid1d_states")
+
+        self.controller = controllers.IntegralLQR(A, B, Q, R, Qi, dt=T_controller)
+        self.control_input_pub = rospy.Publisher("/oct_levitation/linear_1d_controller/control_input", Float64, queue_size=10)
+
         self.last_time = rospy.Time.now().to_sec()
         self.__first_time = True
-        self.current_timer = rospy.Timer(rospy.Duration(self.Ts), self.current_callback)
+        self.last_z = 0.0
+        self.current_timer = rospy.Timer(rospy.Duration(T_controller), self.current_callback)
 
     def current_callback(self, event):
         if self.__first_time:
             self.__first_time = False
+            dipole_tf = self.__tf_buffer.lookup_transform(self.vicon_frame, "vicon/world", rospy.Time())
+            self.last_z = dipole_tf.transform.translation.z
             self.last_time = rospy.Time.now().to_sec()
-        dt = rospy.Time.now().to_sec() - self.last_time 
-        self.last_time = rospy.Time.now().to_sec()
+            return
         # This is where the control loop runs.
         dipole_tf = self.__tf_buffer.lookup_transform(self.vicon_frame, "vicon/world", rospy.Time())
         dipole_position = np.array([dipole_tf.transform.translation.x,
                                     dipole_tf.transform.translation.y,
                                     dipole_tf.transform.translation.z])
-        fz = self.pid.update(self.home_z, dipole_position[2], dt)
+        # dt = rospy.Time.now().to_sec() - self.last_time 
+        dt = T_controller
+        z_dot = (dipole_position[2] - self.last_z) / dt
+        self.last_z = dipole_position[2]
+        y = np.array([[dipole_position[2], z_dot]]).T
+        r = np.array([[self.home_z, 0]]).T
+        fz = self.controller.update(r, y, dt)
+        fz = fz[0,0]
         fz += common.Constants.g * self.dipole_mass # compensate for gravity
+        self.control_input_pub.publish(Float64(data=fz))
+        rospy.loginfo("Control Input: {}".format(fz))
+        self.last_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(dipole_tf, 
                                                    self.dipole_strength,
                                                    self.dipole_axis)

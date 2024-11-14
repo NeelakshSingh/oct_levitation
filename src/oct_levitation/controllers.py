@@ -7,6 +7,7 @@ from scipy.linalg import block_diag
 import oct_levitation.common as common
 import oct_levitation.filters as filters
 from oct_levitation.msg import PID1DState
+from typing import Optional
 
 import rospy
 
@@ -70,7 +71,7 @@ class PID1D(ControllerInteface):
             self.state_pub.publish(state_msg)
         return u
     
-class DiscreteIntegralLQR(ControllerInteface):
+class IntegralLQR(ControllerInteface):
 
     def __init__(self,
                  A: np.ndarray,
@@ -78,7 +79,8 @@ class DiscreteIntegralLQR(ControllerInteface):
                  Q: np.ndarray,
                  R: np.ndarray,
                  Qi: np.ndarray,
-                 dt: float,
+                 dt: Optional[float] = 1e-3,
+                 discretize: bool = True,
                  windup_lim: float = np.inf,
                  clegg_integrator: bool = False):
         """
@@ -100,6 +102,7 @@ class DiscreteIntegralLQR(ControllerInteface):
         self.B = B
         self.Q = Q
         self.R = R
+        self.discretize = discretize
         
         # Designing a state augmented integral LQR controller
         A_aug = np.block([[A, np.zeros((A.shape[0], A.shape[0]))],
@@ -108,8 +111,11 @@ class DiscreteIntegralLQR(ControllerInteface):
         Q_aug = block_diag(Q, Qi)
 
         # Performing an exact ZOH discretization of the augmented system
-        Ad, Bd, Cd, Dd, dt = signal.cont2discrete((A_aug, B_aug, np.eye(A_aug.shape[0]), 0), dt=dt, method='zoh')
-        self.lqr_out = ct.dlqr(Ad, Bd, Q_aug, R)
+        if self.discretize:
+            Ad, Bd, Cd, Dd, dt = signal.cont2discrete((A_aug, B_aug, np.eye(A_aug.shape[0]), 0), dt=dt, method='zoh')
+            self.lqr_out = ct.dlqr(Ad, Bd, Q_aug, R)
+        else:
+            self.lqr_out = ct.lqr(A_aug, B_aug, Q_aug, R)
         self.K = self.lqr_out[0]
 
         self.windup_lim = windup_lim
@@ -126,4 +132,5 @@ class DiscreteIntegralLQR(ControllerInteface):
         e_integral = np.clip(self.e_integral, -self.windup_lim, self.windup_lim)
         u = -self.K @ np.vstack([e, e_integral])
         self.e_prev = e
+        return u
 

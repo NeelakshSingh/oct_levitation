@@ -15,7 +15,7 @@ NORTH_DOWN = True
 M_FRAME = 2.9e-3 # kg
 M_SMALL_MAGNET = 2.25e-3 # kg
 B = 0.0 # damping coefficient (friction)
-X0 = np.array([0.03, 0]) # initial state, m
+X0 = np.array([0.03, 0]) # initial state: x, x_dot
 DIPOLE_AXIS = np.array([0, 0, 1])
 L_BOUNDS = np.array([-0.05, -np.inf])
 U_BOUNDS = np.array([0.05, np.inf])
@@ -32,15 +32,18 @@ class DynamicsSimulator:
         self.vicon_pub = rospy.Publisher(self.vicon_frame, TransformStamped, queue_size=10)
 
         self.last_command_recv = 0
+        self.last_commmand_timeout = 0.2
+        self.__last_command_recv_time = 0.0
+        self.__first_command = True
+        self.__last_command_warning_sent = False
         self.last_time = rospy.Time.now().to_sec()
         self.__first_call = True
-        self.dt = 0
 
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
         m = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + \
             common.NarrowRingMagnet.mframe
-        self.sys = ZLevitatingMassSystem(m, B, X0, L_BOUNDS, U_BOUNDS)
+        self.sys = ZLevitatingMassSystem(m, B, True, self.Ts, X0, L_BOUNDS, U_BOUNDS)
 
         self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
         self.mag_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
@@ -61,12 +64,12 @@ class DynamicsSimulator:
         self.dipole_position = np.array([0, 0, X0[0]])
     
     def timer_callback(self, event):
-        if self.__first_call:
-            self.__first_call = False
-            self.last_time = rospy.Time.now().to_sec()
-        self.dt = rospy.Time.now().to_sec() - self.last_time
-        self.last_time = rospy.Time.now().to_sec()
-        self.sys.update(self.last_command_recv, self.dt)
+        if rospy.Time.now().to_sec() - self.__last_command_recv_time > self.last_commmand_timeout:
+            if not self.__last_command_warning_sent:
+                self.__last_command_warning_sent = True
+                rospy.logwarn("No command received in the last %.2f seconds." % self.last_commmand_timeout)
+                self.last_command_recv = 0
+        self.sys.update(self.last_command_recv, None)
         state = self.sys.get_state()
         self.dipole_position = np.array([0, 0, state[0]])
         self.__tf_msg.header.stamp = rospy.Time.now()
@@ -75,6 +78,9 @@ class DynamicsSimulator:
         self.vicon_pub.publish(self.__tf_msg)
 
     def currents_callback(self, msg: DesCurrentsReg):
+        if self.__first_command:
+            self.__first_command = False
+            self.__last_command_recv_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(self.__tf_msg, 
                                                    common.NarrowRingMagnet.dps,
                                                    DIPOLE_AXIS)
@@ -82,6 +88,10 @@ class DynamicsSimulator:
         wrench = M @ A @ np.array(msg.des_currents_reg)
         fz = wrench[5]
         self.last_command_recv = fz
+        self.__last_command_recv_time = rospy.Time.now().to_sec()
+        if self.__last_command_warning_sent:
+            rospy.loginfo("Command received again.")
+            self.__last_command_warning_sent = False
     
     def run(self):
         self.timer = rospy.Timer(rospy.Duration(self.Ts), self.timer_callback)
