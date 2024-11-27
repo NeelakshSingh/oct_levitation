@@ -27,7 +27,7 @@ DIPOLE_AXIS = np.array([0, 0, 1])
 TOL = 1e-3
 
 CURRENT_MAX = 3.0 # [A]
-CURRENT_POLARITY_FLIPPED = True
+CURRENT_POLARITY_FLIPPED = False
 
 # Controller Design
 B_friction = 0.0 # friction coefficient
@@ -46,7 +46,7 @@ class Linear1DPositionPIDController:
 
     def __init__(self):
         self.model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
-                                                   calibration_file="octomag_5point.yaml")
+                                                   calibration_file="octomag_77pt_avg_bias_corrected.yaml")
         rospy.init_node('linear_1d_controller', anonymous=True)
         self.current_pub = rospy.Publisher("/orig_currents", VectorStamped, queue_size=10)
         self.current_msg = VectorStamped()
@@ -55,7 +55,7 @@ class Linear1DPositionPIDController:
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
         self.__tf_buffer = tf2_ros.Buffer()
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
-        self.home_z = 0.0 # OctoMag origin
+        self.home_z = 0.02 # OctoMag origin
         self.dipole_strength = DIPOLE_STRENGTH_DICT[MAGNET_TYPE] * MAGNET_STACK_SIZE
         self.dipole_axis = DIPOLE_AXIS
         

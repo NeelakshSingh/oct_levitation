@@ -5,9 +5,11 @@ from time import perf_counter
 from scipy.linalg import block_diag
 
 import oct_levitation.common as common
-import oct_levitation.filters as filters
+import control_utils.general.filters as filters
+import control_utils.general.geometry as geometry
 from oct_levitation.msg import PID1DState
-from typing import Optional
+from typing import Optional, Union
+from geometry_msgs.msg import TransformStamped
 
 import rospy
 
@@ -124,7 +126,7 @@ class IntegralLQR(ControllerInteface):
         self.e_prev = 0
 
     def update(self, r, y, dt):
-        e = y - r
+        e = r - y
         self.e_integral += e * dt
         if self.clegg_integrator:
             if np.sign(e) != np.sign(self.e_prev):
@@ -134,3 +136,32 @@ class IntegralLQR(ControllerInteface):
         self.e_prev = e
         return u
 
+class Vicon6DOFEulerXYZStateEstimator:
+
+    def __init__(self,
+                 initial_orientation: Optional[TransformStamped] = TransformStamped(),
+                 initial_velocity: Optional[np.ndarray] = np.zeros(3),
+                 initial_angular_velocity: Optional[np.ndarray] = np.zeros(3)) -> None:
+        """
+        This class is a simple state estimator, made mostly for the purpose of estimating
+        the velocities and just have a modular code structure. In the future though this 
+        class can house more complicated estimation strategies as required.
+
+        Args:
+            initial_orientation (TransformStamped, optional): The initial orientation. Defaults to TransformStamped().
+            initial_velocity (np.ndarray, optional): The initial velocity. Defaults to np.zeros(3).
+            initial_angular_velocity (np.ndarray, optional): The initial angular velocity. Defaults to np.zeros(3).
+        """
+        self.orientation = initial_orientation
+        self.velocity = initial_velocity
+        self.angular_velocity = initial_angular_velocity
+        
+    def update(self, orientation: TransformStamped, dt: float):
+        """
+        Updates the state estimate.
+
+        Args:
+            orientation (TransformStamped): The orientation measurement.
+            dt (float): The time step.
+        """
+        
