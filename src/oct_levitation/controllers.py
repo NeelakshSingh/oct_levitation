@@ -155,13 +155,41 @@ class Vicon6DOFEulerXYZStateEstimator:
         self.orientation = initial_orientation
         self.velocity = initial_velocity
         self.angular_velocity = initial_angular_velocity
+        self.last_position = np.array([self.orientation.transform.translation.x,
+                                        self.orientation.transform.translation.y,
+                                        self.orientation.transform.translation.z])
+        self.last_euler = geometry.euler_xyz_from_quaternion(np.array([self.orientation.transform.rotation.x,
+                                                                      self.orientation.transform.rotation.y,
+                                                                      self.orientation.transform.rotation.z,
+                                                                      self.orientation.transform.rotation.w]))        
         
-    def update(self, orientation: TransformStamped, dt: float):
+    def update(self, orientation: TransformStamped, dt: float) -> np.ndarray:
         """
         Updates the state estimate.
 
         Args:
             orientation (TransformStamped): The orientation measurement.
             dt (float): The time step.
+
+        Returns:
+            np.ndarray: The 12 element vector containing [position, velocity, euler, angular_velocity].
         """
-        
+        position = np.array([orientation.transform.translation.x,
+                             orientation.transform.translation.y,
+                             orientation.transform.translation.z])
+        quaternion = np.array([orientation.transform.rotation.x,
+                               orientation.transform.rotation.y,
+                               orientation.transform.rotation.z,
+                               orientation.transform.rotation.w])
+        euler = geometry.euler_xyz_from_quaternion(quaternion)
+        velocity = (position - self.last_position) / dt
+        euler_rate = (euler - self.last_euler) / dt
+        Exyz = geometry.euler_xyz_rate_to_local_angular_velocity_map_matrix(euler)
+        angular_velocity = Exyz @ euler_rate
+        self.orientation = orientation
+        self.velocity = velocity
+        self.angular_velocity = angular_velocity
+        self.last_position = position
+        self.last_euler = euler
+
+        return np.concatenate([position, velocity, euler, angular_velocity])

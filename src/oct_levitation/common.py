@@ -94,12 +94,3 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                 [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
             ])
     return M
-
-def vector_skew_symmetric_matrix(x: np_t.NDArray) -> np_t.NDArray:
-    """
-    This function return the skew-symmetric matrix version of a numpy 3D vector.
-    """
-    assert x.shape == (3,) or x.shape == (3, 1) or x.shape == (1, 3), "Input must be a 3D vector."
-    return np.array([[0, -x[2], x[1]],
-                     [x[2], 0, -x[0]],
-                     [-x[1], x[0], 0]])
