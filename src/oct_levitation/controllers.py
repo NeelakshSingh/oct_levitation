@@ -193,3 +193,12 @@ class Vicon6DOFEulerXYZStateEstimator:
         self.last_euler = euler
 
         return np.concatenate([position, velocity, euler, angular_velocity])
+    
+    def get_latest_state_estimate(self) -> np.ndarray:
+        """
+        Returns the latest state estimate.
+
+        Returns:
+            np.ndarray: The 12 element vector containing [position, velocity, euler, angular_velocity].
+        """
+        return np.concatenate([self.last_position, self.velocity, self.last_euler, self.angular_velocity])

@@ -61,6 +61,7 @@ class OctomagCalibratedModel:
 
 def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                     dipole_strength:float,
+                                    torque_first: bool,
                                     dipole_axis: np.ndarray = np.array([0, 0, 1])):
     """
     This function returns the magnetic interaction matrix of a dipole.
@@ -69,6 +70,8 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
     Args:
         dipole_tf (TransformStamped): The transform of the dipole in the world frame.
         dipole_strength (float): The strength of the dipole.
+        torque_first (bool): Whether to return the torque block first or the force block first.
+                             If True, then [[M_Tau], [M_F]] is returned and vice versa.
         dipole_axis (np.ndarray): The axis of the dipole according to vicon in home position. 
                                   Defaults to [0, 0, 1].
     
@@ -85,12 +88,17 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
     dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
     dipole_moment = dipole_strength*dipole_axis
 
-    M = np.array([
-                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
+    M_F = np.array([
                 [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
                 [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
                 [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
             ])
-    return M
+    M_Tau = np.array([
+                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
+            ])
+    if torque_first:
+        return np.vstack((M_Tau, M_F))
+    else:
+        return np.vstack((M_F, M_Tau))
