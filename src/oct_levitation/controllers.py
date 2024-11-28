@@ -73,6 +73,51 @@ class PID1D(ControllerInteface):
             self.state_pub.publish(state_msg)
         return u
     
+class LQR(ControllerInteface):
+
+    def __init__(self,
+                 A: np.ndarray,
+                 B: np.ndarray,
+                 Q: np.ndarray,
+                 R: np.ndarray,
+                 dt: Optional[float] = None,
+                 discretize: bool = True):
+        """
+        Args:
+            A (np.ndarray): The state matrix.
+            B (np.ndarray): The input matrix.
+            Q (np.ndarray): The state cost matrix.
+            R (np.ndarray): The input cost matrix.
+            dt (float): The sampling time for discretization. If None, then continuous LQR is used. 
+            discretize (bool): Whether to discretize the system. If yes, then the system is discretized using ZOH.
+                               This option will only be used if a time has been specified.
+        """
+        self.A = A
+        self.B = B
+        self.Q = Q
+        self.R = R
+        
+        if dt is not None:
+            if discretize:
+                Ad, Bd, Cd, Dd, dt = signal.cont2discrete((A, B, np.eye(A.shape[0]), 0), dt=dt, method='zoh')
+                self.lqr_out = ct.dlqr(Ad, Bd, Q, R)
+            else:
+                self.lqr_out = ct.lqr(A, B, Q, R)
+        self.K = self.lqr_out[0]
+
+    def update(self, r, y, dt):
+        """
+        Calculates the control input using the LQR controller.
+        Args:
+            r (np.ndarray): The reference state.
+            y (np.ndarray): The current state.
+            dt (float): IGNORED. This is a just simple proportional law. Argument is kept for interface compatibility.
+        """
+        e = r - y
+        u = self.K @ e
+        return u
+
+    
 class IntegralLQR(ControllerInteface):
 
     def __init__(self,
@@ -202,3 +247,12 @@ class Vicon6DOFEulerXYZStateEstimator:
             np.ndarray: The 12 element vector containing [position, velocity, euler, angular_velocity].
         """
         return np.concatenate([self.last_position, self.velocity, self.last_euler, self.angular_velocity])
+    
+    def get_latest_yaw_removed_state_estimate(self) -> np.ndarray:
+        """
+        Returns the latest state estimate with yaw and wz removed.
+
+        Returns:
+            np.ndarray: The 10 element vector containing [position, velocity, euler, angular_velocity] with yaw removed.
+        """
+        return np.concatenate([self.last_position, self.velocity, self.last_euler[:2], self.angular_velocity[:2]])

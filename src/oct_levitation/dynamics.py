@@ -106,7 +106,7 @@ class WrenchInput6DOFEulerXYZDynamics:
         self.d = d
         self.m = m
         self.I_m = cs.SX(I_m)
-        self.g = g
+        self.g_vec = cs.vertcat(0, 0, -g)
 
         self.__x = cs.SX.sym("x") 
         self.__y = cs.SX.sym("y")
@@ -160,7 +160,7 @@ class WrenchInput6DOFEulerXYZDynamics:
         self.__E_exyz_inv[2, 2] = 1
 
         # Dynamics equations
-        self.__f2 = self.g +  self.__F/ m
+        self.__f2 = self.g_vec +  self.__F/ m
         self.__f3 = cs.mtimes(self.__E_exyz_inv, cs.vertcat(self.__wx, self.__wy, self.__wz))
         self.__I_m_inv = cs.inv(self.I_m)
         self.__f4 = cs.mtimes(self.__I_m_inv, cs.vertcat(self.__Tau_m_tilde, 0)) \
@@ -193,3 +193,30 @@ class WrenchInput6DOFEulerXYZDynamics:
     
     def get_non_linear_dynamics_function(self) -> Callable[[np_t.ArrayLike, np_t.ArrayLike], np_t.NDArray]:
         return self.__get_non_linear_dynamics_impl
+    
+    def isolate_roll_pitch_dynamics(self, A: np_t.ArrayLike, B: np_t.ArrayLike) -> Tuple[np_t.ArrayLike, np_t.ArrayLike]:
+        """
+        This function isolates the roll and pitch dynamics from the linearized dynamics matrix A and input matrix B.
+        Args:
+            A: The linearized dynamics matrix.
+            B: The input matrix.
+        Returns:
+            A_rp: The 4x4 roll and pitch dynamics matrix with wx and wy.
+            B_rp: The 4x2 input matrix isolated for Tau_m_x and Tau_m_y.
+        """
+        A_rp = np.block([[A[6:8, 6:8], A[6:8, 9:11]], 
+                         [A[9:11, 6:8], A[9:11, 9:11]]])
+        B_rp = np.block([[B[6:8 , 3:]], 
+                         [B[9:11, 3:]]])
+        return A_rp, B_rp
+    
+    def remove_yaw_dynamics(self, A: np_t.ArrayLike, B:np_t.ArrayLike) -> Tuple[np_t.ArrayLike, np_t.ArrayLike]:
+        """
+        This function removes the yaw dynamics and the z angular velocity dynamics from the linearized dynamics
+        matrices A and B. This is useful for designing a controller without the uncontrollable at aligned
+        orientations.
+        """
+        A_no_yaw = np.delete(A, [8, 11], axis=0)
+        A_no_yaw = np.delete(A_no_yaw, [8, 11], axis=1)
+        B_no_yaw = np.delete(B, [8, 11], axis=0)
+        return A_no_yaw, B_no_yaw

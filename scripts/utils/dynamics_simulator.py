@@ -47,7 +47,7 @@ class DynamicsSimulator:
 
         self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
         self.mag_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
-                                                   calibration_file="octomag_5point.yaml")
+                                                   calibration_file="octomag_77pt_avg_bias_corrected.yaml")
         
         self.orientation_quat = None
         if NORTH_DOWN:
@@ -83,7 +83,8 @@ class DynamicsSimulator:
             self.__last_command_recv_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(self.__tf_msg, 
                                                    common.NarrowRingMagnet.dps,
-                                                   DIPOLE_AXIS)
+                                                   torque_first=True,
+                                                   dipole_axis=DIPOLE_AXIS)
         A = self.mag_model.get_actuation_matrix(self.dipole_position)
         wrench = M @ A @ np.array(msg.des_currents_reg)
         fz = wrench[5]
