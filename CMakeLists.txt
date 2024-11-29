@@ -54,6 +54,7 @@ find_package(catkin REQUIRED
 add_message_files(
   FILES
   PID1DState.msg
+  Float64MultiArrayStamped.msg
 )
 
 ## Generate services in the 'srv' folder

@@ -1,13 +1,14 @@
 import numpy as np
 import scipy.signal as signal
 import control as ct
+import pynumdiff
 from time import perf_counter
 from scipy.linalg import block_diag
 
 import oct_levitation.common as common
 import control_utils.general.filters as filters
 import control_utils.general.geometry as geometry
-from oct_levitation.msg import PID1DState
+from oct_levitation.msg import PID1DState, Float64MultiArrayStamped
 from typing import Optional, Union
 from geometry_msgs.msg import TransformStamped
 
@@ -186,7 +187,8 @@ class Vicon6DOFEulerXYZStateEstimator:
     def __init__(self,
                  initial_orientation: Optional[TransformStamped] = TransformStamped(),
                  initial_velocity: Optional[np.ndarray] = np.zeros(3),
-                 initial_angular_velocity: Optional[np.ndarray] = np.zeros(3)) -> None:
+                 initial_angular_velocity: Optional[np.ndarray] = np.zeros(3),
+                 estimator_topic: Optional[str] = "/oct_levitation/rgb_state_estimator" ) -> None:
         """
         This class is a simple state estimator, made mostly for the purpose of estimating
         the velocities and just have a modular code structure. In the future though this 
@@ -207,6 +209,9 @@ class Vicon6DOFEulerXYZStateEstimator:
                                                                       self.orientation.transform.rotation.y,
                                                                       self.orientation.transform.rotation.z,
                                                                       self.orientation.transform.rotation.w]))        
+        self.state_pub = None
+        if estimator_topic is not None:
+            self.state_pub = rospy.Publisher(estimator_topic, Float64MultiArrayStamped, queue_size=10)      
         
     def update(self, orientation: TransformStamped, dt: float) -> np.ndarray:
         """
@@ -237,7 +242,13 @@ class Vicon6DOFEulerXYZStateEstimator:
         self.last_position = position
         self.last_euler = euler
 
-        return np.concatenate([position, velocity, euler, angular_velocity])
+        state_estimate = np.concatenate([position, velocity, euler, angular_velocity])
+        if self.state_pub is not None:
+            msg = Float64MultiArrayStamped()
+            msg.array.data = state_estimate
+            msg.header.stamp = rospy.Time.now()
+            self.state_pub.publish(msg)
+        return state_estimate
     
     def get_latest_state_estimate(self) -> np.ndarray:
         """

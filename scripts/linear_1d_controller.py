@@ -20,7 +20,7 @@ from std_msgs.msg import Float64MultiArray
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 from control_utils.general.filters import SingleChannelLiveFilter, MultiChannelLiveFilter
 
-HARDWARE_CONNECTED = False
+HARDWARE_CONNECTED = True
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
 MAGNET_TYPE = "small_ring" # options: "wide_ring", "small_ring"
@@ -36,7 +36,7 @@ CURRENT_POLARITY_FLIPPED = False
 # Controller Design
 B_friction = 0.0 # friction coefficient
 m = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + common.NarrowRingMagnet.mframe
-f_controller = 100 # Hz
+f_controller = 30 # Hz
 T_controller = 1/f_controller
 
 # A = np.array([[0, 1], [0, -B_friction/m]])
@@ -89,9 +89,21 @@ class Linear1DPositionPIDController:
         Qi_op = 1*np.eye(10)
         self.desired_state = np.array([0, 0, self.home_z, 0, 0, 0, 0, 0, 0, 0]) # [x, y, z, vx, vy, vz, phi, theta, wx, wy]
         self.desired_state[6:8] = initial_state[6:8] # We will try to maintain the initial orientation.
+        # self.desired_state[:8] = initial_state[:8] # We will try to maintain the initial state
+        # self.desired_state[8:] = initial_state[9:11]
+        rospy.loginfo("Desired state: {}".format(self.desired_state))
         self.d_filter = None
         self.e_filter = None
-        self.currents_filter = None
+        self.currents_filter = MultiChannelLiveFilter(
+            channels=8,
+            N=10,
+            Wn=10,
+            rs=100,
+            btype="lowpass",
+            ftype="cheby2",
+            use_sos=True,
+            fs=f_controller
+        )
 
         # self.controller = controllers.IntegralLQR(A_op, B_op, Q_op, R_op, Qi_op, dt=T_controller, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=CLEGG_INTEGRATOR)
         self.controller = controllers.LQR(A_op, B_op, Q_op, R_op, dt=T_controller, discretize=True)
@@ -128,12 +140,12 @@ class Linear1DPositionPIDController:
         torque = np.array([u[3], u[4], 0]) # Zero Tau_z in body frame
         torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
         desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
-        desired_currents = alloc_mat @ desired_wrench
-        # desired_currents = self.currents_filter(desired_currents)
+        desired_currents = (alloc_mat @ desired_wrench).flatten()
+        desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
         if CURRENT_POLARITY_FLIPPED:
             desired_currents = -desired_currents
-        self.current_msg.des_currents_reg = desired_currents.flatten().tolist()
+        self.current_msg.des_currents_reg = desired_currents.tolist()
         self.current_msg.header.stamp = rospy.Time.now()
         self.current_pub.publish(self.current_msg)
 
