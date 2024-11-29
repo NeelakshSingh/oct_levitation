@@ -50,7 +50,7 @@ class Linear1DPositionPIDController:
 
     def __init__(self):
         self.model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
-                                                   calibration_file="octomag_77pt_avg_bias_corrected.yaml")
+                                                   calibration_file="octomag_77pt_corrected_minimag_init.yaml")
         rospy.init_node('linear_1d_controller', anonymous=True)
         self.current_pub = rospy.Publisher("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=10)
         self.current_msg = DesCurrentsReg()
@@ -59,7 +59,6 @@ class Linear1DPositionPIDController:
         self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
         self.__tf_buffer = tf2_ros.Buffer()
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
-        self.home_z = 0.02 # OctoMag origin
         self.dipole_strength = DIPOLE_STRENGTH_DICT[MAGNET_TYPE] * MAGNET_STACK_SIZE
         self.dipole_axis = DIPOLE_AXIS
         
@@ -87,6 +86,7 @@ class Linear1DPositionPIDController:
         Q_op = 2*np.eye(10)
         R_op = 0.5*np.eye(5)
         Qi_op = 1*np.eye(10)
+        self.home_z = 0.02 # OctoMag origin
         self.desired_state = np.array([0, 0, self.home_z, 0, 0, 0, 0, 0, 0, 0]) # [x, y, z, vx, vy, vz, phi, theta, wx, wy]
         self.desired_state[6:8] = initial_state[6:8] # We will try to maintain the initial orientation.
         # self.desired_state[:8] = initial_state[:8] # We will try to maintain the initial state
