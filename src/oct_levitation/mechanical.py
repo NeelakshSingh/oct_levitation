@@ -139,6 +139,39 @@ class RigidBodyDipoleInterface:
         """
         com_world = rotate_vector_from_quaternion(q, self.mass_properties.com_position)
         return np.cross(com_world, self.mass_properties.m*g)
+    
+    def get_gravitational_force(self, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
+        """
+        This function returns the gravitational force acting on the rigid body. 
+        It is useful for gravity compensation in control.
+
+        Parameters
+        ----------
+        g (np_t.NDArray) : Gravitational acceleration vector in the world frame. Defaults to downward
+                            earth's gravitation along z-axis.
+        
+        Returns
+        -------
+        np_t.NDArray : Gravitational force acting on the rigid body in the world frame.
+        """
+        return self.mass_properties.m*g
+    
+    def get_gravitational_wrench(self, q: np_t.NDArray, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
+        """
+        This function returns the gravitational wrench acting on the rigid body. 
+        It is useful for gravity compensation in control.
+
+        Parameters
+        ----------
+        q (np_t.NDArray) : Current orientation of the rigid body in quaternion form w.r.t the world frame.
+        g (np_t.NDArray) : Gravitational acceleration vector in the world frame. Defaults to downward
+                           earth's gravitation along z-axis.
+        
+        Returns
+        -------
+        np_t.NDArray : Gravitational wrench [Force, Torque] acting on the rigid body in the world frame.
+        """
+        return np.hstack((self.get_gravitational_force(g), self.get_gravitational_torque(q, g)))
 
 @dataclass
 class TrackingMetadata:

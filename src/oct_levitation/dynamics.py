@@ -6,6 +6,7 @@ import control as ct
 import casadi as cs
 
 import oct_levitation.common as common
+import oct_levitation.geometry as geometry
 
 from time import perf_counter
 from geometry_msgs.msg import TransformStamped
@@ -29,6 +30,9 @@ class DynamicalSystemInterface:
         raise NotImplementedError
     
     def update(self, u: np.ndarray):
+        raise NotImplementedError
+    
+    def simulate_step(self, s: np.ndarray, u: np.ndarray, dt: float):
         raise NotImplementedError
 
 class ZLevitatingMassSystem(DynamicalSystemInterface):
@@ -101,7 +105,7 @@ class LinearizableNonLinearDynamicalSystem(DynamicalSystemInterface):
         
 class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem):
 
-    def __init__(self, m: float, I_m: np_t.NDArray, g: float = common.Constants.g):
+    def __init__(self, m: float, I_m: np_t.NDArray):
         """
         This class is completely independent of the dipole orientation since we consider the
         forces and torques as control input. The world frame is denoted as {V} and the body
@@ -120,13 +124,22 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         - The applied force vector is expressed in the world frame.
         - The applied torque vector is expressed in the body frame. So please design controllers with this in mind and 
           always transform the torque vector the world frame before the field/current allocation step.
+
+        Note on gravity:
+        This dynamics model does NOT include the explicit gravity term in both force and torque equations
+        explicity for the sake of simplicity. This is because incorporating it in the orientation dynamics
+        requires the transform of the gravity vector to the body frame which complicates the dynamics.
+        Therefore, please assume that effect of gravity as the steady state control input at all the times.        
+        Use the relevant methods from the mechanical module to get the forces and torques due to gravity
+        for gravity compensation.
         
-        Args:
-            d: float - The distance between the center of mass and the center of the magnet.
+        Parameters
+        ----------
+            m (float) : The mass of the rigid body in kg.
+            I_m (np_t.NDArray) : 3x3 numpy array The inertia matrix of the rigid body in the body frame.
         """
         self.m = m
         self.I_m = cs.SX(I_m)
-        self.g_vec = cs.vertcat(0, 0, -g)
 
         self.__x = cs.SX.sym("x") 
         self.__y = cs.SX.sym("y")
@@ -180,7 +193,7 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         self.__E_exyz_inv[2, 2] = 1
 
         # Dynamics equations
-        self.__f2 = self.g_vec +  self.__F/ m
+        self.__f2 = self.__F/ m
         self.__f3 = cs.mtimes(self.__E_exyz_inv, cs.vertcat(self.__wx, self.__wy, self.__wz))
         self.__I_m_inv = cs.inv(self.I_m)
         self.__f4 = cs.mtimes(self.__I_m_inv, cs.vertcat(self.__Tau_m_tilde, 0)) \
@@ -199,6 +212,21 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
                                                             ["s", "u"], ["f_s_u"])
     
     def get_linearized_dynamics(self, s: np_t.ArrayLike, u: np_t.ArrayLike) -> Tuple[np_t.NDArray, np_t.NDArray]:
+        """
+        This function returns the linearized dynamics matrices A and B for the given state and input.
+        Note that a default additive steady state gravity term is assumed in the input force vector
+        since it is not included in the dynamics model.
+
+        Parameters
+        ----------
+            s (np_t.ArrayLike) : The state vector.
+            u (np_t.ArrayLike) : The input vector.
+        
+        Returns
+        -------
+            A_op (np_t.NDArray) : The linearized dynamics matrix A.
+            B_op (np_t.NDArray) : The input matrix B.
+        """
         A_op, B_op = self.__get_linearized_dynamics_impl(s, u)
         A_op = np.array(A_op).astype(np.float64)
         B_op = np.array(B_op).astype(np.float64)
@@ -218,12 +246,16 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
     def isolate_roll_pitch_dynamics(self, A: np_t.ArrayLike, B: np_t.ArrayLike) -> Tuple[np_t.ArrayLike, np_t.ArrayLike]:
         """
         This function isolates the roll and pitch dynamics from the linearized dynamics matrix A and input matrix B.
-        Args:
-            A: The linearized dynamics matrix.
-            B: The input matrix.
-        Returns:
-            A_rp: The 4x4 roll and pitch dynamics matrix with wx and wy.
-            B_rp: The 4x2 input matrix isolated for Tau_m_x and Tau_m_y.
+
+        Parameters
+        ----------
+            A (np_t.ArrayLike) : The linearized dynamics matrix.
+            B (np_t.ArrayLike) : The input matrix.
+
+        Returns
+        -------
+            A_rp (np_t.ArrayLike) : The 4x4 roll and pitch dynamics matrix with wx and wy.
+            B_rp (np_t.ArrayLike) : The 4x2 input matrix isolated for Tau_m_x and Tau_m_y.
         """
         A_rp = np.block([[A[6:8, 6:8], A[6:8, 9:11]], 
                          [A[9:11, 6:8], A[9:11, 9:11]]])
@@ -241,3 +273,25 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         A_no_yaw = np.delete(A_no_yaw, [8, 11], axis=1)
         B_no_yaw = np.delete(B, [8, 11], axis=0)
         return A_no_yaw, B_no_yaw
+    
+    def simulate_step(self, s: np_t.NDArray, u: np_t.NDArray, dt: float) -> np_t.NDArray:
+        """
+        This function simulates the dynamics for one time step using the given state and input.
+        It will fix the euler angles to be within the range of -pi to pi. Simple first order
+        integration is used.
+
+        Parameters
+        ----------
+            s (np_t.NDArray) : The state vector.
+            u (np_t.NDArray) : The input vector.
+            dt (float) : The time step duration.
+        
+        Returns
+        -------
+            s_next (np_t.NDArray) : The next state vector.
+        """
+        s_next = s + self.eval_non_linear_dynamics(s, u)*dt
+        s_next[6] = geometry.angle_residual(s_next[6], 0)
+        s_next[7] = geometry.angle_residual(s_next[7], 0)
+        s_next[8] = geometry.angle_residual(s_next[8], 0)
+        return s_next

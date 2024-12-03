@@ -24,19 +24,16 @@ from oct_levitation.mechanical import NarrowRingMagnetS1
 HARDWARE_CONNECTED = True
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
-DIPOLE_BODY = NarrowRingMagnetS1
+CURRENT_MAX = 3.0 # A
+
+DIPOLE_BODY = NarrowRingMagnetS1() # Initialize in order to use methods.
+g_vector = np.array([0, 0, -common.Constants.g])
 
 # Controller Design
 B_friction = 0.0 # friction coefficient
 f_controller = 30 # Hz
 T_controller = 1/f_controller
 
-# A = np.array([[0, 1], [0, -B_friction/m]])
-# B = np.array([[0, 1/m]]).T
-# Q = np.diag([1, 1])
-# rho = 0.1
-# R = 1*rho
-# Qi = np.diag([1, 1]) # Weights for error integral
 
 class Linear1DPositionPIDController:
 
@@ -53,8 +50,7 @@ class Linear1DPositionPIDController:
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
         self.dipole_strength = DIPOLE_BODY.dipole_strength
         self.dipole_axis = DIPOLE_BODY.dipole_axis
-        
-        self.dipole_mass = DIPOLE_BODY.mass_properties.m
+
  
         rospy.sleep(0.1)
         # Using the full rigid body dynamics model linearized around the origin at rest.
@@ -62,9 +58,8 @@ class Linear1DPositionPIDController:
         initial_dipole_tf = self.__tf_buffer.lookup_transform("vicon/world", self.vicon_frame, rospy.Time())        
         self.full_state_estimator = controllers.Vicon6DOFEulerXYZStateEstimator(initial_dipole_tf)
         # We will initialize the dynamics and linearize the system around this operating point.
-        self.rigid_body_dynamics = dynamics.WrenchInput6DOFDipoleEulerXYZDynamics(m=self.dipole_mass,
-                                                                            I_m=DIPOLE_BODY.mass_properties.I_bf,
-                                                                            g=common.Constants.g)
+        self.rigid_body_dynamics = dynamics.WrenchInput6DOFDipoleEulerXYZDynamics(m=DIPOLE_BODY.mass_properties.m,
+                                                                            I_m=DIPOLE_BODY.mass_properties.I_bf)
 
         # In this version we only consider the linearized dynamics near the origin and use that for control.
         initial_state = self.full_state_estimator.get_latest_state_estimate()
@@ -111,7 +106,6 @@ class Linear1DPositionPIDController:
         y = self.full_state_estimator.get_latest_yaw_removed_state_estimate()
         # For some reason u is a matrix object we need to use ravel to flatten it into an array.
         u = np.array(self.controller.update(self.desired_state, y, dt)).flatten()
-        u[2] += common.Constants.g * self.dipole_mass # compensate for gravity
         self.control_input_pub.publish(Float64MultiArray(data=u.flatten().tolist()))
         self.last_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(dipole_tf, 
@@ -125,17 +119,17 @@ class Linear1DPositionPIDController:
         alloc_mat = np.linalg.pinv(M @ A)
         # Now so far the torque has been in the body frame. We need to convert it to the world frame.
         quaternion = np.array([dipole_tf.transform.rotation.x,
-                                 dipole_tf.transform.rotation.y,
-                                 dipole_tf.transform.rotation.z,
-                                 dipole_tf.transform.rotation.w])
+                               dipole_tf.transform.rotation.y,
+                               dipole_tf.transform.rotation.z,
+                               dipole_tf.transform.rotation.w])
         torque = np.array([u[3], u[4], 0]) # Zero Tau_z in body frame
         torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
         desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
+        # Performing gravity compensation
+        desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
         desired_currents = (alloc_mat @ desired_wrench).flatten()
         desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
-        if CURRENT_POLARITY_FLIPPED:
-            desired_currents = -desired_currents
         self.current_msg.des_currents_reg = desired_currents.tolist()
         self.current_msg.header.stamp = rospy.Time.now()
         self.current_pub.publish(self.current_msg)

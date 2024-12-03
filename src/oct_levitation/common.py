@@ -84,14 +84,3 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
         return np.vstack((M_Tau, M_F))
     else:
         return np.vstack((M_F, M_Tau))
-    
-def angle_residual(a: float, b: float):
-    """
-    Computes the smaller arc's angle residual between a and b by converting it to the 
-    range [-pi, pi].
-    """
-    residual = a - b
-    residual = residual % (2*np.pi) # First force to the range [0, 2*pi]
-    if residual > np.pi:
-        residual -= 2*np.pi
-    return residual
