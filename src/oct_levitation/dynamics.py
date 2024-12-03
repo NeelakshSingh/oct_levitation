@@ -11,6 +11,8 @@ from time import perf_counter
 from geometry_msgs.msg import TransformStamped
 from typing import Union, Optional, Tuple, Callable
 
+EPSILON_TOLERANCE = 1e-14 # High precision tolerance
+
 class DynamicalSystemInterface:
 
     sys = None
@@ -80,10 +82,26 @@ class ZLevitatingMassSystem(DynamicalSystemInterface):
     
     def get_output(self):
         return self.x
-        
-class WrenchInput6DOFEulerXYZDynamics:
+    
+class NonLinearDynamicalSystem(DynamicalSystemInterface):
+    def get_non_linear_dynamics_symbolic(self):
+        raise NotImplementedError
+    
+    def eval_non_linear_dynamics(self, s: np_t.ArrayLike, u: np_t.ArrayLike) -> np_t.NDArray:
+        raise NotImplementedError
+    
+    def get_non_linear_dynamics_function(self) -> Callable[[np_t.ArrayLike, np_t.ArrayLike], np_t.NDArray]:
+        raise NotImplementedError
+    
+class LinearizableNonLinearDynamicalSystem(DynamicalSystemInterface):
+    
+    def get_linearized_dynamics(self, s: np_t.ArrayLike, u: np_t.ArrayLike) -> Tuple[np_t.NDArray, np_t.NDArray]:
+        raise NotImplementedError
 
-    def __init__(self, d: float, m: float, I_m: np_t.NDArray, g: float = common.Constants.g):
+        
+class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem):
+
+    def __init__(self, m: float, I_m: np_t.NDArray, g: float = common.Constants.g):
         """
         This class is completely independent of the dipole orientation since we consider the
         forces and torques as control input. The world frame is denoted as {V} and the body
@@ -102,8 +120,10 @@ class WrenchInput6DOFEulerXYZDynamics:
         - The applied force vector is expressed in the world frame.
         - The applied torque vector is expressed in the body frame. So please design controllers with this in mind and 
           always transform the torque vector the world frame before the field/current allocation step.
+        
+        Args:
+            d: float - The distance between the center of mass and the center of the magnet.
         """
-        self.d = d
         self.m = m
         self.I_m = cs.SX(I_m)
         self.g_vec = cs.vertcat(0, 0, -g)
@@ -151,8 +171,8 @@ class WrenchInput6DOFEulerXYZDynamics:
 
         # Euler angle to body frame angular velocity map
         self.__E_exyz_inv = cs.SX(3, 3)
-        self.__E_exyz_inv[0, 0] = cs.cos(self.__psi) / cs.cos(self.__theta)
-        self.__E_exyz_inv[0, 1] = -cs.sin(self.__psi) / cs.cos(self.__theta)
+        self.__E_exyz_inv[0, 0] = cs.cos(self.__psi) / (cs.cos(self.__theta) + EPSILON_TOLERANCE)
+        self.__E_exyz_inv[0, 1] = -cs.sin(self.__psi) / (cs.cos(self.__theta) + EPSILON_TOLERANCE)
         self.__E_exyz_inv[1, 0] = cs.sin(self.__psi)
         self.__E_exyz_inv[1, 1] = cs.cos(self.__psi)
         self.__E_exyz_inv[2, 0] = -cs.cos(self.__psi) * cs.tan(self.__theta)
@@ -189,10 +209,11 @@ class WrenchInput6DOFEulerXYZDynamics:
     
     def eval_non_linear_dynamics(self, s: np_t.ArrayLike, u: np_t.ArrayLike) -> np_t.NDArray:
         f_s_u = self.__get_non_linear_dynamics_impl(s, u)
+        f_s_u = np.array(f_s_u).astype(np.float64).flatten()
         return f_s_u
     
     def get_non_linear_dynamics_function(self) -> Callable[[np_t.ArrayLike, np_t.ArrayLike], np_t.NDArray]:
-        return self.__get_non_linear_dynamics_impl
+        return self.eval_non_linear_dynamics
     
     def isolate_roll_pitch_dynamics(self, A: np_t.ArrayLike, B: np_t.ArrayLike) -> Tuple[np_t.ArrayLike, np_t.ArrayLike]:
         """

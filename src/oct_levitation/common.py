@@ -1,41 +1,23 @@
 import numpy as np
-import numpy.typing as np_t
-import scipy as sci
 import os
 import wand_calibration as wand
 
 import tf.transformations as tr
 
-from control_utils.general.utilities import get_actuation_matrix
 from mag_manip import mag_manip
 from geometry_msgs.msg import TransformStamped
-
 from dataclasses import dataclass
-from typing import Dict
 
 
 OCTOMAG_ALL_COILS_ENABLED = [True, True, True, True, True, True, True, True]
 
 @dataclass
 class Constants:
-    g: float = 9.81 # m/s^2
+    """
+    Standard physical constants used in the code.
+    """
+    g: float = 9.80665 # m/s^2
     mu_0: float = 4*np.pi*1e-7 # T*m/A
-    Br_neodymium: float = 1.2 # T
-
-@dataclass
-class NarrowRingMagnet:
-    Br: float = 1.36 # T
-    rho: float = 7.5e3 # kg/m^3
-    t: float = 4.96e-3 # m
-    ri: float = (5.11e-3)/2 # m
-    ro: float = (9.95e-3)/2 # m
-    V: float = np.pi*(ro**2 - ri**2)*t # m^3
-    m: float = rho*V # kg
-    dps: float = Br*V/Constants.mu_0 # kg*m^2/s
-    mframe: float = 2.9e-3
-    inertia_matrix_S1 : np_t.NDArray = np.array([[492.29, -74.08, -9.38],
-                                                 [-74.08, 807.43, -5.19],
-                                                 [-9.38, -5.19, 1251.91]]) * 1e-9 # kg*m^2
 
 class OctomagCalibratedModel:
 
@@ -102,3 +84,14 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
         return np.vstack((M_Tau, M_F))
     else:
         return np.vstack((M_F, M_Tau))
+    
+def angle_residual(a: float, b: float):
+    """
+    Computes the smaller arc's angle residual between a and b by converting it to the 
+    range [-pi, pi].
+    """
+    residual = a - b
+    residual = residual % (2*np.pi) # First force to the range [0, 2*pi]
+    if residual > np.pi:
+        residual -= 2*np.pi
+    return residual

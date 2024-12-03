@@ -9,7 +9,7 @@ import oct_levitation.common as common
 import oct_levitation.controllers as controllers
 import oct_levitation.dynamics as dynamics
 
-import control_utils.general.geometry as geometry
+import oct_levitation.geometry as geometry
 
 from time import perf_counter
 from copy import deepcopy
@@ -19,23 +19,15 @@ from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float64MultiArray
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 from control_utils.general.filters import SingleChannelLiveFilter, MultiChannelLiveFilter
+from oct_levitation.mechanical import NarrowRingMagnetS1
 
 HARDWARE_CONNECTED = True
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
-MAGNET_TYPE = "small_ring" # options: "wide_ring", "small_ring"
-VICON_FRAME_TYPE = "carbon_fiber_3_arm_1"
-MAGNET_STACK_SIZE = 1
-DIPOLE_STRENGTH_DICT = {"wide_ring": 0.1, "small_ring": common.NarrowRingMagnet.dps} # per stack unit [si]
-DIPOLE_AXIS = np.array([0, 0, 1])
-TOL = 1e-3
-
-CURRENT_MAX = 10.0 # [A]
-CURRENT_POLARITY_FLIPPED = False
+DIPOLE_BODY = NarrowRingMagnetS1
 
 # Controller Design
 B_friction = 0.0 # friction coefficient
-m = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + common.NarrowRingMagnet.mframe
 f_controller = 30 # Hz
 T_controller = 1/f_controller
 
@@ -55,14 +47,14 @@ class Linear1DPositionPIDController:
         self.current_pub = rospy.Publisher("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=10)
         self.current_msg = DesCurrentsReg()
         rospy.logwarn("HARDWARE_CONNECTED is set to {}".format(HARDWARE_CONNECTED))
-        init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)  
-        self.vicon_frame = f"vicon/{MAGNET_TYPE}_S{MAGNET_STACK_SIZE}/Origin"
+        init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)
+        self.vicon_frame = DIPOLE_BODY.tracking_data.pose_frame
         self.__tf_buffer = tf2_ros.Buffer()
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
-        self.dipole_strength = DIPOLE_STRENGTH_DICT[MAGNET_TYPE] * MAGNET_STACK_SIZE
-        self.dipole_axis = DIPOLE_AXIS
+        self.dipole_strength = DIPOLE_BODY.dipole_strength
+        self.dipole_axis = DIPOLE_BODY.dipole_axis
         
-        self.dipole_mass = m
+        self.dipole_mass = DIPOLE_BODY.mass_properties.m
  
         rospy.sleep(0.1)
         # Using the full rigid body dynamics model linearized around the origin at rest.
@@ -70,9 +62,8 @@ class Linear1DPositionPIDController:
         initial_dipole_tf = self.__tf_buffer.lookup_transform("vicon/world", self.vicon_frame, rospy.Time())        
         self.full_state_estimator = controllers.Vicon6DOFEulerXYZStateEstimator(initial_dipole_tf)
         # We will initialize the dynamics and linearize the system around this operating point.
-        self.rigid_body_dynamics = dynamics.WrenchInput6DOFEulerXYZDynamics(d=self.dipole_strength,
-                                                                            m=self.dipole_mass,
-                                                                            I_m=common.NarrowRingMagnet.inertia_matrix_S1,
+        self.rigid_body_dynamics = dynamics.WrenchInput6DOFDipoleEulerXYZDynamics(m=self.dipole_mass,
+                                                                            I_m=DIPOLE_BODY.mass_properties.I_bf,
                                                                             g=common.Constants.g)
 
         # In this version we only consider the linearized dynamics near the origin and use that for control.

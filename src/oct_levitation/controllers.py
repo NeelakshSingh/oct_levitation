@@ -7,10 +7,11 @@ from scipy.linalg import block_diag
 
 import oct_levitation.common as common
 import control_utils.general.filters as filters
-import control_utils.general.geometry as geometry
+import oct_levitation.geometry as geometry
 from oct_levitation.msg import PID1DState, Float64MultiArrayStamped
 from typing import Optional, Union
 from geometry_msgs.msg import TransformStamped
+from filterpy.kalman import ExtendedKalmanFilter as EKF
 
 import rospy
 
@@ -181,8 +182,24 @@ class IntegralLQR(ControllerInteface):
         u = -self.K @ np.vstack([e, e_integral])
         self.e_prev = e
         return u
+    
+class EstimatorInterface:
+    def __init__(self):
+        raise NotImplementedError
 
-class Vicon6DOFEulerXYZStateEstimator:
+    def update(self, measurement, dt):
+        raise NotImplementedError
+    
+    def get_latest_state_estimate(self):
+        raise NotImplementedError
+    
+    def predict(self, dt):
+        raise NotImplementedError("This estimator does not support prediction.")
+    
+    def predict_update(self, measurement, dt):
+        raise NotImplementedError("This estimator does not support predict and update functionality.")
+
+class Vicon6DOFEulerXYZStateEstimator(EstimatorInterface):
 
     def __init__(self,
                  initial_orientation: Optional[TransformStamped] = TransformStamped(),
@@ -267,3 +284,9 @@ class Vicon6DOFEulerXYZStateEstimator:
             np.ndarray: The 10 element vector containing [position, velocity, euler, angular_velocity] with yaw removed.
         """
         return np.concatenate([self.last_position, self.velocity, self.last_euler[:2], self.angular_velocity[:2]])
+
+# Note that the EKF class already implements the estimator interface. Except for the get_latest_state_estimate method.
+class EKFEstimator(EKF):
+
+    def __init__(self):
+        raise NotImplementedError
