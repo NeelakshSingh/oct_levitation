@@ -34,6 +34,14 @@ class DynamicalSystemInterface:
     
     def simulate_step(self, s: np.ndarray, u: np.ndarray, dt: float):
         raise NotImplementedError
+    
+    @property
+    def num_states(self):
+        raise NotImplementedError
+    
+    @property
+    def num_inputs(self):
+        raise NotImplementedError
 
 class ZLevitatingMassSystem(DynamicalSystemInterface):
 
@@ -102,8 +110,18 @@ class LinearizableNonLinearDynamicalSystem(DynamicalSystemInterface):
     def get_linearized_dynamics(self, s: np_t.ArrayLike, u: np_t.ArrayLike) -> Tuple[np_t.NDArray, np_t.NDArray]:
         raise NotImplementedError
 
+    def simulate_step_linearized(self, s: np_t.ArrayLike, u: np_t.ArrayLike,
+                                 s_op: np_t.ArrayLike, u_op: np_t.ArrayLike, dt: float) -> np_t.NDArray:
+        raise NotImplementedError
+    
+    def calculate_steady_state_input(self, s: np_t.ArrayLike) -> np_t.NDArray:
+        raise NotImplementedError
+
         
 class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem):
+
+    __num_states: int = 12
+    __num_inputs: int = 5
 
     def __init__(self, m: float, I_m: np_t.NDArray):
         """
@@ -211,6 +229,14 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
                                                             [self.__f_s_u],
                                                             ["s", "u"], ["f_s_u"])
     
+    @property
+    def num_states(self):
+        return self.__num_states
+    
+    @property
+    def num_inputs(self):
+        return self.__num_inputs
+
     def get_linearized_dynamics(self, s: np_t.ArrayLike, u: np_t.ArrayLike) -> Tuple[np_t.NDArray, np_t.NDArray]:
         """
         This function returns the linearized dynamics matrices A and B for the given state and input.
@@ -295,3 +321,47 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         s_next[7] = geometry.angle_residual(s_next[7], 0)
         s_next[8] = geometry.angle_residual(s_next[8], 0)
         return s_next
+    
+    def simulate_step_linearized(self, s: np_t.NDArray, u: np_t.NDArray,
+                                s_op: np_t.ArrayLike, u_op: np_t.ArrayLike, dt: float) -> np_t.NDArray:
+        """
+        This function simulates the dynamics for one time step using the given state and input
+        and the linearized system matrices, linearized around the given state and input.
+        It will fix the euler angles to be within the range of -pi to pi. Simple first order
+        integration is used.
+
+        Parameters
+        ----------
+            s (np_t.NDArray) : The state vector.
+            u (np_t.NDArray) : The input vector.
+            s_op (np_t.ArrayLike) : The operating point state vector for linearization.
+            u_op (np_t.ArrayLike) : The operating point input vector for linearization.
+            dt (float) : The time step duration.
+
+        Returns
+        -------
+            s_next (np_t.NDArray) : The next state vector.
+        """
+        A, B = self.get_linearized_dynamics(s_op, u_op)
+        delta_s = s - s_op
+        delta_u = u - u_op
+        delta_s_next = delta_s + (A @ delta_s + B @ delta_u)
+        s_next = s_op + delta_s_next
+        s_next[6] = geometry.angle_residual(s_next[6], 0)
+        s_next[7] = geometry.angle_residual(s_next[7], 0)
+        s_next[8] = geometry.angle_residual(s_next[8], 0)
+        return s_next
+    
+    def calculate_steady_state_input(self, s: np_t.NDArray) -> np_t.NDArray:
+        """
+        Calculates the steady state input to maintain the given state vector.
+
+        Parameters
+        ----------
+            s (np_t.ArrayLike) : The state vector.
+        
+        Returns
+        -------
+            u_op (np_t.ArrayLike) : The steady state input vector.
+        """
+        

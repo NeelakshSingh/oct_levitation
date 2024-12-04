@@ -210,5 +210,5 @@ class NarrowRingMagnetS1(RigidBodyDipoleInterface):
                                                             Py=814.33e-9,
                                                             Pz=1241.44e-9
                                                         ))
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/NarrowRingMagnet_S1/Origin")
+    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_S1/Origin")
     dipole_axis: np_t.NDArray = np.array([0, 0, 1]) # Default dipole axis is along the z-axis
