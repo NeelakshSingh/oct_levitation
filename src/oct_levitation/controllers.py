@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as np_t
 import scipy.signal as signal
 import control as ct
 import pynumdiff
@@ -8,8 +9,9 @@ from scipy.linalg import block_diag
 import oct_levitation.common as common
 import control_utils.general.filters as filters
 import oct_levitation.geometry as geometry
+import oct_levitation.numerical as numerical
 from oct_levitation.msg import PID1DState, Float64MultiArrayStamped
-from typing import Optional, Union
+from typing import Optional, Union, Iterable
 from geometry_msgs.msg import TransformStamped
 from filterpy.kalman import ExtendedKalmanFilter as EKF
 
@@ -125,6 +127,7 @@ class IntegralLQR(ControllerInteface):
     def __init__(self,
                  A: np.ndarray,
                  B: np.ndarray,
+                 C: np.ndarray,
                  Q: np.ndarray,
                  R: np.ndarray,
                  Qi: np.ndarray,
@@ -140,6 +143,7 @@ class IntegralLQR(ControllerInteface):
         Args:
             A (np.ndarray): The state matrix.
             B (np.ndarray): The input matrix.
+            C (np.ndarray): The output matrix.
             Q (np.ndarray): The state cost matrix.
             R (np.ndarray): The input cost matrix.
             Qi (np.ndarray): The integral error cost matrix.
@@ -149,21 +153,24 @@ class IntegralLQR(ControllerInteface):
         """
         self.A = A
         self.B = B
+        self.C = C
         self.Q = Q
         self.R = R
         self.discretize = discretize
         
         # Designing a state augmented integral LQR controller
-        A_aug = np.block([[A, np.zeros((A.shape[0], A.shape[0]))],
-                          [np.eye(A.shape[0]), np.zeros((A.shape[0], A.shape[0]))]])
+        A_aug = np.block([[A, np.zeros((A.shape[0], A.shape[1]))],
+                          [-C, np.zeros((C.shape[0], A.shape[1]))]])
         B_aug = np.block([[B], [np.zeros((B.shape[0], B.shape[1]))]])
         Q_aug = block_diag(Q, Qi)
 
         # Performing an exact ZOH discretization of the augmented system
         if self.discretize:
             Ad, Bd, Cd, Dd, dt = signal.cont2discrete((A_aug, B_aug, np.eye(A_aug.shape[0]), 0), dt=dt, method='zoh')
+            self.Ce = Cd
             self.lqr_out = ct.dlqr(Ad, Bd, Q_aug, R)
         else:
+            self.Ce = self.C
             self.lqr_out = ct.lqr(A_aug, B_aug, Q_aug, R)
         self.K = self.lqr_out[0]
 
@@ -174,7 +181,7 @@ class IntegralLQR(ControllerInteface):
 
     def update(self, r, y, dt):
         e = r - y
-        self.e_integral += e * dt
+        self.e_integral += self.Ce @ (e * dt)
         if self.clegg_integrator:
             if np.sign(e) != np.sign(self.e_prev):
                 self.e_integral = 0
@@ -183,6 +190,49 @@ class IntegralLQR(ControllerInteface):
         self.e_prev = e
         return u
     
+class IntegralSeriesLQR(LQR):
+
+    def __init__(self,
+                 A: np.ndarray,
+                 B: np.ndarray,
+                 C: np.ndarray,
+                 Q: np.ndarray,
+                 R: np.ndarray,
+                 Ki: np.ndarray,
+                 dt: Optional[float] = None,
+                 discretize: bool = True,
+                 windup_lim: float = np.inf,
+                 clegg_integrator: bool = False):
+        """
+        This is an LQR controller with full state feedback through some state estimator augmented
+        with an integral controller for the directly observable states through the output matrix C.
+
+        Parameters:
+            A (np.ndarray): The state matrix.
+            B (np.ndarray): The input matrix.
+            C (np.ndarray): The output matrix.
+            Q (np.ndarray): The state cost matrix.
+            R (np.ndarray): The input cost matrix.
+            Ki (np.ndarray): The integral controller gain matrix.
+            dt (Optional[float], optional): The sampling time for discretization. Defaults to None.
+            discretize (bool, optional): Whether to discretize the system. Defaults to True.
+        """
+        super().__init__(A, B, Q, R, dt, discretize)
+        self.C = C # D = 0 so won't make a difference in discretization
+        self.Ki = Ki
+        self.e_integrator = numerical.FirstOrderIntegrator(windup_lim, clegg_integrator)
+
+    def update(self, r, y, dt):
+        e = r - y
+        self.e_integral = self.e_integrator(self.C @ e, dt)
+        u = self.K @ e + self.Ki @ self.e_integral
+        return u
+        
+    
+#######################################################
+# STATE ESTIMATORS
+#######################################################
+
 class EstimatorInterface:
     def __init__(self):
         raise NotImplementedError
@@ -198,14 +248,16 @@ class EstimatorInterface:
     
     def predict_update(self, measurement, dt):
         raise NotImplementedError("This estimator does not support predict and update functionality.")
-
+    
 class Vicon6DOFEulerXYZStateEstimator(EstimatorInterface):
 
     def __init__(self,
                  initial_orientation: Optional[TransformStamped] = TransformStamped(),
                  initial_velocity: Optional[np.ndarray] = np.zeros(3),
                  initial_angular_velocity: Optional[np.ndarray] = np.zeros(3),
-                 estimator_topic: Optional[str] = "/oct_levitation/rgb_state_estimator" ) -> None:
+                 estimator_topic: Optional[str] = "/oct_levitation/rgb_state_estimator",
+                 small_angle_approximation: bool = False,
+                 alpha: Union[float, Iterable[float]] = 0.1) -> None:
         """
         This class is a simple state estimator, made mostly for the purpose of estimating
         the velocities and just have a modular code structure. In the future though this 
@@ -215,6 +267,9 @@ class Vicon6DOFEulerXYZStateEstimator(EstimatorInterface):
             initial_orientation (TransformStamped, optional): The initial orientation. Defaults to TransformStamped().
             initial_velocity (np.ndarray, optional): The initial velocity. Defaults to np.zeros(3).
             initial_angular_velocity (np.ndarray, optional): The initial angular velocity. Defaults to np.zeros(3).
+            estimator_topic (str, optional): The topic to publish the state estimate. Defaults to "/oct_levitation/rgb_state_estimator".
+            small_angle_approximation (bool, optional): Whether to use the small angle approximation for euler rates. Defaults to False.
+            alpha (Union[float, Iterable[float]], optional): The smoothing factor for the differentiatior. Defaults to 0.1.
         """
         self.orientation = initial_orientation
         self.velocity = initial_velocity
@@ -227,6 +282,9 @@ class Vicon6DOFEulerXYZStateEstimator(EstimatorInterface):
                                                                       self.orientation.transform.rotation.z,
                                                                       self.orientation.transform.rotation.w]))        
         self.state_pub = None
+        self.vel_diffs = numerical.MultiChannelFirstOrderDifferentiator(channels=3, alpha=alpha)
+        self.euler_rate_diffs = numerical.MultiChannelFirstOrderDifferentiator(channels=3, alpha=alpha)
+        self.small_angle_approximation = small_angle_approximation
         if estimator_topic is not None:
             self.state_pub = rospy.Publisher(estimator_topic, Float64MultiArrayStamped, queue_size=10)      
         
@@ -249,10 +307,13 @@ class Vicon6DOFEulerXYZStateEstimator(EstimatorInterface):
                                orientation.transform.rotation.z,
                                orientation.transform.rotation.w])
         euler = geometry.euler_xyz_from_quaternion(quaternion)
-        velocity = (position - self.last_position) / dt
-        euler_rate = (euler - self.last_euler) / dt
-        Exyz = geometry.euler_xyz_rate_to_local_angular_velocity_map_matrix(euler)
-        angular_velocity = Exyz @ euler_rate
+        velocity = self.vel_diffs(position, dt)
+        euler_rate = self.euler_rate_diffs(euler, dt)
+        if not self.small_angle_approximation:
+            Exyz = geometry.euler_xyz_rate_to_local_angular_velocity_map_matrix(euler)
+            angular_velocity = Exyz @ euler_rate
+        else:
+            angular_velocity = euler_rate
         self.orientation = orientation
         self.velocity = velocity
         self.angular_velocity = angular_velocity

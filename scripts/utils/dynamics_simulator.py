@@ -8,10 +8,11 @@ from tnb_mns_driver.msg import DesCurrentsReg
 
 from oct_levitation.dynamics import ZLevitatingMassSystem
 import oct_levitation.common as common
+import oct_levitation.mechanical as mechanical
 
 MAGNET_STACK_SIZE = 1
 # MAGNET_TYPE = "wide_ring" # options: "wide_ring", "narrow_ring"
-NORTH_DOWN = True
+NORTH_DOWN = False
 M_FRAME = 2.9e-3 # kg
 M_SMALL_MAGNET = 2.25e-3 # kg
 B = 0.0 # damping coefficient (friction)
@@ -19,6 +20,8 @@ X0 = np.array([0.03, 0]) # initial state: x, x_dot
 DIPOLE_AXIS = np.array([0, 0, 1])
 L_BOUNDS = np.array([-0.05, -np.inf])
 U_BOUNDS = np.array([0.05, np.inf])
+
+DIPOLE_BODY = mechanical.NarrowRingMagnetS1()
 
 class DynamicsSimulator:
 
@@ -41,8 +44,7 @@ class DynamicsSimulator:
 
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
-        m = common.NarrowRingMagnet.m * MAGNET_STACK_SIZE + \
-            common.NarrowRingMagnet.mframe
+        m = DIPOLE_BODY.mass_properties.m
         self.sys = ZLevitatingMassSystem(m, B, True, self.Ts, X0, L_BOUNDS, U_BOUNDS)
 
         self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
@@ -82,13 +84,14 @@ class DynamicsSimulator:
             self.__first_command = False
             self.__last_command_recv_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(self.__tf_msg, 
-                                                   common.NarrowRingMagnet.dps,
+                                                   DIPOLE_BODY.dipole_strength,
                                                    torque_first=True,
                                                    dipole_axis=DIPOLE_AXIS)
         A = self.mag_model.get_actuation_matrix(self.dipole_position)
         wrench = M @ A @ np.array(msg.des_currents_reg)
         fz = wrench[5]
         self.last_command_recv = fz
+        rospy.loginfo("Command received: %.5f" % fz)
         self.__last_command_recv_time = rospy.Time.now().to_sec()
         if self.__last_command_warning_sent:
             rospy.loginfo("Command received again.")

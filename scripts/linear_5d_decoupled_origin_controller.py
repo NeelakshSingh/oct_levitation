@@ -30,10 +30,21 @@ DIPOLE_BODY = NarrowRingMagnetS1() # Initialize in order to use methods.
 g_vector = np.array([0, 0, -common.Constants.g])
 
 # Controller Design
-B_friction = 0.0 # friction coefficient
 f_controller = 30 # Hz
 T_controller = 1/f_controller
 
+A = np.array([[0, 1], [0, 0]])
+B_forces = np.array([[0], [1/DIPOLE_BODY.mass_properties.m]])
+Q_linear = np.diag([1, 1])*1e-1
+R_linear = np.diag([1])*1e-1
+Qi_linear = np.diag([1, 1])*1e-1
+
+B_phi = np.array([[0], [1/DIPOLE_BODY.mass_properties.I_bf[0, 0]]])
+B_theta = np.array([[0], [1/DIPOLE_BODY.mass_properties.I_bf[1, 1]]])
+Q_rot = np.diag([1, 1])*1
+Qi_rot = np.diag([1, 1])*1
+R_rot = np.diag([1])*1e7 # Have large penalty on torque magnitude to encourage very small torques.
+Rot_windup_limit = 0.5 # rad
 
 class Linear1DPositionPIDController:
 
@@ -50,49 +61,27 @@ class Linear1DPositionPIDController:
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
         self.dipole_strength = DIPOLE_BODY.dipole_strength
         self.dipole_axis = DIPOLE_BODY.dipole_axis
-
- 
         rospy.sleep(0.1)
         # Using the full rigid body dynamics model linearized around the origin at rest.
         # First we need to get the initial position and orientation of the dipole.
         initial_dipole_tf = self.__tf_buffer.lookup_transform("vicon/world", self.vicon_frame, rospy.Time())        
         self.full_state_estimator = controllers.Vicon6DOFEulerXYZStateEstimator(initial_dipole_tf)
-        # We will initialize the dynamics and linearize the system around this operating point.
-        self.rigid_body_dynamics = dynamics.WrenchInput6DOFDipoleEulerXYZDynamics(m=DIPOLE_BODY.mass_properties.m,
-                                                                            I_m=DIPOLE_BODY.mass_properties.I_bf)
-
         # In this version we only consider the linearized dynamics near the origin and use that for control.
         initial_state = self.full_state_estimator.get_latest_state_estimate()
+        self.x_controller = controllers.IntegralLQR(A, B_forces, Q_linear, R_linear, Qi_linear, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=True)
+        self.y_controller = controllers.IntegralLQR(A, B_forces, Q_linear, R_linear, Qi_linear, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=True)
+        self.z_controller = controllers.IntegralLQR(A, B_forces, Q_linear, R_linear, Qi_linear, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=True)
+                            
+        self.phi_controller = controllers.IntegralLQR(A, B_phi, Q_rot, R_rot, Qi_rot, dt=T_controller, discretize=True, windup_lim=Rot_windup_limit, clegg_integrator=True)
+        self.theta_controller = controllers.IntegralLQR(A, B_theta, Q_rot, R_rot, Qi_rot, dt=T_controller, discretize=True, windup_lim=Rot_windup_limit, clegg_integrator=True)
+        
         rospy.loginfo("Initial state: {}".format(initial_state))
-        # u_ss doesn't contain gravity compensation, so we need to add that manually later.
-        initial_control_input = np.array([0, 0, 0, 0, 0]) # 3 forces in world frame, 2 torques in body frame
-        A_op, B_op = self.rigid_body_dynamics.get_linearized_dynamics(initial_state, initial_control_input)
-        # Because of the uncontrollability of the yaw and yaw rate at origin, we will remove them from our state space model.
-        A_op, B_op = self.rigid_body_dynamics.remove_yaw_dynamics(A_op, B_op)
-        Q_op = 10*np.eye(10)
-        R_op = 0.5*np.eye(5)
-        Qi_op = 1*np.eye(10)
         self.home_z = 0.02 # OctoMag origin
-        self.desired_state = np.array([0, 0, self.home_z, 0, 0, 0, 0, 0, 0, 0]) # [x, y, z, vx, vy, vz, phi, theta, wx, wy]
-        # self.desired_state[6:8] = initial_state[6:8] # We will try to maintain the initial orientation.
-        # self.desired_state[:8] = initial_state[:8] # We will try to maintain the initial state
-        # self.desired_state[8:] = initial_state[9:11]
-        rospy.loginfo("Desired state: {}".format(self.desired_state))
-        self.d_filter = None
-        self.e_filter = None
-        self.currents_filter = MultiChannelLiveFilter(
-            channels=8,
-            N=10,
-            Wn=10,
-            rs=100,
-            btype="lowpass",
-            ftype="cheby2",
-            use_sos=True,
-            fs=f_controller
-        )
-
-        # self.controller = controllers.IntegralLQR(A_op, B_op, Q_op, R_op, Qi_op, dt=T_controller, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=CLEGG_INTEGRATOR)
-        self.controller = controllers.LQR(A_op, B_op, Q_op, R_op, dt=T_controller, discretize=True)
+        self.desired_x = np.array([[0, 0]]).T
+        self.desired_y = np.array([[0, 0]]).T
+        self.desired_z = np.array([[self.home_z, 0]]).T
+        self.desired_phi = np.array([[0, 0]]).T
+        self.desired_theta = np.array([[0, 0]]).T
         self.control_input_pub = rospy.Publisher("/oct_levitation/linear_1d_controller/control_input", Float64MultiArray, queue_size=10)
 
         self.last_time = rospy.Time.now().to_sec()
@@ -105,8 +94,12 @@ class Linear1DPositionPIDController:
         self.full_state_estimator.update(dipole_tf, dt)
         y = self.full_state_estimator.get_latest_yaw_removed_state_estimate()
         # For some reason u is a matrix object we need to use ravel to flatten it into an array.
-        u = np.array(self.controller.update(self.desired_state, y, dt)).flatten()
-        self.control_input_pub.publish(Float64MultiArray(data=u.flatten().tolist()))
+        u = np.zeros(5)
+        u[1] = self.x_controller.update(np.array([[y[0]. y[3]]]).T, self.desired_x, dt).flatten()
+        u[2] = self.y_controller.update(np.array([[y[1]. y[4]]]).T, self.desired_y, dt).flatten()
+        u[3] = self.z_controller.update(np.array([[y[2]. y[5]]]).T, self.desired_z, dt).flatten()
+        u[4] = self.phi_controller.update(np.array([[y[6]. y[9]]]).T, self.desired_phi, dt).flatten()
+        u[5] = self.theta_controller.update(np.array([[y[7]. y[10]]]).T, self.desired_theta, dt).flatten()
         self.last_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(dipole_tf, 
                                                    self.dipole_strength,
@@ -123,12 +116,12 @@ class Linear1DPositionPIDController:
                                dipole_tf.transform.rotation.z,
                                dipole_tf.transform.rotation.w])
         torque = np.array([u[3], u[4], 0]) # Zero Tau_z in body frame
-        torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
+        # torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
         desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
         # Performing gravity compensation
         desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
         desired_currents = (alloc_mat @ desired_wrench).flatten()
-        desired_currents = self.currents_filter(desired_currents)
+        # desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
         self.current_msg.des_currents_reg = desired_currents.tolist()
         self.current_msg.header.stamp = rospy.Time.now()
