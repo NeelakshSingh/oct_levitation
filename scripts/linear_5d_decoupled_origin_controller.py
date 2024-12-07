@@ -18,15 +18,17 @@ from tnb_mns_driver.msg import DesCurrentsReg
 from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float64MultiArray
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
-from control_utils.general.filters import SingleChannelLiveFilter, MultiChannelLiveFilter
-from oct_levitation.mechanical import NarrowRingMagnetS1
+from control_utils.general.filters import AveragingLowPassFilter
+from control_utils.general.utilities import SmoothIterativeUpdate
+import oct_levitation.mechanical as mechanical
+import oct_levitation.numerical as numerical
 
 HARDWARE_CONNECTED = True
 INTEGRATOR_WINDUP_LIMIT = 10
 CLEGG_INTEGRATOR = True
-CURRENT_MAX = 3.0 # A
+CURRENT_MAX = 10.0 # A
 
-DIPOLE_BODY = NarrowRingMagnetS1() # Initialize in order to use methods.
+DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricSquareS1() # Initialize in order to use methods.
 g_vector = np.array([0, 0, -common.Constants.g])
 
 # Controller Design
@@ -88,6 +90,10 @@ class Linear1DPositionPIDController:
         self.desired_phi = np.array([[0, 0]]).T
         self.desired_theta = np.array([[0, 0]]).T
         self.control_input_pub = rospy.Publisher("/oct_levitation/linear_1d_controller/control_input", Float64MultiArray, queue_size=10)
+        
+        self.smooth_starter = SmoothIterativeUpdate(y0=0.0, ye=1.0, te=1.0, Ts=0.01)
+        self.differentiator = numerical.FirstOrderDifferentiator(alpha=0.5)
+        self.lpf = AveragingLowPassFilter(0.9)
 
         last_x = initial_dipole_tf.transform.translation.x
         last_y = initial_dipole_tf.transform.translation.y
@@ -121,16 +127,18 @@ class Linear1DPositionPIDController:
         phi = eulers[0]
         theta = eulers[1]
         s = np.array([x, y, z, phi, theta])
-        s_dot = (s - self.last_s) / dt
+        # s_dot = (s - self.last_s) / dt
+        s_dot = self.differentiator(s, dt)
+        s_dot = self.lpf(s_dot)
         self.last_s = s
 
         # For some reason u is a matrix object we need to use ravel to flatten it into an array.
         u = np.zeros(5)
-        u[0] = self.x_controller.update(self.desired_x, np.array([[s[0], s_dot[0]]]).T, dt).flatten()
-        u[1] = self.y_controller.update(self.desired_y, np.array([[s[1], s_dot[1]]]).T, dt).flatten()
+        # u[0] = self.x_controller.update(self.desired_x, np.array([[s[0], s_dot[0]]]).T, dt).flatten()
+        # u[1] = self.y_controller.update(self.desired_y, np.array([[s[1], s_dot[1]]]).T, dt).flatten()
         u[2] = self.z_controller.update(self.desired_z, np.array([[s[2], s_dot[2]]]).T, dt).flatten()
-        u[3] = self.phi_controller.update(self.desired_phi, np.array([[s[3], s_dot[3]]]).T, dt).flatten()
-        u[4] = self.theta_controller.update(self.desired_theta, np.array([[s[4], s_dot[4]]]).T, dt).flatten()
+        # u[3] = self.phi_controller.update(self.desired_phi, np.array([[s[3], s_dot[3]]]).T, dt).flatten()
+        # u[4] = self.theta_controller.update(self.desired_theta, np.array([[s[4], s_dot[4]]]).T, dt).flatten()
         self.last_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(dipole_tf, 
                                                    self.dipole_strength,
@@ -150,7 +158,9 @@ class Linear1DPositionPIDController:
         torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
         desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
         # Performing gravity compensation
-        desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
+        # desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
+        desired_wrench -= np.array([0, 0, -DIPOLE_BODY.mass_properties.m * common.Constants.g, 0, 0, 0])
+        desired_wrench = desired_wrench * self.smooth_starter.update()
         self.control_input_pub.publish(Float64MultiArray(data=desired_wrench.flatten().tolist()))
         desired_currents = (alloc_mat @ desired_wrench).flatten()
         # desired_currents = self.currents_filter(desired_currents)

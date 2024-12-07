@@ -29,6 +29,11 @@ class PrincipleAxesAndMomentsOfInertia:
     Py: float
     Pz: float
 
+    def __post_init__(self):
+        self.Ix = self.Ix/np.linalg.norm(self.Ix, 2)
+        self.Iy = self.Iy/np.linalg.norm(self.Iy, 2)
+        self.Iz = self.Iz/np.linalg.norm(self.Iz, 2)
+
 @dataclass
 class MassProperties:
     """
@@ -194,6 +199,7 @@ class NarrowRingMagnetS1(RigidBodyDipoleInterface):
     geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
     dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
     mframe: float = 2.9e-3
+    # Computed using SolidWorks
     mass_properties: MassProperties = MassProperties(geometric_properties.volume*material_properties.density + mframe,
                                                         np.array([[492.29, -74.08, 9.38],
                                                                   [-74.28, 807.43, 5.19],
@@ -203,12 +209,34 @@ class NarrowRingMagnetS1(RigidBodyDipoleInterface):
                                                                   [3.83, 2.12, 1241.41]])*1e-9,
                                                         np.array([1.27, 0.70, 0.87])*1e-3,
                                                         PrincipleAxesAndMomentsOfInertia(
-                                                            Ix=np.array([0.97, -0.23, 0.00])*1e-3,
-                                                            Iy=np.array([0.23, 0.97, 0.01])*1e-3,
-                                                            Iz=np.array([-0.01, -0.01, 1.00])*1e-3,
+                                                            Ix=np.array([0.97, -0.23, 0.00]),
+                                                            Iy=np.array([0.23, 0.97, 0.01]),
+                                                            Iz=np.array([-0.01, -0.01, 1.00]),
                                                             Px=467.21e-9,
                                                             Py=814.33e-9,
                                                             Pz=1241.44e-9
                                                         ))
     tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_S1/Origin")
     dipole_axis: np_t.NDArray = np.array([0, 0, 1]) # Default dipole axis is along the z-axis
+
+@dataclass
+class NarrowRingMagnetSymmetricSquareS1(RigidBodyDipoleInterface):
+    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
+    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
+    dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
+    mframe: float = 22.54e-3 # Mass of the square frame in kg
+    # Computed using SolidWorks
+    mass_properties: MassProperties = MassProperties(24.67e-3,
+                                                     np.diag([6918.86, 7712.23, 14125.84])*1e-9,
+                                                     np.diag([6794.76, 7588.13, 14125.84])*1e-9,
+                                                     np.array([0.00, 0.00, 2.24])*1e-3,
+                                                     PrincipleAxesAndMomentsOfInertia(
+                                                            Ix=np.array([-1.00, 0.00, 0.00]),
+                                                            Iy=np.array([0.00, 1.00, 0.00]),
+                                                            Iz=np.array([0.00, 0.00, -1.00]),
+                                                            Px=6794.76e-9,
+                                                            Py=7588.13e-9,
+                                                            Pz=14125.84e-9
+                                                     ))
+    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_square5_frame_S1/Origin")
+    dipole_axis: np_t.NDArray = np.array([0, 0, 1])

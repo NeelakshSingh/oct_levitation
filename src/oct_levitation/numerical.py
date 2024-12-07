@@ -16,7 +16,7 @@ class FirstOrderDifferentiator:
     def __call__(self, val: np_t.ArrayLike, dt: float) -> np_t.ArrayLike:
         if self.prev_val is None:
             self.prev_val = val
-            return 0
+            return np.zeros_like(val)
         smooth_val = self.alpha*self.prev_val + (1-self.alpha)*val
         diff = (smooth_val - self.prev_val)/dt
         self.prev_val = smooth_val

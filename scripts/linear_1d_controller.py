@@ -19,14 +19,14 @@ from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float64MultiArray
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 from control_utils.general.filters import SingleChannelLiveFilter, MultiChannelLiveFilter
-from oct_levitation.mechanical import NarrowRingMagnetS1
+import oct_levitation.mechanical as mechanical
 
-HARDWARE_CONNECTED = False
+HARDWARE_CONNECTED = True
 INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
-CURRENT_MAX = 3.0 # A
+CURRENT_MAX = 10.0 # A
 
-DIPOLE_BODY = NarrowRingMagnetS1() # Initialize in order to use methods.
+DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricSquareS1() # Initialize in order to use methods.
 g_vector = np.array([0, 0, -common.Constants.g])
 
 # Controller Design
