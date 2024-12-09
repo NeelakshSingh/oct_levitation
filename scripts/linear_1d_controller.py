@@ -26,7 +26,8 @@ INTEGRATOR_WINDUP_LIMIT = 100
 CLEGG_INTEGRATOR = False
 CURRENT_MAX = 10.0 # A
 
-DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricSquareS1() # Initialize in order to use methods.
+# DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricSquareS1() # Initialize in order to use methods.
+DIPOLE_BODY = mechanical.NarrowRingMagnetS1() # Initialize in order to use methods.
 g_vector = np.array([0, 0, -common.Constants.g])
 
 # Controller Design
@@ -71,10 +72,13 @@ class Linear1DPositionPIDController:
         A_op, B_op = self.rigid_body_dynamics.remove_yaw_dynamics(A_op, B_op)
         Q_op = 10*np.eye(10)
         R_op = 0.5*np.eye(5)
+        C_op = np.block([[np.eye(3), np.zeros((3, 7))],
+                         [np.zeros((2, 6)), np.eye(2), np.zeros((2, 2))]])
+        Ki = np.eye(5)*0.1
         Qi_op = 1*np.eye(10)
         self.home_z = 0.02 # OctoMag origin
         self.desired_state = np.array([0, 0, self.home_z, 0, 0, 0, 0, 0, 0, 0]) # [x, y, z, vx, vy, vz, phi, theta, wx, wy]
-        # self.desired_state[6:8] = initial_state[6:8] # We will try to maintain the initial orientation.
+        self.desired_state[6:8] = initial_state[6:8] # We will try to maintain the initial orientation.
         # self.desired_state[:8] = initial_state[:8] # We will try to maintain the initial state
         # self.desired_state[8:] = initial_state[9:11]
         rospy.loginfo("Desired state: {}".format(self.desired_state))
@@ -92,7 +96,8 @@ class Linear1DPositionPIDController:
         )
 
         # self.controller = controllers.IntegralLQR(A_op, B_op, Q_op, R_op, Qi_op, dt=T_controller, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=CLEGG_INTEGRATOR)
-        self.controller = controllers.LQR(A_op, B_op, Q_op, R_op, dt=T_controller, discretize=True)
+        # self.controller = controllers.LQR(A_op, B_op, Q_op, R_op, dt=T_controller, discretize=True)
+        self.controller = controllers.IntegralSeriesLQR(A_op, B_op, C_op, Q_op, R_op, Ki, dt=T_controller, discretize=True)
         self.control_input_pub = rospy.Publisher("/oct_levitation/linear_1d_controller/control_input", Float64MultiArray, queue_size=10)
 
         self.last_time = rospy.Time.now().to_sec()

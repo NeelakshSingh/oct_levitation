@@ -21,62 +21,91 @@ class ControllerInteface:
     def __init__(self):
         raise NotImplementedError
 
-    def update(self, r, y):
+    def update(self, r, y, dt):
         raise NotImplementedError
+
+    def update_e(self, e, dt):
+        """
+        Error based update function signature.
+        """
+        return self.update(e, 0, dt)
 
 class PID1D(ControllerInteface):
     def __init__(self, Kp, Ki, Kd,
                  windup_lim: float = np.inf,
                  clegg_integrator: bool = False,
-                 error_filter: filters.LiveFilter = None,
-                 d_filter: filters.LiveFilter = None,
+                 alpha_diff: float = 0.1,
+                 d_filter: Optional[filters.LiveFilter] = None,
                  publish_states: bool = False,
                  state_pub_topic: str = "/pid1d_states"):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
 
-        self.e_prev = 0
-        self.e_integral = 0
-        self.__first_call = True
-        self.windup_lim = windup_lim
-        self.clegg_integrator = clegg_integrator
-        self.error_filter = error_filter
+        self.e_integrator = numerical.FirstOrderIntegrator(windup_lim,
+                                                           clegg_integrator)
+        self.e_differentiator = numerical.FirstOrderDifferentiator(alpha=alpha_diff)
         self.d_filter = d_filter
         self.publish_states = publish_states
-        if publish_states:
-            self.state_pub = rospy.Publisher(state_pub_topic, PID1DState, queue_size=10)
+        # if publish_states:
+        #     self.state_pub = rospy.Publisher(state_pub_topic, PID1DState, queue_size=10)
 
     def update(self, r, y, dt):
-        state_msg = PID1DState()
+        # state_msg = PID1DState()
         e = r - y
-        if self.error_filter:
-            e = self.error_filter(e)
-        self.e_integral += e * dt
-        if self.clegg_integrator:
-            if np.sign(e) != np.sign(self.e_integral):
-                self.e_integral = 0
-                state_msg.clegg_triggered = True
-        d = (e - self.e_prev) / dt
+        e_integral = self.e_integrator(e, dt)
+        d = self.e_differentiator(e, dt)
         if self.d_filter:
             d = self.d_filter(d)
-        if self.e_integral > self.windup_lim or self.e_integral < -self.windup_lim:
-            state_msg.windup_triggered = True
-            self.e_integral = 0
-        u = self.Kp * e + self.Ki * self.e_integral + self.Kd * d
+
+        u = self.Kp * e + self.Ki * e_integral + self.Kd * d
         self.e_prev = e
-        if self.publish_states:
-            state_msg.Kp = self.Kp
-            state_msg.Ki = self.Ki
-            state_msg.Kd = self.Kd
-            state_msg.error = e
-            state_msg.error_integral = self.e_integral
-            state_msg.error_dot = d
-            state_msg.control_input = u
-            state_msg.header.stamp = rospy.Time.now()
-            self.state_pub.publish(state_msg)
+        # if self.publish_states:
+        #     state_msg.Kp = self.Kp
+        #     state_msg.Ki = self.Ki
+        #     state_msg.Kd = self.Kd
+        #     state_msg.error = e
+        #     state_msg.error_integral = self.e_integral
+        #     state_msg.error_dot = d
+        #     state_msg.control_input = u
+        #     state_msg.header.stamp = rospy.Time.now()
+        #     self.state_pub.publish(state_msg)
         return u
+
+class LeadCompensator(ControllerInteface):
+    def __init__(self,
+                 k: float,
+                 alpha: float,
+                 T: float,
+                 alpha_diff: Optional[float] = 0.1):
+        """
+        Simple lead compensator with first order discretization and first order approximation
+        for differentiation. The CT transfer function in s-domain is: k(T*s + 1)/(alpha*T*s + 1)
+
+        Args:
+            k (float): The constant gain for the lead compensator.
+            alpha (float): Compensation constant which controls the pole placement 
+                (i.e. frequency) for phase boosting. 0 < alpha < 1.
+            T (float): A tunable parameter to place the zero. Controls gain boost.
+            alpha_diff (float): Smoothing parameter for first order differentiator. Defaults to 0.1.
+        """
+        self.k = k
+        self.alpha = alpha
+        self.T = T
+        self.ip_diff= numerical.FirstOrderDifferentiator(alpha_diff)
+        self.z_prev = 0
     
+    def update_e(self, e, dt):
+        return self.update(e, dt)
+    
+    def update(self, x, dt):
+        x_dot = self.ip_diff(x, dt)
+        y = self.alpha*self.T*x_dot + x
+        const = np.exp(-dt/(self.k*self.T))
+        z = y*(1 - const) + self.z_prev*const
+        self.z_prev = z
+        return z
+
 class LQR(ControllerInteface):
 
     def __init__(self,

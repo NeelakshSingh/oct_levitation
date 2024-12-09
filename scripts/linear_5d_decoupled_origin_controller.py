@@ -15,6 +15,7 @@ from time import perf_counter
 from copy import deepcopy
 
 from tnb_mns_driver.msg import DesCurrentsReg
+from control_utils.general.filters import SingleChannelLiveFilter
 from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float64MultiArray
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
@@ -29,6 +30,7 @@ CLEGG_INTEGRATOR = True
 CURRENT_MAX = 10.0 # A
 
 DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricSquareS1() # Initialize in order to use methods.
+# DIPOLE_BODY = mechanical.NarrowRingMagnetS1() # Initialize in order to use methods.
 g_vector = np.array([0, 0, -common.Constants.g])
 
 # Controller Design
@@ -38,7 +40,7 @@ T_controller = 1/f_controller
 A = np.array([[0, 1], [0, 0]])
 B_forces = np.array([[0], [1/DIPOLE_BODY.mass_properties.m]])
 Q_linear = np.diag([1, 1])
-R_linear = np.diag([0.1])
+R_linear = np.diag([10]) # Encourage small currents
 
 B_phi = np.array([[0], [1/DIPOLE_BODY.mass_properties.I_bf[0, 0]]])
 B_theta = np.array([[0], [1/DIPOLE_BODY.mass_properties.I_bf[1, 1]]])
@@ -53,11 +55,38 @@ Ki_z = np.array([[1]])
 Ki_phi = np.array([[1e-4]])
 Ki_theta = np.array([[1e-4]])
 
+## For square frame
+roll_params = {
+    "k_pd": 7.171215327544092e-05,
+    "k_lead": 0.5,
+    "T_lead": 1.2315887226657807,
+    "alpha_lead": 0.6592780141072891
+}
+
+# For the lighter frame.
+
+roll_PID = controllers.PID1D(roll_params["k_pd"], 0.0, roll_params["k_pd"])
+roll_LPF = SingleChannelLiveFilter(N=2,
+                                    Wn=15,
+                                    btype='lowpass',
+                                    ftype='butter',
+                                    analog=False,
+                                    fs=f_controller,
+                                    use_sos=True)
+roll_lead_compensator = controllers.LeadCompensator(k=roll_params["k_lead"],
+                                                    alpha=roll_params["alpha_lead"],
+                                                    T=roll_params["T_lead"])
+
+def get_Tau_x(e, dt):
+    e = roll_LPF(e)
+    e = roll_lead_compensator.update(e, dt)
+    return roll_PID.update_e(e, dt)
+
 class Linear1DPositionPIDController:
 
     def __init__(self):
         self.model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
-                                                   calibration_file="octomag_77pt_avg_bias_corrected.yaml")
+                                                   calibration_file="MINIMAG_E090094.yaml")
         rospy.init_node('linear_5d_controller', anonymous=True)
         self.current_pub = rospy.Publisher("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=10)
         self.current_msg = DesCurrentsReg()
@@ -91,7 +120,7 @@ class Linear1DPositionPIDController:
         self.desired_theta = np.array([[0, 0]]).T
         self.control_input_pub = rospy.Publisher("/oct_levitation/linear_1d_controller/control_input", Float64MultiArray, queue_size=10)
         
-        self.smooth_starter = SmoothIterativeUpdate(y0=0.0, ye=1.0, te=1.0, Ts=0.01)
+        self.smooth_starter = SmoothIterativeUpdate(y0=0.0, ye=1.0, te=2.0, Ts=0.01)
         self.differentiator = numerical.FirstOrderDifferentiator(alpha=0.5)
         self.lpf = AveragingLowPassFilter(0.9)
 
@@ -113,8 +142,6 @@ class Linear1DPositionPIDController:
         # This is where the control loop runs.
         dipole_tf = self.__tf_buffer.lookup_transform("vicon/world", self.vicon_frame, rospy.Time())
         dt = T_controller
-        # self.full_state_estimator.update(dipole_tf, dt)
-        # y = self.full_state_estimator.get_latest_yaw_removed_state_estimate()
         
         # Manually Estimating the states.
         x = dipole_tf.transform.translation.x
@@ -127,17 +154,17 @@ class Linear1DPositionPIDController:
         phi = eulers[0]
         theta = eulers[1]
         s = np.array([x, y, z, phi, theta])
-        # s_dot = (s - self.last_s) / dt
         s_dot = self.differentiator(s, dt)
         s_dot = self.lpf(s_dot)
         self.last_s = s
 
         # For some reason u is a matrix object we need to use ravel to flatten it into an array.
         u = np.zeros(5)
-        # u[0] = self.x_controller.update(self.desired_x, np.array([[s[0], s_dot[0]]]).T, dt).flatten()
-        # u[1] = self.y_controller.update(self.desired_y, np.array([[s[1], s_dot[1]]]).T, dt).flatten()
+        u[0] = self.x_controller.update(self.desired_x, np.array([[s[0], s_dot[0]]]).T, dt).flatten()
+        u[1] = self.y_controller.update(self.desired_y, np.array([[s[1], s_dot[1]]]).T, dt).flatten()
         u[2] = self.z_controller.update(self.desired_z, np.array([[s[2], s_dot[2]]]).T, dt).flatten()
         # u[3] = self.phi_controller.update(self.desired_phi, np.array([[s[3], s_dot[3]]]).T, dt).flatten()
+        # u[3] = get_Tau_x(0-s[3], T_controller)
         # u[4] = self.theta_controller.update(self.desired_theta, np.array([[s[4], s_dot[4]]]).T, dt).flatten()
         self.last_time = rospy.Time.now().to_sec()
         M = common.get_magnetic_interaction_matrix(dipole_tf, 
@@ -158,13 +185,14 @@ class Linear1DPositionPIDController:
         torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
         desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
         # Performing gravity compensation
-        # desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
-        desired_wrench -= np.array([0, 0, -DIPOLE_BODY.mass_properties.m * common.Constants.g, 0, 0, 0])
+        desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
+        # desired_wrench -= np.array([0, 0, -DIPOLE_BODY.mass_properties.m * common.Constants.g, 0, 0, 0])
         desired_wrench = desired_wrench * self.smooth_starter.update()
         self.control_input_pub.publish(Float64MultiArray(data=desired_wrench.flatten().tolist()))
         desired_currents = (alloc_mat @ desired_wrench).flatten()
         # desired_currents = self.currents_filter(desired_currents)
         desired_currents = np.clip(desired_currents, -CURRENT_MAX, CURRENT_MAX)
+        desired_currents = -desired_currents
         self.current_msg.des_currents_reg = desired_currents.tolist()
         self.current_msg.header.stamp = rospy.Time.now()
         self.current_pub.publish(self.current_msg)
