@@ -1,7 +1,9 @@
 import numpy as np
 import scipy.spatial.transform as scitf
 
-EPSILON_TOLERANCE = 1e-12 # for numerical stability
+from geometry_msgs.msg import TransformStamped
+
+EPSILON_TOLERANCE = 1e-15 # for numerical stability
 
 def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
     """
@@ -26,7 +28,7 @@ def get_homoegeneous_vector(v: np.ndarray) -> np.ndarray:
         v_h: 4x1 array
     """
     assert v.size == 3, "Input vector must have 3 elements."
-    return np.vstack((v, 1))
+    return np.concatenate((v, [1]))
 
 def get_non_homoegeneous_vector(v_h: np.ndarray) -> np.ndarray:
     """
@@ -65,6 +67,45 @@ def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.nd
     T[:3, :3] = R
     T[:3, 3] = p
     return T
+
+def transform_vector_from_quaternion(q: np.ndarray, p: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """
+    Full translationa and rotation of a vector given a quaternion and the translation
+    vector.
+
+    Parameters:
+
+        q: 4x1 array of Quaternion in the form [x, y, z, w]
+        p: 3x1 array of translation in the form [x, y, z]
+        v: 3x1 array of vector to be transformed
+    
+    Returns:
+        v_tf: 3x1 transformed vector 
+    """
+    v_homo = get_homoegeneous_vector(v)
+    v_tf_homo = transformation_matrix_from_quaternion(q, p).dot(v_homo)
+    return get_non_homoegeneous_vector(v_tf_homo)
+
+def transform_vector_from_transform_stamped(msg: TransformStamped, v: np.ndarray) -> np.ndarray:
+    """
+    Full translationa and rotation of a vector given the ROS TransformStamped message.
+
+    Parameters:
+
+        msg (TransformStamped): The ROS transform message
+        v: 3x1 array of vector to be transformed
+    
+    Returns:
+        v_tf: 3x1 transformed vector 
+    """
+    q = np.array([msg.transform.rotation.x,
+                  msg.transform.rotation.y,
+                  msg.transform.rotation.z,
+                  msg.transform.rotation.w])
+    p = np.array([msg.transform.translation.x,
+                  msg.transform.translation.y,
+                  msg.transform.translation.z])
+    return transform_vector_from_quaternion(q, p, v)
 
 def invert_transformation_matrix(T: np.ndarray) -> np.ndarray:
     """
@@ -217,6 +258,7 @@ def euler_xyz_from_quaternion(q: np.ndarray) -> np.ndarray:
     If you are wondering why I made this instead of directly using scipy's methods,
     well it is because it is super easy to mix the intrinsic and extrinsic notations
     and get the wrong results with scipy.
+    
     Parameters
     ----------
         q: Quaternion in the form [x, y, z, w]
@@ -228,6 +270,21 @@ def euler_xyz_from_quaternion(q: np.ndarray) -> np.ndarray:
     scipy_rotation = scitf.Rotation.from_quat(q)
     euler = scipy_rotation.as_euler('XYZ') # caps for intrinsic
     return euler
+
+def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
+    """
+    Wrapper for scipy's Rotation class for converting XYZ tait-bryan intrinsic angles
+    to quaternion.
+
+    Parameters:
+        euler (np.ndarray): The euler angles in the form [roll, pitch, yaw]
+    
+    Returns:
+        q: Quaternion in the form [x, y, z, w]
+    """
+    scipy_rotation = scitf.Rotation.from_euler('XYZ', euler)
+    q = scipy_rotation.as_quat()
+    return q
 
 def angle_residual(a: float, b: float):
     """
@@ -248,3 +305,55 @@ def angle_residual(a: float, b: float):
     if residual > np.pi:
         residual -= 2*np.pi
     return residual
+
+def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
+                                    dipole_strength:float,
+                                    full_mat: float = False,
+                                    torque_first: bool = False,
+                                    dipole_axis: np.ndarray = np.array([0, 0, 1])):
+    """
+    This function returns the magnetic interaction matrix of a dipole.
+    This is purely defined by the orientation of the dipole and its strength.
+
+    Args:
+        dipole_tf (TransformStamped): The transform of the dipole in the world frame.
+        dipole_strength (float): The strength of the dipole.
+        full_mat (float): Whether to return the full magnetic interaction matrix. 
+                          If False, it returns the tuple (M_F, M_Tau) for the force and
+                          torque magnetization matrices respectively. Defaults to False.
+        torque_first (bool): Whether to return the torque block first or the force block first\
+                             when full_mat is set to True.
+                             If True, then [[M_Tau], [M_F]] is returned and vice versa.
+        dipole_axis (np.ndarray): The axis of the dipole according to vicon in home position. 
+                                  Defaults to [0, 0, 1].
+    
+    Returns:
+        np.ndarray: The magnetic interaction matrix of the dipole
+    """
+    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
+    dipole_quaternion = np.array([dipole_tf.transform.rotation.x,
+                                  dipole_tf.transform.rotation.y,
+                                  dipole_tf.transform.rotation.z,
+                                  dipole_tf.transform.rotation.w])
+    R_OH = rotation_matrix_from_quaternion(dipole_quaternion)
+    dipole_axis = R_OH.dot(dipole_axis)
+    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
+    dipole_moment = dipole_strength*dipole_axis
+
+    M_F = np.array([
+                [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
+                [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
+                [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
+            ])
+    M_Tau = np.array([
+                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
+            ])
+    if full_mat:
+        if torque_first:
+            return np.vstack((M_Tau, M_F))
+        else:
+            return np.vstack((M_F, M_Tau))
+    else:
+        return M_F, M_Tau

@@ -61,9 +61,13 @@ class FirstOrderIntegrator:
     def __call__(self, val: np_t.ArrayLike, dt: float) -> np_t.ArrayLike:
         if self.clegg_integrator and self.prev_val is not None:
             # Check which terms changed sign and reset the integral term.
-            reset_idx = np.where(np.sign(val) != np.sign(self.prev_val))[0]
-            if reset_idx.size > 0:
-                self.integral[reset_idx] = 0
+            if not np.isscalar(val):
+                reset_idx = np.where(np.sign(val) != np.sign(self.prev_val))[0]
+                if reset_idx.size > 0:
+                    self.integral[reset_idx] = 0
+            else:
+                if np.sign(val) != np.sign(self.prev_val):
+                    self.integral = 0
         self.integral += val*dt
         self.integral = np.clip(self.integral, -self.windup_lim, self.windup_lim)
         self.prev_val = val

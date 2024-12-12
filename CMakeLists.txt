@@ -148,6 +148,9 @@ catkin_install_python(PROGRAMS
   scripts/linear_1d_controller.py
   scripts/linear_5d_decoupled_origin_controller.py
   scripts/linear_1d_lqri.py
+  scripts/system_component_analysis.py
+  scripts/gravity_compensation.py
+  scripts/torque_control.py
   scripts/utils/dynamics_simulator.py
   scripts/utils/joy_setpoint.py
   scripts/utils/fft_noise_analysis.py

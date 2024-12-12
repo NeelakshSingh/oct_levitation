@@ -29,7 +29,7 @@ INTEGRATOR_WINDUP_LIMIT = 10
 CLEGG_INTEGRATOR = True
 CURRENT_MAX = 10.0 # A
 
-DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricSquareS1() # Initialize in order to use methods.
+DIPOLE_BODY = mechanical.NarrowRingMagnetSymmetricXFrameS1() # Initialize in order to use methods.
 # DIPOLE_BODY = mechanical.NarrowRingMagnetS1() # Initialize in order to use methods.
 g_vector = np.array([0, 0, -common.Constants.g])
 
@@ -58,12 +58,17 @@ Ki_theta = np.array([[1e-4]])
 ## For square frame
 roll_params = {
     "k_pd": 7.171215327544092e-05,
-    "k_lead": 0.5,
+    "k_lead": 0.4,
     "T_lead": 1.2315887226657807,
     "alpha_lead": 0.6592780141072891
 }
 
-# For the lighter frame.
+pitch_params = {
+    "k_pd": 7.993522341187041e-05,
+    "k_lead": 0.4,
+    "T_lead": 1.2315887226657807,
+    "alpha_lead": 0.6592780141072891
+}
 
 roll_PID = controllers.PID1D(roll_params["k_pd"], 0.0, roll_params["k_pd"])
 roll_LPF = SingleChannelLiveFilter(N=2,
@@ -77,10 +82,27 @@ roll_lead_compensator = controllers.LeadCompensator(k=roll_params["k_lead"],
                                                     alpha=roll_params["alpha_lead"],
                                                     T=roll_params["T_lead"])
 
+pitch_PID = controllers.PID1D(pitch_params["k_pd"], 0.0, pitch_params["k_pd"])
+pitch_LPF = SingleChannelLiveFilter(N=2,
+                                    Wn=15,
+                                    btype='lowpass',
+                                    ftype='butter',
+                                    analog=False,
+                                    fs=f_controller,
+                                    use_sos=True)
+pitch_lead_compensator = controllers.LeadCompensator(k=pitch_params["k_lead"],
+                                                    alpha=pitch_params["alpha_lead"],
+                                                    T=pitch_params["T_lead"])
+
 def get_Tau_x(e, dt):
     e = roll_LPF(e)
     e = roll_lead_compensator.update(e, dt)
     return roll_PID.update_e(e, dt)
+
+def get_Tau_y(e, dt):
+    e = pitch_LPF(e)
+    e = pitch_lead_compensator.update(e, dt)
+    return pitch_PID.update_e(e, dt)
 
 class Linear1DPositionPIDController:
 
@@ -106,7 +128,7 @@ class Linear1DPositionPIDController:
         initial_state = self.full_state_estimator.get_latest_state_estimate()
         self.x_controller = controllers.IntegralSeriesLQR(A, B_forces, C_all, Q_linear, R_linear, Ki_x, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=True)
         self.y_controller = controllers.IntegralSeriesLQR(A, B_forces, C_all, Q_linear, R_linear, Ki_y, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=True)
-        self.z_controller = controllers.IntegralSeriesLQR(A, B_forces, C_all, Q_linear, R_linear, Ki_z, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=True)
+        self.z_controller = controllers.IntegralSeriesLQR(A, B_forces, C_all, Q_linear, R_linear, Ki_z, dt=T_controller, discretize=True, windup_lim=INTEGRATOR_WINDUP_LIMIT, clegg_integrator=False)
                             
         self.phi_controller = controllers.IntegralSeriesLQR(A, B_phi, C_all, Q_rot, R_rot, Ki_phi, dt=T_controller, discretize=True, windup_lim=Rot_windup_limit, clegg_integrator=True)
         self.theta_controller = controllers.IntegralSeriesLQR(A, B_theta, C_all, Q_rot, R_rot, Ki_theta, dt=T_controller, discretize=True, windup_lim=Rot_windup_limit, clegg_integrator=True)
@@ -154,27 +176,30 @@ class Linear1DPositionPIDController:
         phi = eulers[0]
         theta = eulers[1]
         s = np.array([x, y, z, phi, theta])
+        rospy.loginfo(f"x,y,z,r,p: {s}")
         s_dot = self.differentiator(s, dt)
         s_dot = self.lpf(s_dot)
         self.last_s = s
 
         # For some reason u is a matrix object we need to use ravel to flatten it into an array.
         u = np.zeros(5)
-        u[0] = self.x_controller.update(self.desired_x, np.array([[s[0], s_dot[0]]]).T, dt).flatten()
-        u[1] = self.y_controller.update(self.desired_y, np.array([[s[1], s_dot[1]]]).T, dt).flatten()
+        # u[0] = self.x_controller.update(self.desired_x, np.array([[s[0], s_dot[0]]]).T, dt).flatten()
+        # u[1] = self.y_controller.update(self.desired_y, np.array([[s[1], s_dot[1]]]).T, dt).flatten()
         u[2] = self.z_controller.update(self.desired_z, np.array([[s[2], s_dot[2]]]).T, dt).flatten()
         # u[3] = self.phi_controller.update(self.desired_phi, np.array([[s[3], s_dot[3]]]).T, dt).flatten()
         # u[3] = get_Tau_x(0-s[3], T_controller)
         # u[4] = self.theta_controller.update(self.desired_theta, np.array([[s[4], s_dot[4]]]).T, dt).flatten()
+        # u[4] = get_Tau_y(0-s[4], T_controller)
         self.last_time = rospy.Time.now().to_sec()
-        M = common.get_magnetic_interaction_matrix(dipole_tf, 
+        M = geometry.get_magnetic_interaction_matrix(dipole_tf, 
                                                    self.dipole_strength,
+                                                   full_mat=True,
                                                    torque_first=False,
                                                    dipole_axis=self.dipole_axis)
-        dipole_position = np.array([dipole_tf.transform.translation.x,
-                                    dipole_tf.transform.translation.y,
-                                    dipole_tf.transform.translation.z])
-        A = self.model.get_actuation_matrix(dipole_position)
+        # dipole_position = np.array([dipole_tf.transform.translation.x,
+        #                             dipole_tf.transform.translation.y,
+        #                             dipole_tf.transform.translation.z])
+        A = self.model.get_actuation_matrix(np.zeros(3))
         alloc_mat = np.linalg.pinv(M @ A)
         # Now so far the torque has been in the body frame. We need to convert it to the world frame.
         quaternion = np.array([dipole_tf.transform.rotation.x,
@@ -183,10 +208,12 @@ class Linear1DPositionPIDController:
                                dipole_tf.transform.rotation.w])
         torque = np.array([u[3], u[4], 0]) # Zero Tau_z in body frame
         torque = geometry.rotate_vector_from_quaternion(quaternion, torque)
-        desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
+        # desired_wrench = np.concatenate((u[:3], torque)) # desired forces and torques in world frame
+        desired_wrench = np.array([0.0, 0.0, u[2], 0.0, 0.0, 0.0])
         # Performing gravity compensation
-        desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
-        # desired_wrench -= np.array([0, 0, -DIPOLE_BODY.mass_properties.m * common.Constants.g, 0, 0, 0])
+        # desired_wrench -= DIPOLE_BODY.get_gravitational_wrench(q=quaternion, g=g_vector)
+        desired_wrench -= np.array([0, 0, -DIPOLE_BODY.mass_properties.m * common.Constants.g, 0, 0, 0])
+        # desired_wrench = desired_wrench * self.smooth_starter.update()
         desired_wrench = desired_wrench * self.smooth_starter.update()
         self.control_input_pub.publish(Float64MultiArray(data=desired_wrench.flatten().tolist()))
         desired_currents = (alloc_mat @ desired_wrench).flatten()
