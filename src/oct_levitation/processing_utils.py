@@ -1,0 +1,245 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+
+
+def read_scalar_stamped(topicname, dwd):
+    # keep for backwards compatibility
+    df=pd.read_csv(dwd + topicname + '.csv', sep=',',header=0) # header = num. of rows to skip  
+    data= df.values
+    time  = data[:,0] # [secs]
+    scalar   = data[:,1] # [rad]
+    return time, scalar
+
+def read_data_stamped(topicname, dwd):
+    df=pd.read_csv(dwd + topicname + '.csv', sep=',',header=0) # header = num. of rows to skip  
+    data= df.values
+    time  = data[:,0] # [secs]
+    return time, data[:,1:]
+
+
+def shift_time_and_convert_to_sec(time, offset):
+    time = time - offset
+    return time*1e-9 # [secs]
+
+def interp0(x, xp, yp):
+    """Zeroth order hold interpolation w/ same
+    (base)   signature  as numpy.interp."""
+
+    def func(x0):
+        if x0 <= xp[0]:
+            return yp[0]
+        if x0 >= xp[-1]:
+            return yp[-1]
+        k = 0
+        while x0 > xp[k]:
+            k += 1
+        return yp[k-1]
+    
+    if isinstance(x,float):
+        return func(x)
+    elif isinstance(x, list):
+        return [func(x) for x in x]
+    elif isinstance(x, np.ndarray):
+        return np.asarray([func(x) for x in x])
+    else:
+        raise TypeError('argument must be float, list, or ndarray')
+    
+def read_data_multidof(dwd, topics):
+    ## Read multidof data
+    # Based on the fact that u_alpha and u_beta have the same length of non zero elements,
+    # even though they have different time stamps, treat them as they are having the same
+    # time stamps, i.e. simply put the non-zero element of u_beta on top of the time stamp
+    # of u_alpha where u_alpha is non-zero. Besides that, interpolate data, e.g. alpha, beta
+    # on the u_alpha time stamps.
+    # This method also bases on the fact that the lengths of u_alpha and u_beta are the same
+    # If they are not, offset is needed for u_beta 
+    print("------------------READ DATA MULTIDOF INTERPOLATE ON U_ALPHA---------------------")
+
+    time, data = {}, {}
+    for topic in topics:
+        time[topic], data[topic] = read_scalar_stamped(topic, dwd)
+        # print(len(time[topic]))
+
+    # Shift all the smallest starting time to 0 and convert it to s
+    offset = min([time[topic][0] for topic in topics])
+    for topic in topics:
+        time[topic] = shift_time_and_convert_to_sec(time[topic], offset)
+
+    # Crop all the signals to the interval of u_alpha
+    min_time = time['_u_alpha'][0]
+    max_time = time['_u_alpha'][-1]
+
+    for topic in topics:
+        # # Do not crop the u_beta series
+        if topic != '_u_beta':  
+            tmp_1 = (time[topic] >= min_time)
+            tmp_2 = (time[topic] <= max_time)
+            time[topic] = time[topic][tmp_1 & tmp_2]
+            data[topic] = data[topic][tmp_1 & tmp_2]
+
+    for topic in topics:
+        # print(topic)
+        # print(len(time[topic]))
+        time_sum = 0
+        for i in range(len(time[topic])-1):
+            time_sum += (time[topic][i+1] - time[topic][i])
+        # print('time step: ', time_sum/len(time[topic]))
+
+    time_u = time['_u_alpha']
+
+    variables = {}
+    # When saving data, remove the '_' at the begining of the topic name
+    # Interpolate on u_alpha, put u_beta on top of u_alpha's time stamp
+    for topic in topics:
+        # Do not interpolate u_beta assuming it has the same time stamps as u_alpha
+        if topic != '_u_beta':
+            variables[topic[1:]] = np.interp(time_u, time[topic], data[topic])
+        else:
+            variables[topic[1:]] = data[topic]
+
+    # Use the input time series as the time stamp
+    # time = time_u - time_u[0]
+    time = time_u
+    variables['time'] = time
+
+    return variables
+
+    
+def read_data_interpolate_on_u(dwd, topics):
+    print("------------------READ DATA SINGLEDOF INTERPOLATE ON U---------------------")
+
+    time, data = {}, {}
+    for topic in topics:
+        time[topic], data[topic] = read_scalar_stamped(topic, dwd)
+        # print(len(time[topic]))
+
+    # Shift all the smallest starting time to 0 and convert it to s
+    offset = min([time[topic][0] for topic in topics])
+    for topic in topics:
+        time[topic] = shift_time_and_convert_to_sec(time[topic], offset)
+
+    # Crop all the signals to the interval when all signals presents
+    min_time = max([time[topic][0] for topic in topics])
+    max_time = min([time[topic][-1] for topic in topics])
+
+    for topic in topics:
+        # Do not crop the u_beta series
+        if topic != ('_u_alpha' or '_u_beta'):  
+            tmp_1 = (time[topic] >= min_time)
+            tmp_2 = (time[topic] <= max_time)
+            time[topic] = time[topic][tmp_1 & tmp_2]
+            data[topic] = data[topic][tmp_1 & tmp_2]
+
+    for topic in topics:
+        # print(len(time[topic]))
+        time_sum = 0
+        for i in range(len(time[topic])-1):
+            time_sum += (time[topic][i+1] - time[topic][i])
+        # print('time step: ', time_sum/len(time[topic]))
+
+    time_u = time['_u_alpha']
+
+    variables = {}
+    # When saving data, remove the '_' at the begining of the topic name
+    # Interpolate on the input u
+    for topic in topics:
+        # Do not interpolate u_beta assuming it has the same time stamps as u_alpha
+        if topic != '_u_beta':
+            variables[topic[1:]] = np.interp(time_u, time[topic], data[topic])
+        else:
+            variables[topic[1:]] = data[topic]
+
+    # Use the input time series as the time stamp
+    time = time_u - time_u[0]
+    variables['time'] = time
+
+    return variables 
+
+    
+
+
+def read_data(dwd, topics, interpolate_topic, input_type=None):
+    #%% Import:
+    print("------------------READ DATA---------------------")
+
+    time, data = {}, {}
+    for topic in topics:
+        time[topic], data[topic] = read_data_stamped(topic, dwd)
+        
+
+    # shift no really necessary, but makes numbers easier to read in debugging
+    offset = min([time[topic][0] for topic in topics])
+    for topic in topics:
+        time[topic] = shift_time_and_convert_to_sec(time[topic], offset)
+
+    min_time = max([time[topic][0] for topic in topics])
+    max_time = min([time[topic][-1] for topic in topics])
+
+    # crop all the data to the same time interval min_time to max_time
+    for topic in topics:
+        tmp_1 = (time[topic] >= min_time)
+        tmp_2 = (time[topic] <= max_time)
+        time[topic] = time[topic][tmp_1 & tmp_2]
+        data[topic] = data[topic][tmp_1 & tmp_2]
+
+    time_a = time[interpolate_topic]
+
+    variables = {}
+    for topic in topics:
+        current_data = data[topic]
+        interpolation_func = np.interp
+        interpolated_data = [interpolation_func(time_a, time[topic], col) for col in current_data.T] # interp and interp0 require 1D arrays
+        variables[topic.lstrip("_")] = np.asarray(interpolated_data).T
+        
+    time = time_a - time_a[0]
+    variables['time'] = time
+
+    return variables
+
+def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
+    #%% Import:
+    print("------------------READ DATA---------------------")
+
+    dfs = {}
+    for topic in topics:
+        dfs[topic] = pd.read_csv(dwd + topic + '.csv', sep=',',header=0) # header = num. of rows to skip  
+        
+    # shift no really necessary, but makes numbers easier to read in debugging
+    offset = min([dfs[topic].time[0] for topic in topics])
+    for topic in topics:
+        dfs[topic].time = (dfs[topic].time - offset)/1e9
+
+    min_time = max([dfs[topic].time.values[0] for topic in topics])
+    max_time = min([dfs[topic].time.values[-1] for topic in topics])
+
+    # crop all the data to the same time interval min_time to max_time
+    for topic in topics:
+        tmp_1 = (dfs[topic].time >= min_time)
+        tmp_2 = (dfs[topic].time <= max_time)
+        dfs[topic] = dfs[topic][tmp_1 & tmp_2]
+
+    time_a = dfs[interpolate_topic].time.values
+    time = time_a - time_a[0]
+
+    interp_dfs = {}
+
+    for topic in topics:
+        current_df: pd.DataFrame = dfs[topic]
+        i = 0
+        interp_df = pd.DataFrame()
+        interp_df["time"] = time
+        for col in current_df.columns:
+            if col == "time":
+                i += 1
+                continue
+                # Check if the column's dtype is non-numeric
+            if not np.issubdtype(current_df[col].dtype, np.number):
+                i += 1
+                continue
+            interp_df[col] = np.interp(time_a, current_df.time.values, current_df.iloc[:, i])
+            i += 1
+        interp_dfs[topic] = interp_df
+
+    return time, interp_dfs

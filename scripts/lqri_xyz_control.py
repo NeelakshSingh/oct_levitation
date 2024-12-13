@@ -147,6 +147,7 @@ class XYZControl:
         control_input_msg.header.stamp = rospy.Time.now()
         control_input_msg.array = desired_wrench.tolist()
         self.control_input_pub.publish(control_input_msg)
+        self.reference_pose_pub.publish(self.desired_pose)
 
         # CURRENT ALLOCATION FROM FORCES AND TORQUES
         M = geometry.get_magnetic_interaction_matrix(dipole_tf, self.dipole_object.dipole_strength, full_mat=True, torque_first=False)
