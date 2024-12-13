@@ -194,6 +194,7 @@ class IntegralLQR(ControllerInteface):
         Q_aug = block_diag(Q, Qi)
 
         # Performing an exact ZOH discretization of the augmented system
+        self.lqr_out = None
         if self.discretize:
             Ad, Bd, Cd, Dd, dt = signal.cont2discrete((A_aug, B_aug, np.eye(A_aug.shape[0]), 0), dt=dt, method='zoh')
             self.Ce = Cd

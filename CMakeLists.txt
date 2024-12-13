@@ -151,6 +151,9 @@ catkin_install_python(PROGRAMS
   scripts/system_component_analysis.py
   scripts/gravity_compensation.py
   scripts/torque_control.py
+  scripts/lqri_torque_control.py
+  scripts/lqri_z_control.py
+  scripts/lqri_xyz_control.py
   scripts/utils/dynamics_simulator.py
   scripts/utils/joy_setpoint.py
   scripts/utils/fft_noise_analysis.py

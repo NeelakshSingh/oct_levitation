@@ -27,57 +27,6 @@ HARDWARE_CONNECTED = True
 # Controller Design
 F_control = 100 # Hz
 
-## For symmetric disc frame
-roll_params = {
-    "k_pd": 2.5138629276247015e-05,
-    "k_lead": 0.4,
-    "T_lead": 1.2315887226657807,
-    "alpha_lead": 0.6592780141072891
-}
-
-pitch_params = {
-    "k_pd": 2.9184607392960052e-05,
-    "k_lead": 0.4,
-    "T_lead": 1.2315887226657807,
-    "alpha_lead": 0.6592780141072891
-}
-
-roll_PID = controllers.PID1D(roll_params["k_pd"], 0.01, roll_params["k_pd"],
-                             clegg_integrator=False) # slight integral for steady state errors
-roll_LPF = SingleChannelLiveFilter(N=2,
-                                    Wn=15,
-                                    btype='lowpass',
-                                    ftype='butter',
-                                    analog=False,
-                                    fs=F_control,
-                                    use_sos=True)
-roll_lead_compensator = controllers.LeadCompensator(k=roll_params["k_lead"],
-                                                    alpha=roll_params["alpha_lead"],
-                                                    T=roll_params["T_lead"])
-
-pitch_PID = controllers.PID1D(pitch_params["k_pd"], 0.01, pitch_params["k_pd"],
-                              clegg_integrator=False)
-pitch_LPF = SingleChannelLiveFilter(N=2,
-                                    Wn=15,
-                                    btype='lowpass',
-                                    ftype='butter',
-                                    analog=False,
-                                    fs=F_control,
-                                    use_sos=True)
-pitch_lead_compensator = controllers.LeadCompensator(k=pitch_params["k_lead"],
-                                                    alpha=pitch_params["alpha_lead"],
-                                                    T=pitch_params["T_lead"])
-
-def get_Tau_x(e, dt):
-    e = roll_LPF(e)
-    e = roll_lead_compensator.update(e, dt)
-    return roll_PID.update_e(e, dt)
-
-def get_Tau_y(e, dt):
-    e = pitch_LPF(e)
-    e = pitch_lead_compensator.update(e, dt)
-    return pitch_PID.update_e(e, dt)
-
 class TorqueControl:
 
     def __init__(self):
@@ -87,10 +36,28 @@ class TorqueControl:
         self.calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
                                                    calibration_file="octomag_5point.yaml")
         self.dipole_object = mechanical.NarrowRingMagnetSymmDiscD50T5FrameS3()
+        Ix = self.dipole_object.mass_properties.I_bf[0,0]
+        Iy = self.dipole_object.mass_properties.I_bf[1,1]
+
+        A_roll = np.zeros((2,2))
+        A_roll[0, 1] = 1.0
+        A_roll[1, 1] = 1e-5 # Very small damping term
+        C_roll = np.array([[1, 0]])
+        C_pitch = C_roll
+        A_pitch = A_roll
+        B_roll = np.array([[0, 1/Ix]]).T
+        B_pitch = np.array([[0, 1/Iy]]).T
+        Q = np.eye(2)
+        R = 1
+        Ki = np.array([[0.00]])
+
+        self.roll_lqri = controllers.IntegralSeriesLQR(A_roll, B_roll, C_roll, Q, R, Ki, dt=1/F_control)
+        self.pitch_lqri = controllers.IntegralSeriesLQR(A_pitch, B_pitch, C_pitch, Q, R, Ki, dt=1/F_control)
         
         # For transforms and state estimation
         self.vicon_frame = self.dipole_object.tracking_data.pose_frame
-        self.pose_diff = numerical.FirstOrderDifferentiator(alpha=0.3)
+        self.roll_diff = numerical.FirstOrderDifferentiator(alpha=0.1)
+        self.pitch_diff = numerical.FirstOrderDifferentiator(alpha=0.1)
 
         self.__tf_buffer = tf2_ros.Buffer()
         self.__tf_listener = tf2_ros.TransformListener(self.__tf_buffer)
@@ -123,8 +90,12 @@ class TorqueControl:
         # CONTROLLERS
         roll_error = geometry.angle_residual(0, angle_x)
         pitch_error = geometry.angle_residual(0, angle_y)
-        Tau_x = get_Tau_x(roll_error, 1/F_control)
-        Tau_y = get_Tau_y(pitch_error, 1/F_control)
+        roll_e_dot = self.roll_diff(roll_error, 1/F_control)
+        pitch_e_dot = self.pitch_diff(pitch_error, 1/F_control)
+
+        Tau_x = self.roll_lqri.update_e(np.array([[roll_error, roll_e_dot]]).T, 1/F_control)[0,0]
+        Tau_y = self.pitch_lqri.update_e(np.array([[pitch_error, pitch_e_dot]]).T, 1/F_control)[0,0]
+
         # desired_wrench = np.array([0.0, 0.0, 0.0, Tau_x, Tau_y, 0.0]) # Small angle assumption
         rospy.loginfo(f"roll_error: {roll_error}, pitch_error: {pitch_error}")
         rospy.loginfo(f"Tau_x: {Tau_x}, Tau_y: {Tau_y}")

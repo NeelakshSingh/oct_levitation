@@ -36,7 +36,7 @@ class GravityCompensation:
         # OctoMag calibration and dipole properties
         self.calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
                                                    calibration_file="octomag_5point.yaml")
-        self.dipole_object = mechanical.NarrowRingMagnetDisc7mmFrameS1()
+        self.dipole_object = mechanical.NarrowRingMagnetSymmDiscD50T5FrameS3()
         
         # For transforms and state estimation
         self.vicon_frame = self.dipole_object.tracking_data.pose_frame

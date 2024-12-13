@@ -321,3 +321,30 @@ class NarrowRingMagnetDisc7mmFrameS1(RigidBodyDipoleInterface):
 
     tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_7mm_disc_S1/Origin")
     dipole_axis: np_t.NDArray = np.array([0, 0, 1])
+
+@dataclass
+class NarrowRingMagnetSymmDiscD50T5FrameS3(RigidBodyDipoleInterface):
+    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
+    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
+    dipole_strength: float = 3*material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
+    mframe: float = 16.1e-3 # Mass of the X frame in kg
+    # Computed using SolidWorks
+    mass_properties: MassProperties = MassProperties(1.8300000e-02,
+                                                     np.array([[2.42540000e-06, 0.00000000e+00, 0.00000000e+00],
+                                                               [0.00000000e+00, 2.81576000e-06, 0.00000000e+00],
+                                                               [0.00000000e+00, 0.00000000e+00, 4.84415000e-06]]),
+                                                     np.array([[2.42540000e-06, 0.00000000e+00, 0.00000000e+00],
+                                                               [0.00000000e+00, 2.81575000e-06, 0.00000000e+00],
+                                                               [0.00000000e+00, 0.00000000e+00, 4.84415000e-06]]),
+                                                     np.array([0.00000000, 0.00000000, -0.00002000]),
+                                                     PrincipleAxesAndMomentsOfInertia(
+                                                             Ix=np.array([1.00000000, 0.00000000, 0.00000000]),
+                                                             Iy=np.array([0.00000000, 1.00000000, 0.00000000]),
+                                                             Iz=np.array([0.00000000, 0.00000000, 1.00000000]),
+                                                             Px=2.42540000e-06,
+                                                             Py=2.81575000e-06,
+                                                             Pz=4.84415000e-06
+                                                     ))
+
+    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_symm_disc_D50T5/Origin")
+    dipole_axis: np_t.NDArray = np.array([0, 0, 1])
