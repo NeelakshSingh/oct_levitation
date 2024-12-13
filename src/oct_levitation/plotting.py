@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import oct_levitation.geometry as geometry
+import pandas as pd
 
 from typing import Optional, Tuple
 
@@ -77,7 +78,8 @@ def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (1
 
 
 def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
-                          xscale=1, yscale=1, zscale=1):
+                          xscale=1, yscale=1, zscale=1,
+                          x_style='r-', y_style='g-', z_style='b-'):
     """
     Source: https://github.com/ethz-asl/kalibr/blob/master/Schweizer-Messer/sm_python/python/sm/plotCoordinateFrame.py
 
@@ -108,9 +110,9 @@ def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
     X = np.append([p_0[:,0].T], [p_0[:,1].T], axis=0 )
     Y = np.append([p_0[:,0].T], [p_0[:,2].T], axis=0 )
     Z = np.append([p_0[:,0].T], [p_0[:,3].T], axis=0 )
-    axis.plot3D(X[:,0],X[:,1],X[:,2], 'r-', linewidth=linewidth)
-    axis.plot3D(Y[:,0],Y[:,1],Y[:,2], 'g-', linewidth=linewidth)
-    axis.plot3D(Z[:,0],Z[:,1],Z[:,2], 'b-', linewidth=linewidth)
+    axis.plot3D(X[:,0],X[:,1],X[:,2], x_style, linewidth=linewidth)
+    axis.plot3D(Y[:,0],Y[:,1],Y[:,2], y_style, linewidth=linewidth)
+    axis.plot3D(Z[:,0],Z[:,1],Z[:,2], z_style, linewidth=linewidth)
 
     if name is not None:
         axis.text(X[0,0],X[0,1],X[0,2], name, zdir='x')
@@ -166,4 +168,343 @@ def plot_6DOF_pose_euler_xyz(state_history: np.ndarray,
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
+    plt.show()
+
+def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray):
+    """
+    Plots target Euler angles and positions from actual poses DataFrame and a constant reference pose.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
+    - reference_pose (np.ndarray): Array of size 7 [x, y, z, qx, qy, qz, qw] representing the constant reference pose.
+    """
+    # Extract time, positions, and orientations
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Extract reference position and orientation
+    reference_position = reference_pose[:3]
+    reference_orientation = reference_pose[3:]
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
+
+    # Plot positions
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+
+    # Position plots
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
+        axs[0, i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
+        axs[0, i].set_title(f"Position {axis}")
+        axs[0, i].set_xlabel("Time (s)")
+        axs[0, i].set_ylabel("Position (m)")
+        axs[0, i].legend()
+
+    # Euler angle plots
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
+        axs[1, i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[1, i].set_title(angle)
+        axs[1, i].set_xlabel("Time (s)")
+        axs[1, i].set_ylabel("Angle (rad)")
+        axs[1, i].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_position: np.ndarray):
+    """
+    Plots target positions from actual poses DataFrame and a constant reference position.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
+    - reference_position (np.ndarray): Array of size 3 [x, y, z] representing the constant reference position.
+    """
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+
+    # Plot positions
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
+        axs[i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
+        axs[i].set_title(f"Position {axis}")
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Position (m)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray):
+    """
+    Plots target orientations (Euler angles) from actual poses DataFrame and a constant reference orientation.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual orientations (quaternions) with time.
+    - reference_orientation (np.ndarray): Array of size 4 [qx, qy, qz, qw] representing the constant reference quaternion.
+    """
+    time = actual_poses['time'].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
+
+    # Plot Euler angles
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
+        axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[i].set_title(angle)
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Angle (rad)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame):
+    """
+    Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
+    - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
+    """
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
+
+    # Plot positions
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+
+    # Position plots
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
+        axs[0, i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
+        axs[0, i].set_title(f"Position {axis}")
+        axs[0, i].set_xlabel("Time (s)")
+        axs[0, i].set_ylabel("Position (m)")
+        axs[0, i].legend()
+
+    # Euler angle plots
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
+        axs[1, i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[1, i].set_title(angle)
+        axs[1, i].set_xlabel("Time (s)")
+        axs[1, i].set_ylabel("Angle (rad)")
+        axs[1, i].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame):
+    """
+    Plots target positions from actual poses DataFrame and variable reference positions DataFrame.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame with actual positions and time.
+    - reference_poses (pd.DataFrame): DataFrame with reference positions and time.
+    """
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+
+    # Plot positions
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
+        axs[i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
+        axs[i].set_title(f"Position {axis}")
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Position (m)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame):
+    """
+    Plots target orientations (Euler angles) from actual poses DataFrame and variable reference orientations DataFrame.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame with actual orientations (quaternions) and time.
+    - reference_poses (pd.DataFrame): DataFrame with reference orientations (quaternions) and time.
+    """
+    time = actual_poses['time'].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
+
+    # Plot Euler angles
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
+        axs[i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[i].set_title(angle)
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Angle (rad)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10):
+    """
+    Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
+    Reference poses are taken from the provided DataFrame and are non-constant.
+
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
+    - reference_poses (pd.DataFrame): DataFrame containing reference poses (positions and quaternions) with time.
+    - arrow_interval (int): Interval for plotting arrows indicating the direction of motion.
+    """
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert reference quaternions to Euler angles using `euler_xyz_from_quaternion`
+    reference_eulers = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
+
+    # Create figure and 3D axis
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot actual positions
+    ax.plot(actual_positions[:, 0], actual_positions[:, 1], actual_positions[:, 2], color='black', label='Actual Path')
+
+    # Plot reference positions (non-constant)
+    ax.plot(reference_positions[:, 0], reference_positions[:, 1], reference_positions[:, 2], color='red', linestyle='--', label='Reference Path')
+
+    # Plot arrows for actual positions to indicate direction of forward progress
+    for i in range(arrow_interval, len(time), arrow_interval):
+        ax.quiver(actual_positions[i-1, 0], actual_positions[i-1, 1], actual_positions[i-1, 2],
+                  actual_positions[i, 0] - actual_positions[i-1, 0], 
+                  actual_positions[i, 1] - actual_positions[i-1, 1], 
+                  actual_positions[i, 2] - actual_positions[i-1, 2], 
+                  color='black', arrow_length_ratio=0.1)
+
+    # Plot arrows for reference positions to indicate direction of forward progress
+    for i in range(arrow_interval, len(time), arrow_interval):
+        ax.quiver(reference_positions[i-1, 0], reference_positions[i-1, 1], reference_positions[i-1, 2],
+                  reference_positions[i, 0] - reference_positions[i-1, 0], 
+                  reference_positions[i, 1] - reference_positions[i-1, 1], 
+                  reference_positions[i, 2] - reference_positions[i-1, 2], 
+                  color='red', linestyle='--', arrow_length_ratio=0.1)
+
+    # Add reference pose frames (non-constant)
+    for i in range(0, len(time), frame_interval):  # plot frames every 10% of time
+        reference_T_0f = geometry.transformation_matrix_from_euler_xyz(reference_eulers[i], reference_positions[i])
+        plot_coordinate_frame(ax, reference_T_0f, size=frame_size, linewidth=1.5, name='Reference Pose', xscale=1, yscale=1, zscale=1,
+                              x_style='r--', y_style='g--', z_style='b--')
+
+    # Add coordinate frames at selected positions in the actual path
+    for i in range(0, len(time), frame_interval):  # plot frames every 10% of time
+        actual_T_0f = geometry.transformation_matrix_from_quaternion(actual_poses.iloc[i, 4:8], actual_poses.iloc[i, 1:4])
+        plot_coordinate_frame(ax, actual_T_0f, size=frame_size, linewidth=1.5, name=None)
+
+    # Label the axes
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title("Actual Pose v/s Reference Pose")
+
+    # Show legend
+    ax.legend()
+
+    # Show plot
+    plt.show()
+
+
+
+def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10):
+    """
+    Plots the actual poses in 3D space with arrows indicating the direction of forward progress in time,
+    and a constant reference pose in 3D space. The reference pose is given in terms of x, y, z, qx, qy, qz, qw,
+    which will be converted to Euler angles using `euler_xyz_from_quaternion`.
+
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
+    - reference_pose (np.ndarray): Array containing a constant reference pose in the form [x, y, z, qx, qy, qz, qw].
+    - arrow_interval (int): Interval for plotting arrows indicating the direction of motion.
+    """
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    
+    # Reference pose (constant)
+    reference_position = reference_pose[:3]
+    reference_orientation = reference_pose[3:]
+
+    # Create figure and 3D axis
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot actual positions
+    ax.plot(actual_positions[:, 0], actual_positions[:, 1], actual_positions[:, 2], color='black', label='Actual Path')
+
+    # Plot constant reference position (horizontal line)
+    ax.plot(np.full_like(time, reference_position[0]), 
+            np.full_like(time, reference_position[1]),
+            np.full_like(time, reference_position[2]), 
+            color='red', linestyle='--', label='Constant Reference')
+
+    # Plot arrows for actual positions to indicate direction of forward progress
+    for i in range(arrow_interval, len(time), arrow_interval):
+        ax.quiver(actual_positions[i-1, 0], actual_positions[i-1, 1], actual_positions[i-1, 2],
+                  actual_positions[i, 0] - actual_positions[i-1, 0], 
+                  actual_positions[i, 1] - actual_positions[i-1, 1], 
+                  actual_positions[i, 2] - actual_positions[i-1, 2], 
+                  color='black', arrow_length_ratio=0.1)
+
+    # Add reference pose frame (constant)
+    reference_T_0f = geometry.transformation_matrix_from_quaternion(reference_orientation, reference_position)
+    plot_coordinate_frame(ax, reference_T_0f, size=frame_size, linewidth=1.5, name='Constant Reference Pose', xscale=1, yscale=1, zscale=1,
+                          x_style='r--', y_style='g--', z_style='b--')
+
+    # Add coordinate frames at selected positions in the actual path
+    for i in range(0, len(time), frame_interval): 
+        actual_T_0f = geometry.transformation_matrix_from_quaternion(actual_orientations[i], actual_positions[i])
+        plot_coordinate_frame(ax, actual_T_0f, size=frame_size, linewidth=1.5, name=None)
+
+    # Label the axes
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title("Actual Pose v/s Reference Pose")
+
+    # Show legend
+    ax.legend()
+
+    # Show plot
     plt.show()
