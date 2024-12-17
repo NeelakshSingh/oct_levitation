@@ -1,9 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import oct_levitation.geometry as geometry
 import pandas as pd
+from control_utils.general.utilities import quaternion_to_normal_vector, angles_from_normal_vector
 
-from typing import Optional, Tuple
+import os
+import subprocess
+
+from typing import Optional, Tuple, List
+
+def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str) -> None:
+    """
+    Converts an SVG file to an EMF file using Inkscape.
+
+    Parameters:
+    - svg_file (str): Path to the SVG file to convert.
+    - emf_file (str): Path to save the resulting EMF file.
+
+    Returns:
+    - None
+    """
+    if not os.path.exists(inkscape_path):
+        raise FileNotFoundError("Inkscape executable not found at the specified path.")
+    subprocess.run([inkscape_path, svg_file, '-M', emf_file], check=True)
 
 def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple = (30, 10)) -> None:
     """
@@ -170,17 +190,20 @@ def plot_6DOF_pose_euler_xyz(state_history: np.ndarray,
     ax.set_zlabel('Z')
     plt.show()
 
-def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray):
+def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray) -> Tuple[Figure, List[plt.Axes]]:
     """
     Plots target Euler angles and positions from actual poses DataFrame and a constant reference pose.
     
     Parameters:
     - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
     - reference_pose (np.ndarray): Array of size 7 [x, y, z, qx, qy, qz, qw] representing the constant reference pose.
+
+    Returns:
+    - fig (plt.Figure)
     """
     # Extract time, positions, and orientations
     time = actual_poses['time'].values
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Extract reference position and orientation
@@ -191,6 +214,10 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
     reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
 
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+    reference_euler = np.rad2deg(reference_euler)
+
     # Plot positions
     fig, axs = plt.subplots(2, 3, figsize=(18, 10))
 
@@ -198,23 +225,24 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[0, i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[0, i].set_title(f"Position {axis}")
+        axs[0, i].set_title(f"Position {axis} of Dipole Center")
         axs[0, i].set_xlabel("Time (s)")
-        axs[0, i].set_ylabel("Position (m)")
+        axs[0, i].set_ylabel("Position (mm)")
         axs[0, i].legend()
 
     # Euler angle plots
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[1, i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[1, i].set_title(angle)
+        axs[1, i].set_title(f"{angle} of Dipole Center")
         axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Angle (rad)")
+        axs[1, i].set_ylabel("Angle (deg)")
         axs[1, i].legend()
 
     # Adjust layout
     plt.tight_layout()
     plt.show()
+    return fig, axs
 
 
 def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_position: np.ndarray):
@@ -226,23 +254,101 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
     - reference_position (np.ndarray): Array of size 3 [x, y, z] representing the constant reference position.
     """
     time = actual_poses['time'].values
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
 
     # Plot positions
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
 
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[i].set_title(f"Position {axis}")
+        axs[i].set_title(f"Position {axis} of Dipole Center Frame")
         axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Position (m)")
+        axs[i].set_ylabel("Position (mm)")
         axs[i].legend()
 
     # Adjust layout
     plt.tight_layout()
     plt.show()
 
+    return fig, axs
+
+def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: float,
+                                       save_as: str=None,
+                                       save_as_emf: bool=False,
+                                       inkscape_path: str=None, **kwargs):
+    """
+    Plots target positions from actual poses DataFrame and a constant reference position.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
+    - reference_z (float): The desired z position.
+    """
+    time = actual_poses['time'].values
+    actual_z_position = actual_poses['transform.translation.z'].values*1000 # in mm
+
+    # Plot positions
+    fig, ax = plt.figure(figsize=(18, 5))
+
+    ax.plot(time, actual_z_position, label=f"Actual Z", **kwargs)
+    ax.axhline(y=reference_z, label=f"Reference Z", linestyle='dashed', color='r')
+    ax.set_title(f"Z Position of Dipole Center Frame")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Position (mm)")
+    ax.legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+
+    return fig, ax
+
+def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
+                                       save_as: str=None,
+                                       save_as_emf: bool=False,
+                                       inkscape_path: str=None, **kwargs):
+    time = actual_poses['time'].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_yx = np.array([angles_from_normal_vector(
+        quaternion_to_normal_vector(quaternion)
+    ) for quaternion in actual_orientations])
+
+    actual_xy = np.roll(actual_yx, 1, axis=1)
+
+    # Convert to degrees
+    actual_xy = np.rad2deg(actual_xy)
+    reference_angles = np.rad2deg(reference_angles)
+
+    # Plot Euler angles
+    fig, axs = plt.subplots(1, 2, figsize=(18, 5), sharex=True, sharey=True)
+
+    fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
+    for i, angle in enumerate(['Beta', 'Alpha']):
+        axs[i].plot(time, actual_xy[:, i], label=f"Actual {angle}")
+        axs[i].axhline(y=reference_angles[i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[i].set_title(f"{angle} of Dipole Center Frame")
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Angle (deg)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+    return fig, axs
 
 def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray):
     """
@@ -259,20 +365,60 @@ def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_o
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
     reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
 
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+    reference_euler = np.rad2deg(reference_euler)
+
     # Plot Euler angles
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
 
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle)
+        axs[i].set_title(angle + " of Dipole Center Frame")
         axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (rad)")
+        axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+    return fig, axs
+
+def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray):
+    """
+    Plots target orientations (Euler angles) from actual poses DataFrame and a constant reference orientation.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual orientations (quaternions) with time.
+    - reference_orientation (np.ndarray): Array of size 4 [qx, qy, qz, qw] representing the constant reference quaternion.
+    """
+    time = actual_poses['time'].values
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
+
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+    reference_euler = np.rad2deg(reference_euler)
+
+    # Plot Euler angles
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
+
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
+        axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[i].set_title(angle + " of Dipole Center Frame")
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Angle (deg)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+    return fig, axs
 
 def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame):
     """
@@ -283,25 +429,29 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
     - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
     """
     time = actual_poses['time'].values
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
     reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Convert quaternions to Euler angles
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
     reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
 
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+    reference_euler = np.rad2deg(reference_euler)
+
     # Plot positions
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10), sharex=True, sharey=True)
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[0, i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[0, i].set_title(f"Position {axis}")
+        axs[0, i].set_title(f"Position {axis} of Dipole Center Frame")
         axs[0, i].set_xlabel("Time (s)")
-        axs[0, i].set_ylabel("Position (m)")
+        axs[0, i].set_ylabel("Position (mm)")
         axs[0, i].legend()
 
     # Euler angle plots
@@ -310,12 +460,13 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
         axs[1, i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
         axs[1, i].set_title(angle)
         axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Angle (rad)")
+        axs[1, i].set_ylabel("Angle (deg)")
         axs[1, i].legend()
 
     # Adjust layout
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+    return fig, axs
 
 
 def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame):
@@ -327,24 +478,24 @@ def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_pose
     - reference_poses (pd.DataFrame): DataFrame with reference positions and time.
     """
     time = actual_poses['time'].values
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
-    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
 
     # Plot positions
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
 
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[i].set_title(f"Position {axis}")
+        axs[i].set_title(f"Position {axis} of Dipole Center Frame")
         axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Position (m)")
+        axs[i].set_ylabel("Position (mm)")
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
-
+    return fig, axs
 
 def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame):
     """
@@ -362,20 +513,25 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
     reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
 
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+    reference_euler = np.rad2deg(reference_euler)
+
     # Plot Euler angles
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
 
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle)
+        axs[i].set_title(angle + " of Dipole Center Frame.")
         axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (rad)")
+        axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+    return fig, axs
 
 def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10):
     """
@@ -437,13 +593,15 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_title("Actual Pose v/s Reference Pose")
+    ax.set_title("Actual Pose v/s Reference Pose of Dipole Center Frame")
 
     # Show legend
     ax.legend()
 
     # Show plot
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+    return fig, ax
 
 
 
@@ -501,10 +659,43 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_title("Actual Pose v/s Reference Pose")
+    ax.set_title("Actual Pose v/s Reference Pose of Dipole Center Frame")
 
     # Show legend
     ax.legend()
 
     # Show plot
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+    return fig, ax
+
+def plot_currents(system_state_df: pd.DataFrame, des_currents_df: pd.DataFrame,
+                  save_as: str=None,
+                  save_as_emf: bool=False,
+                  inkscape_path: str=None, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+    # Plot each current column in its respective subplot
+    # Create subplots in a 2x4 layout
+    fig, axs = plt.subplots(2, 4, figsize=(16, 8), sharex=True, sharey=True)
+    fig.suptitle("Actual and Desired Currents vs Time", fontsize=16)  # Main title for the figure
+
+    # Flatten the 2D axes array for easier iteration
+    axs = axs.flatten()
+    for i in range(8):
+        axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='tab:blue', **kwargs)
+        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:black', **kwargs)
+        axs[i].set_title(f'Currents in Coil {i+1}')
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Current (A)")
+        axs[i].grid(True)
+
+    # Adjust layout to prevent overlap
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+
+    return fig, axs
+
