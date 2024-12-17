@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 from matplotlib.figure import Figure
 import oct_levitation.geometry as geometry
 import pandas as pd
@@ -10,7 +11,35 @@ import subprocess
 
 from typing import Optional, Tuple, List
 
-def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str) -> None:
+INKSCAPE_PATH = "/usr/bin/inkscape" # default
+
+######################################
+# PLOTTING UTILITIES
+######################################
+
+xkcd_contrast_colors = {
+    "Blue": "#0343df",
+    "Red": "#e50000",
+    "Green": "#15b01a",
+    "Orange": "#f97306",
+    "Purple": "#7e1e9c",
+    "Yellow": "#ffff14",
+    "Black": "#000000",
+    "Cyan": "#00ffff",
+    "Pink": "#ff81c0",
+    "Brown": "#653700",
+    "Light Gray": "#d3d3d3",
+    "Teal": "#029386",
+}
+
+xkcd_contrast_list = list(xkcd_contrast_colors.items())
+
+def get_cmap(n, name='hsv'):
+    '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
+    RGB color; the keyword argument name must be a standard mpl colormap name.'''
+    return matplotlib.colormaps[name]
+
+def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str = INKSCAPE_PATH) -> None:
     """
     Converts an SVG file to an EMF file using Inkscape.
 
@@ -24,6 +53,10 @@ def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str) -> None:
     if not os.path.exists(inkscape_path):
         raise FileNotFoundError("Inkscape executable not found at the specified path.")
     subprocess.run([inkscape_path, svg_file, '-M', emf_file], check=True)
+
+######################################
+# PLOTTING POSES
+######################################
 
 def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple = (30, 10)) -> None:
     """
@@ -669,6 +702,10 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     plt.show()
     return fig, ax
 
+######################################
+# PLOTTING CURRENTS AND FIELDS
+######################################
+
 def plot_currents(system_state_df: pd.DataFrame, des_currents_df: pd.DataFrame,
                   save_as: str=None,
                   save_as_emf: bool=False,
@@ -699,3 +736,97 @@ def plot_currents(system_state_df: pd.DataFrame, des_currents_df: pd.DataFrame,
 
     return fig, axs
 
+def plot_3d_quiver(dataframe: pd.DataFrame, 
+                   scale_factor: float=1.0, 
+                   save_as: str=None, 
+                   save_as_emf: bool=False, 
+                   inkscape_path: str=None, **kwargs):
+    """
+    Plots a 3D quiver plot using position and field vector data from a pandas dataframe.
+
+    Parameters:
+        dataframe (pd.DataFrame): A dataframe containing the columns 'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'.
+        scale_factor (float): A scaling factor to adjust the length of the arrows. Default is 1.0.
+        save_as (str): File path to save the plot as an SVG. Use '.svg' extension.
+        save_as_emf (bool): Whether to save an additional EMF file (requires Inkscape). Default is False.
+        inkscape_path (str): If save_as_emf is true then this argument must be set to inkscape's binary path in your system.
+        **kwargs: Additional keyword arguments to pass to the `ax.quiver` function.
+
+    Returns:
+        None
+    """
+    required_columns = {'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'}
+    if not required_columns.issubset(dataframe.columns):
+        raise ValueError(f"Dataframe must contain the columns: {required_columns}")
+    
+    Px, Py, Pz = dataframe['Px'] * 1000, dataframe['Py'] * 1000, dataframe['Pz'] * 1000
+    Bx, By, Bz = dataframe['Bx'] * 1000, dataframe['By'] * 1000, dataframe['Bz'] * 1000
+    Bx_scaled, By_scaled, Bz_scaled = Bx * scale_factor, By * scale_factor, Bz * scale_factor
+    
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.quiver(Px, Py, Pz, Bx_scaled, By_scaled, Bz_scaled, length=1, normalize=False, **kwargs)
+    
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
+    ax.set_title('3D Quiver Plot of Field Vectors (Field in mT)')
+    
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+    return fig, ax
+
+def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
+                              labels: List[str],
+                              scale_factor: float=1.0, 
+                              save_as: str=None, 
+                              save_as_emf: bool=False, 
+                              inkscape_path: str=None, **kwargs):
+    """
+    Plots a 3D quiver plot using position and field vector data from a pandas dataframe.
+
+    Parameters:
+        dataframes (list[pd.DataFrame]): List of dataframes containing the columns 'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'.
+        labels (list[str]): List of dataframe labels for plotting.
+        scale_factor (float): A scaling factor to adjust the length of the arrows. Default is 1.0.
+        save_as (str): File path to save the plot as an SVG. Use '.svg' extension.
+        save_as_emf (bool): Whether to save an additional EMF file (requires Inkscape). Default is False.
+        inkscape_path (str): If save_as_emf is true then this argument must be set to inkscape's binary path in your system.
+        **kwargs: Additional keyword arguments to pass to the `ax.quiver` function.
+
+    Returns:
+        None
+    """
+    required_columns = {'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'}
+    cmap = get_cmap(len(dataframes))
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    for i, (dataframe, label) in enumerate(zip(dataframes, labels)):
+        if not (required_columns.issubset(dataframe.columns)):
+            raise ValueError(f"Dataframe must contain the columns: {required_columns}")
+    
+        Px, Py, Pz = dataframe['Px'] * 1000, dataframe['Py'] * 1000, dataframe['Pz'] * 1000
+        Bx, By, Bz = dataframe['Bx'] * 1000, dataframe['By'] * 1000, dataframe['Bz'] * 1000
+        Bx_scaled, By_scaled, Bz_scaled = Bx * scale_factor, By * scale_factor, Bz * scale_factor
+        
+        ax.quiver(Px, Py, Pz, Bx_scaled, By_scaled, Bz_scaled, length=1, normalize=False,
+                label=label, color=xkcd_contrast_list[i%len(xkcd_contrast_list)], **kwargs)
+    
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
+    ax.set_title(f'3D Quiver Plot of Field Vectors (Field in mT), Scale: {scale_factor}x')
+    ax.legend()
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+    return fig, ax
