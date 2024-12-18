@@ -59,7 +59,7 @@ def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str = INKSCAPE_PA
 ######################################
 
 def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple = (30, 10),
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs) -> None:
+                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> None:
     """
     Plots the 12 states from the state history of the 6DOF rigid body using the XYZ euler angles for orientation.
     Args:
@@ -126,7 +126,7 @@ def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple 
     plt.show()
 
 def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (10,10),
-                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs) -> None:
+                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> None:
     assert state_history.shape[1] == 12, "State history should have 12 columns"
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection='3d')
@@ -236,7 +236,7 @@ def plot_6DOF_pose_euler_xyz(state_history: np.ndarray,
     plt.show()
 
 def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray,
-                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
     """
     Plots target Euler angles and positions from actual poses DataFrame and a constant reference pose.
     
@@ -253,8 +253,8 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Extract reference position and orientation
-    reference_position = reference_pose[:3]
-    reference_orientation = reference_pose[3:]
+    reference_position = reference_pose[:3]*1000
+    reference_orientation = np.rad2deg(reference_pose[3:])
 
     # Convert quaternions to Euler angles
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
@@ -297,7 +297,7 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
 
 
 def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_position: np.ndarray,
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target positions from actual poses DataFrame and a constant reference position.
     
@@ -307,6 +307,7 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
     """
     time = actual_poses['time'].values
     actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
+    reference_position = reference_position*1000
 
     # Plot positions
     fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
@@ -333,7 +334,7 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
 def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: float,
                                        save_as: str=None,
                                        save_as_emf: bool=False,
-                                       inkscape_path: str=None, **kwargs):
+                                       inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target positions from actual poses DataFrame and a constant reference position.
     All inputs are in SI units.
@@ -372,7 +373,7 @@ def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: 
 def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
                                        save_as: str=None,
                                        save_as_emf: bool=False,
-                                       inkscape_path: str=None, **kwargs):
+                                       inkscape_path: str=INKSCAPE_PATH, **kwargs):
     time = actual_poses['time'].values
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
@@ -411,7 +412,7 @@ def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_ang
     return fig, axs
 
 def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray,
-                                         save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                         save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target orientations (Euler angles) from actual poses DataFrame and a constant reference orientation.
     
@@ -452,7 +453,7 @@ def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_o
     return fig, axs
 
 def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray,
-                                            save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                            save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target orientations (Euler angles) from actual poses DataFrame and a constant reference orientation.
     
@@ -493,7 +494,7 @@ def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, referenc
     return fig, axs
 
 def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
     
@@ -548,7 +549,7 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
 
 
 def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target positions from actual poses DataFrame and variable reference positions DataFrame.
     
@@ -582,7 +583,7 @@ def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_pose
     return fig, axs
 
 def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                                         save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                         save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target orientations (Euler angles) from actual poses DataFrame and variable reference orientations DataFrame.
     
@@ -624,7 +625,7 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
     return fig, axs
 
 def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
-                                                     save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                                     save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
     Reference poses are taken from the provided DataFrame and are non-constant.
@@ -648,10 +649,10 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
     ax = fig.add_subplot(111, projection='3d')
 
     # Plot actual positions
-    ax.plot(actual_positions[:, 0], actual_positions[:, 1], actual_positions[:, 2], color='black', label='Actual Path')
+    ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot reference positions (non-constant)
-    ax.plot(reference_positions[:, 0], reference_positions[:, 1], reference_positions[:, 2], color='red', linestyle='--', label='Reference Path')
+    ax.plot(reference_positions[:, 0]*1000, reference_positions[:, 1]*1000, reference_positions[:, 2]*1000, color='red', linestyle='--', label='Reference Path')
 
     # Plot arrows for actual positions to indicate direction of forward progress
     for i in range(arrow_interval, len(time), arrow_interval):
@@ -680,10 +681,9 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
         actual_T_0f = geometry.transformation_matrix_from_quaternion(actual_poses.iloc[i, 4:8], actual_poses.iloc[i, 1:4])
         plot_coordinate_frame(ax, actual_T_0f, size=frame_size, linewidth=1.5, name=None)
 
-    # Label the axes
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
     ax.set_title("Actual Pose v/s Reference Pose of Dipole Center Frame")
 
     # Show legend
@@ -702,7 +702,7 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
 
 
 def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
-                                                 save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                                                 save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the actual poses in 3D space with arrows indicating the direction of forward progress in time,
     and a constant reference pose in 3D space. The reference pose is given in terms of x, y, z, qx, qy, qz, qw,
@@ -726,7 +726,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     ax = fig.add_subplot(111, projection='3d')
 
     # Plot actual positions
-    ax.plot(actual_positions[:, 0], actual_positions[:, 1], actual_positions[:, 2], color='black', label='Actual Path')
+    ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot constant reference position (horizontal line)
     ax.plot(np.full_like(time, reference_position[0]), 
@@ -752,10 +752,9 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
         actual_T_0f = geometry.transformation_matrix_from_quaternion(actual_orientations[i], actual_positions[i])
         plot_coordinate_frame(ax, actual_T_0f, size=frame_size, linewidth=1.5, name=None)
 
-    # Label the axes
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
     ax.set_title("Actual Pose v/s Reference Pose of Dipole Center Frame")
 
     # Show legend
@@ -778,7 +777,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
 def plot_actual_currents(system_state_df: pd.DataFrame,
                          save_as: str=None,
                          save_as_emf: bool=False,
-                         inkscape_path: str=None, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+                         inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
     # Plot each current column in its respective subplot
     # Create subplots in a 2x4 layout
     fig, axs = plt.subplots(2, 4, figsize=(16, 8), sharex=True, sharey=True)
@@ -807,7 +806,7 @@ def plot_actual_currents(system_state_df: pd.DataFrame,
 def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df: pd.DataFrame,
                                 save_as: str=None,
                                 save_as_emf: bool=False,
-                                inkscape_path: str=None, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+                                inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
     # Plot each current column in its respective subplot
     # Create subplots in a 2x4 layout
     fig, axs = plt.subplots(2, 4, figsize=(16, 8), sharex=True, sharey=True)
@@ -839,7 +838,7 @@ def plot_forces_and_torques(df: pd.DataFrame,
                             title: str="Desired Forces and Torques",
                             save_as: str=None,
                             save_as_emf: bool=False,
-                            inkscape_path: str=None, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+                            inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
     """
     Plots forces (Fx, Fy, Fz) and torques (Tx, Ty, Tz) from a DataFrame with time on the x-axis.
     Forces are converted to milliNewtons (mN) and torques to milliNewton-millimeters (mN-mm).
@@ -916,7 +915,7 @@ def plot_3d_quiver(dataframe: pd.DataFrame,
                    scale_factor: float=1.0, 
                    save_as: str=None, 
                    save_as_emf: bool=False, 
-                   inkscape_path: str=None, **kwargs):
+                   inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots a 3D quiver plot using position and field vector data from a pandas dataframe.
 
@@ -961,7 +960,7 @@ def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
                               scale_factor: float=1.0, 
                               save_as: str=None, 
                               save_as_emf: bool=False, 
-                              inkscape_path: str=None, **kwargs):
+                              inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots a 3D quiver plot using position and field vector data from a pandas dataframe.
 
@@ -1008,7 +1007,7 @@ def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
     return fig, ax
 
 def plot_field_components_at_dipole_center(pose_df, desired_currents_df, actual_currents_df, calibration_fn,
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 3 magnetic field components (Bx, By, Bz) over time for both actual and desired fields.
     Shared x and y axes across subplots. Allows saving as SVG/EMF.
@@ -1067,7 +1066,7 @@ def plot_field_components_at_dipole_center(pose_df, desired_currents_df, actual_
     return fig, axs
 
 def plot_gradient_components_at_dipole_center(pose_df, desired_currents_df, actual_currents_df, calibration_fn,
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz) over time 
     for both actual and desired gradients. Shared x and y axes across subplots.
@@ -1131,7 +1130,7 @@ def plot_gradient_components_at_dipole_center(pose_df, desired_currents_df, actu
 
 def plot_field_components_at_dipole_center_const_actuation_position(
                           pose_df, desired_currents_df, actual_currents_df, calibration_fn, des_actuation_pos=np.zeros(3),
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 3 magnetic field components (Bx, By, Bz) over time for both actual and desired fields.
     Where the desired fields are calculated based on the actuation matrix calcualted at the given 
@@ -1195,7 +1194,7 @@ def plot_field_components_at_dipole_center_const_actuation_position(
 
 def plot_gradient_components_at_dipole_center_const_actuation_position(
                           pose_df, desired_currents_df, actual_currents_df, calibration_fn, des_actuation_pos=np.zeros(3),
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=None, **kwargs):
+                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz) over time 
     for both actual and desired gradients. Shared x and y axes across subplots.
