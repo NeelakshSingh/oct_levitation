@@ -5,6 +5,7 @@ import matplotlib
 from matplotlib.figure import Figure
 import oct_levitation.geometry as geometry
 import oct_levitation.common as common
+import oct_levitation.mechanical as mechanical
 import pandas as pd
 from control_utils.general.utilities import quaternion_to_normal_vector, angles_from_normal_vector
 
@@ -1513,3 +1514,105 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: 
 
     plt.show()
     return fig, axs
+
+def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
+                                        actual_currents_df: pd.DataFrame,
+                                        desired_wrench: pd.DataFrame,
+                                        calibrated_model: object,
+                                        dipole_strength: float,
+                                        dipole_axis: np.ndarray,
+                                        save_as: str = None,
+                                        save_as_emf: bool = False,
+                                        inkscape_path: str = INKSCAPE_PATH,
+                                        **kwargs):
+    # Combine pose and current data
+    combined_pose_currents = pd.merge_asof(dipole_center_pose_df, actual_currents_df, on='time')
+    time = dipole_center_pose_df['time']
+    actual_wrench_dict = {'array_0': [], 'array_1': [], 'array_2': [], 'array_3': [], 'array_4': [], 'array_5': []}
+
+    # Calculate actual wrench
+    for i in range(len(combined_pose_currents)):
+        position = np.array([
+            combined_pose_currents['transform.translation.x'].iloc[i],
+            combined_pose_currents['transform.translation.y'].iloc[i],
+            combined_pose_currents['transform.translation.z'].iloc[i]
+        ])
+        actual_currents = np.array([combined_pose_currents[f'currents_reg_{j}'].iloc[i] for j in range(8)])
+
+        actual_fields = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
+        
+        quaternion = np.array([
+            combined_pose_currents['transform.rotation.x'].iloc[i],
+            combined_pose_currents['transform.rotation.y'].iloc[i],
+            combined_pose_currents['transform.rotation.z'].iloc[i],
+            combined_pose_currents['transform.rotation.w'].iloc[i]
+        ])
+
+        M = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quaternion=quaternion,
+                                                                 dipole_strength=dipole_strength,
+                                                                 full_mat=True,
+                                                                 torque_first=False,
+                                                                 dipole_axis=dipole_axis)
+        actual_wrench = M @ actual_fields
+        for j, key in enumerate(list(actual_wrench_dict.keys())):
+            actual_wrench_dict[key].append(actual_wrench[j])
+
+    # Convert wrench dict to DataFrame
+    actual_wrench_df = pd.DataFrame(actual_wrench_dict)
+    
+    # Plot settings
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Force (actual, reference), Torque (actual, reference)
+
+    key_map = {'Fx': 'array_0', 'Fy': 'array_1', 'Fz': 'array_2',
+               'Taux': 'array_3', 'Tauy': 'array_4', 'Tauz': 'array_5'}
+    
+    fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
+    
+    # Force subplots (columns 0, 1, 2)
+    for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
+        axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0])
+        axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], linestyle='-')
+        axes[0, i].set_title(f'{force_component} - Force')
+        axes[0, i].grid(True)
+        if i == 0:
+            axes[0, i].set_ylabel('Force (mN)')
+        if i == 2:
+            axes[0, i].legend(loc='upper right')
+
+    # Torque subplots (columns 0, 1, 2)
+    for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
+        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e6, label='Actual Torque', color=colors[2])
+        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e6, label='Reference Torque', color=colors[3], linestyle='-')
+        axes[1, i].set_title(f'{torque_component} - Torque')
+        axes[1, i].grid(True)
+        if i == 0:
+            axes[1, i].set_ylabel('Torque (mN-mm)')
+        if i == 2:
+            axes[1, i].legend(loc='upper right')
+
+    # Shared X-axis
+    for ax in axes[1, :]:
+        ax.set_xlabel('Time (s)')
+    
+    axes[0, 1].sharey(axes[0, 0])
+    axes[0, 2].sharey(axes[0, 0])
+    axes[1, 1].sharey(axes[1, 0])
+    axes[1, 2].sharey(axes[1, 0])
+
+    # Autoscale axes
+    for ax_row in axes: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
+
+    plt.tight_layout()
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    plt.show()    
+    return fig, axes

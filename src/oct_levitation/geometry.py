@@ -306,6 +306,54 @@ def angle_residual(a: float, b: float):
         residual -= 2*np.pi
     return residual
 
+def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
+                                    dipole_strength:float,
+                                    full_mat: float = False,
+                                    torque_first: bool = False,
+                                    dipole_axis: np.ndarray = np.array([0, 0, 1])):
+    """
+    This function returns the magnetic interaction matrix of a dipole.
+    This is purely defined by the orientation of the dipole and its strength.
+
+    Args:
+        dipole_tf (np.ndarray): Quaternion of the form [qx, qy, qz, qw].
+        dipole_strength (float): The strength of the dipole.
+        full_mat (float): Whether to return the full magnetic interaction matrix. 
+                          If False, it returns the tuple (M_F, M_Tau) for the force and
+                          torque magnetization matrices respectively. Defaults to False.
+        torque_first (bool): Whether to return the torque block first or the force block first\
+                             when full_mat is set to True.
+                             If True, then [[M_Tau], [M_F]] is returned and vice versa.
+        dipole_axis (np.ndarray): The axis of the dipole according to vicon in home position. 
+                                  Defaults to [0, 0, 1].
+    
+    Returns:
+        np.ndarray: The magnetic interaction matrix of the dipole
+    """
+    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
+    R_OH = rotation_matrix_from_quaternion(dipole_quaternion)
+    dipole_axis = R_OH.dot(dipole_axis)
+    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
+    dipole_moment = dipole_strength*dipole_axis
+
+    M_F = np.array([
+                [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
+                [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
+                [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
+            ])
+    M_Tau = np.array([
+                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
+            ])
+    if full_mat:
+        if torque_first:
+            return np.vstack((M_Tau, M_F))
+        else:
+            return np.vstack((M_F, M_Tau))
+    else:
+        return M_F, M_Tau
+
 def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                     dipole_strength:float,
                                     full_mat: float = False,
@@ -335,25 +383,8 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                   dipole_tf.transform.rotation.y,
                                   dipole_tf.transform.rotation.z,
                                   dipole_tf.transform.rotation.w])
-    R_OH = rotation_matrix_from_quaternion(dipole_quaternion)
-    dipole_axis = R_OH.dot(dipole_axis)
-    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
-    dipole_moment = dipole_strength*dipole_axis
-
-    M_F = np.array([
-                [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
-                [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
-                [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
-            ])
-    M_Tau = np.array([
-                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
-            ])
-    if full_mat:
-        if torque_first:
-            return np.vstack((M_Tau, M_F))
-        else:
-            return np.vstack((M_F, M_Tau))
-    else:
-        return M_F, M_Tau
+    return magnetic_interaction_matrix_from_quaternion(dipole_quaternion,
+                                                       dipole_strength=dipole_strength,
+                                                       full_mat=full_mat,
+                                                       torque_first=torque_first,
+                                                       dipole_axis=dipole_axis)
