@@ -2,7 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
+###############################################
+# Legacy utility functions from control_utils adapted
+# for use with bagpyext.
+###############################################
 
 def read_scalar_stamped(topicname, dwd):
     # keep for backwards compatibility
@@ -243,3 +246,140 @@ def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
         interp_dfs[topic] = interp_df
 
     return time, interp_dfs
+
+###############################################
+# DATA CONVERSION AND PROCESSING FUNCTIONS
+###############################################
+
+# All functions assume that dataframes were obtained through bagpyext CSV files
+# and the above listed time synced interpolated dataset.
+import pandas as pd
+import numpy as np
+
+def field_position_dataframe_from_des_currents_reg(pose_df: pd.DataFrame, current_df: pd.DataFrame, calibration_fn) -> pd.DataFrame:
+    """
+    Generates a DataFrame containing field and gradient values at pose points based on 
+    coil currents and calibration matrix.
+
+    Parameters:
+        pose_df (pd.DataFrame): DataFrame containing pose information with columns:
+                                ['time', 'transform.translation.x', 'transform.translation.y', 
+                                 'transform.translation.z']
+        current_df (pd.DataFrame): DataFrame containing current information with columns:
+                                   ['time', 'des_currents_reg_0', ..., 'des_currents_reg_7']
+        calibration_fn (Callable): A callable function that takes a 3D position [x, y, z] and 
+                                   returns an 8x8 actuation matrix A.
+    
+    Returns:
+        pd.DataFrame: A DataFrame with columns:
+                      ['Px', 'Py', 'Pz', 'Bx', 'By', 'Bz', 'dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
+    """
+    # Ensure the two DataFrames are aligned on time
+    combined_df = pd.merge_asof(pose_df, current_df, on='time')
+    
+    # Prepare lists for the output data
+    output_data = {
+        'time': [],
+        'Px': [], 'Py': [], 'Pz': [],
+        'Bx': [], 'By': [], 'Bz': [],
+        'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [],
+        'dBy/dy': [], 'dBy/dz': []
+    }
+    
+    # Iterate over each row in the combined DataFrame
+    for _, row in combined_df.iterrows():
+        # Extract position and currents
+        position = [row['transform.translation.x'], row['transform.translation.y'], row['transform.translation.z']]
+        currents = np.array([
+            row['des_currents_reg_0'], row['des_currents_reg_1'], row['des_currents_reg_2'],
+            row['des_currents_reg_3'], row['des_currents_reg_4'], row['des_currents_reg_5'],
+            row['des_currents_reg_6'], row['des_currents_reg_7']
+        ])
+        
+        # Get the actuation matrix A using the calibration function
+        A = calibration_fn(position)  # Shape: (8, 8)
+        
+        # Compute the field vector b (b = A @ currents)
+        b = A @ currents  # Shape: (8,)
+        
+        # Append data to output
+        output_data['time'].append(row['time'])
+        output_data['Px'].append(position[0])
+        output_data['Py'].append(position[1])
+        output_data['Pz'].append(position[2])
+        output_data['Bx'].append(b[0])
+        output_data['By'].append(b[1])
+        output_data['Bz'].append(b[2])
+        output_data['dBx/dx'].append(b[3])
+        output_data['dBx/dy'].append(b[4])
+        output_data['dBx/dz'].append(b[5])
+        output_data['dBy/dy'].append(b[6])
+        output_data['dBy/dz'].append(b[7])
+    
+    # Convert the output dictionary to a DataFrame
+    output_df = pd.DataFrame(output_data)
+    return output_df
+
+def field_position_dataframe_from_system_state(pose_df: pd.DataFrame, current_df: pd.DataFrame, calibration_fn) -> pd.DataFrame:
+    """
+    Generates a DataFrame containing field and gradient values at pose points based on 
+    coil currents and calibration matrix.
+
+    Parameters:
+        pose_df (pd.DataFrame): DataFrame containing pose information with columns:
+                                ['time', 'transform.translation.x', 'transform.translation.y', 
+                                 'transform.translation.z']
+        current_df (pd.DataFrame): DataFrame containing current information with columns:
+                                   ['time', 'currents_reg_0', ..., 'currents_reg_7']
+        calibration_fn (Callable): A callable function that takes a 3D position [x, y, z] and 
+                                   returns an 8x8 actuation matrix A.
+    
+    Returns:
+        pd.DataFrame: A DataFrame with columns:
+                      ['Px', 'Py', 'Pz', 'Bx', 'By', 'Bz', 'dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
+    """
+    # Ensure the two DataFrames are aligned on time
+    combined_df = pd.merge_asof(pose_df, current_df, on='time')
+    
+    # Prepare lists for the output data
+    output_data = {
+        'time': [],
+        'Px': [], 'Py': [], 'Pz': [],
+        'Bx': [], 'By': [], 'Bz': [],
+        'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [],
+        'dBy/dy': [], 'dBy/dz': []
+    }
+    
+    # Iterate over each row in the combined DataFrame
+    for _, row in combined_df.iterrows():
+        # Extract position and currents
+        position = [row['transform.translation.x'], row['transform.translation.y'], row['transform.translation.z']]
+        currents = np.array([
+            row['currents_reg_0'], row['currents_reg_1'], row['currents_reg_2'],
+            row['currents_reg_3'], row['currents_reg_4'], row['currents_reg_5'],
+            row['currents_reg_6'], row['currents_reg_7']
+        ])
+        
+        # Get the actuation matrix A using the calibration function
+        A = calibration_fn(position)  # Shape: (8, 8)
+        
+        # Compute the field vector b (b = A @ currents)
+        b = A @ currents  # Shape: (8,)
+        
+        # Append data to output
+        output_data['time'].append(row['time'])
+        output_data['Px'].append(position[0])
+        output_data['Py'].append(position[1])
+        output_data['Pz'].append(position[2])
+        output_data['Bx'].append(b[0])
+        output_data['By'].append(b[1])
+        output_data['Bz'].append(b[2])
+        output_data['dBx/dx'].append(b[3])
+        output_data['dBx/dy'].append(b[4])
+        output_data['dBx/dz'].append(b[5])
+        output_data['dBy/dy'].append(b[6])
+        output_data['dBy/dz'].append(b[7])
+    
+    # Convert the output dictionary to a DataFrame
+    output_df = pd.DataFrame(output_data)
+    return output_df

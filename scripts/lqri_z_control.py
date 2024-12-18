@@ -68,8 +68,8 @@ class TorqueControl:
         rospy.logwarn("HARDWARE_CONNECTED is set to {}".format(HARDWARE_CONNECTED))
         init_hardware_and_shutdown_handler(HARDWARE_CONNECTED)
         self.current_pub = rospy.Publisher("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=10)
-        self.control_input_pub = rospy.Publisher("/oct_levitation/lqri_z_2dtorque/control_input", Float64MultiArrayStamped, queue_size=10)
-        self.reference_pose_pub = rospy.Publisher("/oct_levitation/lqri_z_2dtorque/reference_pose", TransformStamped, queue_size=10)
+        self.control_input_pub = rospy.Publisher("/oct_levitation/lqri_z/control_input", Float64MultiArrayStamped, queue_size=10)
+        self.reference_pose_pub = rospy.Publisher("/oct_levitation/lqri_z/reference_pose", TransformStamped, queue_size=10)
         self.current_msg = DesCurrentsReg()
         
         # Start controller routine
