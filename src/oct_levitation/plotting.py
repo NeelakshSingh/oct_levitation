@@ -1,15 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import matplotlib
 from matplotlib.figure import Figure
 import oct_levitation.geometry as geometry
+import oct_levitation.common as common
 import pandas as pd
 from control_utils.general.utilities import quaternion_to_normal_vector, angles_from_normal_vector
 
 import os
 import subprocess
 
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Callable
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
 
@@ -235,7 +237,7 @@ def plot_6DOF_pose_euler_xyz(state_history: np.ndarray,
     ax.set_zlabel('Z')
     plt.show()
 
-def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray,
+def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, scale_equal: bool = True,
                                   save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
     """
     Plots target Euler angles and positions from actual poses DataFrame and a constant reference pose.
@@ -271,7 +273,7 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[0, i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[0, i].set_title(f"Position {axis} of Dipole Center")
+        axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[0, i].set_xlabel("Time (s)")
         axs[0, i].set_ylabel("Position (mm)")
         axs[0, i].legend()
@@ -280,10 +282,21 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[1, i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[1, i].set_title(f"{angle} of Dipole Center")
+        axs[1, i].set_title(f"{angle} of Body Fixed Frame")
         axs[1, i].set_xlabel("Time (s)")
         axs[1, i].set_ylabel("Angle (deg)")
         axs[1, i].legend()
+
+    if scale_equal:
+        axs[0, 2].sharey(axs[0, 0])
+        axs[0, 1].sharey(axs[0, 0])
+        axs[1, 1].sharey(axs[1, 0])
+        axs[1, 2].sharey(axs[1, 0])
+        # Autoscale shared axes
+        for ax_row in axs: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
 
     # Adjust layout
     plt.tight_layout()
@@ -315,7 +328,7 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[i].set_title(f"Position {axis} of Dipole Center Frame")
+        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Position (mm)")
         axs[i].legend()
@@ -353,7 +366,7 @@ def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: 
 
     ax.plot(time, actual_z_position, label=f"Actual Z", **kwargs)
     ax.axhline(y=reference_z, label=f"Reference Z", linestyle='dashed', color='r')
-    ax.set_title(f"Z Position of Dipole Center Frame")
+    ax.set_title(f"Z Position of Body Fixed Frame")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Position (mm)")
     ax.legend()
@@ -368,6 +381,50 @@ def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: 
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
     plt.show()
 
+    return fig, ax
+
+def plot_z_position_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
+                              save_as: str = None, save_as_emf: bool = False,
+                              inkscape_path: str = INKSCAPE_PATH, **kwargs):
+    """
+    Plots Z positions over time from actual poses and reference poses.
+    All inputs are in SI units.
+
+    Parameters:
+        - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
+        - reference_poses (pd.DataFrame): DataFrame containing reference positions with time.
+        - save_as (str): Filename to save the plot as SVG (optional).
+        - save_as_emf (bool): If True, also save the plot as EMF using Inkscape.
+        - inkscape_path (str): Path to Inkscape executable.
+        - **kwargs: Additional arguments passed to plt.plot().
+    """
+    time = actual_poses['time'].values
+    actual_z_position = actual_poses['transform.translation.z'].values * 1000  # Convert to mm
+    reference_z_position = reference_poses['transform.translation.z'].values * 1000  # Convert to mm
+
+    # Plot positions
+    fig = plt.figure(figsize=(12, 3.5))
+    ax = fig.add_subplot()
+
+    ax.plot(time, actual_z_position, label="Actual Z", **kwargs)
+    ax.plot(time, reference_z_position, label="Reference Z", linestyle='dashed', color='r', **kwargs)
+
+    ax.set_title("Z Position of Body Fixed Frame")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Position (mm)")
+    ax.legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Save as SVG/EMF if required
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    plt.show()
     return fig, ax
 
 def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
@@ -395,7 +452,7 @@ def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_ang
     for i, angle in enumerate(['Beta', 'Alpha']):
         axs[i].plot(time, actual_xy[:, i], label=f"Actual {angle}")
         axs[i].axhline(y=reference_angles[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(f"{angle} of Dipole Center Frame")
+        axs[i].set_title(f"{angle} of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
@@ -410,6 +467,192 @@ def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_ang
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
     plt.show()
     return fig, axs
+
+def plot_z_position_Fz_constant_reference(actual_poses: pd.DataFrame, reference_z: float,
+                                          ft_df: pd.DataFrame,
+                                          save_as: str = None,
+                                          save_as_emf: bool = False,
+                                          inkscape_path: str = INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+    """
+    Plots Z position (actual and constant reference) along with the desired Fz force in subplots.
+    Positions are in mm, forces in mN.
+
+    Parameters:
+        - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
+        - reference_z (float): Constant reference Z position in SI units.
+        - ft_df (pd.DataFrame): DataFrame containing forces, 'array_2' corresponds to Fz.
+        - save_as (str): Filename to save the plot as SVG (optional).
+        - save_as_emf (bool): If True, also save the plot as EMF using Inkscape.
+        - inkscape_path (str): Path to Inkscape executable.
+        - **kwargs: Additional arguments passed to plt.plot().
+    """
+    # Extract data
+    time = actual_poses['time'].values
+    actual_z_position = actual_poses['transform.translation.z'].values * 1000  # Convert to mm
+    reference_z = reference_z * 1000  # Constant reference in mm
+    Fz = ft_df['array_2'].values * 1e3  # Convert to mN
+
+    # Create subplots
+    fig, axes = plt.subplots(2, 1, figsize=(10, 5), sharex=True, gridspec_kw={'height_ratios': [1.5, 1]})
+    fig.suptitle("Z Position and Desired Fz Force of Rigid Body", fontsize=14)
+
+    # Plot Z position
+    axes[0].plot(time, actual_z_position, label="Actual Z", color='tab:blue', **kwargs)
+    axes[0].axhline(y=reference_z, label="Reference Z", linestyle='dashed', color='tab:red')
+    axes[0].set_ylabel("Position (mm)")
+    axes[0].set_title("Z Position of Body Fixed Frame")
+    axes[0].legend()
+
+    # Plot Fz
+    axes[1].plot(time, Fz, label="Desired Fz", color='k', **kwargs)
+    axes[1].set_xlabel("Time (s)")
+    axes[1].set_ylabel("Force (mN)")
+    axes[1].set_title("Desired Fz Force")
+    axes[1].legend()
+
+    for ax in axes:
+        ax.minorticks_on()
+        ax.grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
+        ax.grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    # Save as SVG/EMF if needed
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    plt.show()
+    return fig, axes
+
+def plot_z_position_Fz_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
+                                          ft_df: pd.DataFrame,
+                                          save_as: str = None,
+                                          save_as_emf: bool = False,
+                                          inkscape_path: str = INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+    """
+    Plots Z position (actual and variable reference) along with the desired Fz force in subplots.
+    Positions are in mm, forces in mN.
+
+    Parameters:
+        - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
+        - reference_poses (pd.DataFrame): DataFrame containing reference positions with time.
+        - ft_df (pd.DataFrame): DataFrame containing forces, 'array_2' corresponds to Fz.
+        - save_as (str): Filename to save the plot as SVG (optional).
+        - save_as_emf (bool): If True, also save the plot as EMF using Inkscape.
+        - inkscape_path (str): Path to Inkscape executable.
+        - **kwargs: Additional arguments passed to plt.plot().
+    """
+    # Extract data
+    time = actual_poses['time'].values
+    actual_z_position = actual_poses['transform.translation.z'].values * 1000  # Convert to mm
+    reference_z_position = reference_poses['transform.translation.z'].values * 1000  # Convert to mm
+    Fz = ft_df['array_2'].values * 1e3  # Convert to mN
+
+    # Create subplots
+    fig, axes = plt.subplots(2, 1, figsize=(10, 5), sharex=True, gridspec_kw={'height_ratios': [1.5, 1]})
+    fig.suptitle("Z Position and Desired Fz Force", fontsize=14)
+
+    # Plot Z position
+    axes[0].plot(time, actual_z_position, label="Actual Z", color='tab:blue', **kwargs)
+    axes[0].plot(time, reference_z_position, label="Reference Z", linestyle='dashed', color='tab:red', **kwargs)
+    axes[0].set_ylabel("Position (mm)")
+    axes[0].set_title("Z Position of Body Fixed Frame")
+    axes[0].legend()
+
+    # Plot Fz
+    axes[1].plot(time, Fz, label="Desired Fz", color='k', **kwargs)
+    axes[1].set_xlabel("Time (s)")
+    axes[1].set_ylabel("Force (mN)")
+    axes[1].set_title("Desired Fz Force")
+    axes[1].legend()
+
+    for ax in axes:
+        ax.minorticks_on()
+        ax.grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
+        ax.grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    # Save as SVG/EMF if needed
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    plt.show()
+    return fig, axes
+
+
+
+def plot_alpha_beta_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
+                              save_as: str = None, save_as_emf: bool = False,
+                              inkscape_path: str = INKSCAPE_PATH, **kwargs):
+    """
+    Plots Alpha and Beta angles over time from actual poses and reference poses.
+    Angles are computed from quaternions and converted to degrees.
+
+    Parameters:
+        - actual_poses (pd.DataFrame): DataFrame containing actual orientations with time.
+        - reference_poses (pd.DataFrame): DataFrame containing reference orientations with time.
+        - save_as (str): Filename to save the plot as SVG (optional).
+        - save_as_emf (bool): If True, also save the plot as EMF using Inkscape.
+        - inkscape_path (str): Path to Inkscape executable.
+        - **kwargs: Additional arguments passed to plt.plot().
+    """
+    time = actual_poses['time'].values
+
+    # Extract quaternions and compute Euler angles
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y',
+                                        'transform.rotation.z', 'transform.rotation.w']].values
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y',
+                                              'transform.rotation.z', 'transform.rotation.w']].values
+
+    actual_angles = np.array([
+        angles_from_normal_vector(quaternion_to_normal_vector(quaternion))
+        for quaternion in actual_orientations
+    ])
+    reference_angles = np.array([
+        angles_from_normal_vector(quaternion_to_normal_vector(quaternion))
+        for quaternion in reference_orientations
+    ])
+
+    # Convert to degrees
+    actual_angles_deg = np.rad2deg(np.roll(actual_angles, 1, axis=1))
+    reference_angles_deg = np.rad2deg(np.roll(reference_angles, 1, axis=1))
+
+    # Plot Euler angles
+    fig, axs = plt.subplots(1, 2, figsize=(14, 3.5), sharex=True, sharey=True)
+    fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
+
+    angle_labels = ['Beta', 'Alpha']
+    for i, angle in enumerate(angle_labels):
+        axs[i].plot(time, actual_angles_deg[:, i], label=f"Actual {angle}", **kwargs)
+        axs[i].plot(time, reference_angles_deg[:, i], label=f"Reference {angle}",
+                    linestyle='dashed', color='r', **kwargs)
+        axs[i].set_title(f"{angle} of Body Fixed Frame")
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Angle (deg)")
+        axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Save as SVG/EMF if required
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    plt.show()
+    return fig, axs
+
 
 def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray,
                                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
@@ -437,7 +680,7 @@ def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_o
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle + " of Dipole Center Frame")
+        axs[i].set_title(angle + " of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
@@ -478,7 +721,7 @@ def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, referenc
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle + " of Dipole Center Frame")
+        axs[i].set_title(angle + " of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
@@ -523,7 +766,7 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[0, i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[0, i].set_title(f"Position {axis} of Dipole Center Frame")
+        axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[0, i].set_xlabel("Time (s)")
         axs[0, i].set_ylabel("Position (mm)")
         axs[0, i].legend()
@@ -567,7 +810,7 @@ def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_pose
     for i, axis in enumerate(['X', 'Y', 'Z']):
         axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
         axs[i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[i].set_title(f"Position {axis} of Dipole Center Frame")
+        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Position (mm)")
         axs[i].legend()
@@ -609,7 +852,7 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
         axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
         axs[i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle + " of Dipole Center Frame.")
+        axs[i].set_title(angle + " of Body Fixed Frame.")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
@@ -684,7 +927,7 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
     ax.set_xlabel('X (mm)')
     ax.set_ylabel('Y (mm)')
     ax.set_zlabel('Z (mm)')
-    ax.set_title("Actual Pose v/s Reference Pose of Dipole Center Frame")
+    ax.set_title("Actual Pose v/s Reference Pose of Body Fixed Frame")
 
     # Show legend
     ax.legend()
@@ -755,7 +998,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     ax.set_xlabel('X (mm)')
     ax.set_ylabel('Y (mm)')
     ax.set_zlabel('Z (mm)')
-    ax.set_title("Actual Pose v/s Reference Pose of Dipole Center Frame")
+    ax.set_title("Actual Pose v/s Reference Pose of Body Fixed Frame Frame")
 
     # Show legend
     ax.legend()
@@ -815,8 +1058,8 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
     # Flatten the 2D axes array for easier iteration
     axs = axs.flatten()
     for i in range(8):
-        axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='b', **kwargs)
-        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='g', **kwargs)
+        axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='tab:blue', **kwargs)
+        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:green', **kwargs)
         axs[i].set_title(f'Currents in Coil {i+1}')
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Current (A)")
@@ -834,7 +1077,7 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
 
     return fig, axs
 
-def plot_forces_and_torques(df: pd.DataFrame,
+def plot_forces_and_torques(ft_df: pd.DataFrame,
                             title: str="Desired Forces and Torques",
                             save_as: str=None,
                             save_as_emf: bool=False,
@@ -844,18 +1087,18 @@ def plot_forces_and_torques(df: pd.DataFrame,
     Forces are converted to milliNewtons (mN) and torques to milliNewton-millimeters (mN-mm).
 
     Parameters:
-        df (pd.DataFrame): Input DataFrame with 'time', 'array_0' to 'array_5' columns.
+        ft_df (pd.DataFrame): Input DataFrame with 'time', 'array_0' to 'array_5' columns.
                            'array_0' = Fx, 'array_1' = Fy, 'array_2' = Fz
                            'array_3' = Tx, 'array_4' = Ty, 'array_5' = Tz
     """
     # Extract relevant columns
-    time = df['time']
-    Fx = df['array_0'] * 1e3  # Convert to mN
-    Fy = df['array_1'] * 1e3
-    Fz = df['array_2'] * 1e3
-    Tx = df['array_3'] * 1e6  # Convert to mN-mm
-    Ty = df['array_4'] * 1e6
-    Tz = df['array_5'] * 1e6
+    time = ft_df['time']
+    Fx = ft_df['array_0'] * 1e3  # Convert to mN
+    Fy = ft_df['array_1'] * 1e3
+    Fz = ft_df['array_2'] * 1e3
+    Tx = ft_df['array_3'] * 1e6  # Convert to mN-mm
+    Ty = ft_df['array_4'] * 1e6
+    Tz = ft_df['array_5'] * 1e6
 
     # Create subplots: 2 rows, 3 columns
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
@@ -1006,17 +1249,21 @@ def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
     plt.show()
     return fig, ax
 
-def plot_field_components_at_dipole_center(pose_df, desired_currents_df, actual_currents_df, calibration_fn,
+def plot_field_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
+                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel,
                           save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 3 magnetic field components (Bx, By, Bz) over time for both actual and desired fields.
+    The desired components are calculated using the linear actuation matrix since that's what we use
+    during the computation. However, the actual field is computed using the nonlinear model's forward
+    computation function available through the calibration model class.
     Shared x and y axes across subplots. Allows saving as SVG/EMF.
 
     Parameters:
         pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
         desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
         actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibration_fn (Callable): Function that maps position to an 8x8 matrix A
+        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
         save_as (str): Filename to save the plot as SVG/EMF (without extension).
         **kwargs: Additional parameters for plt.plot().
     """
@@ -1028,18 +1275,18 @@ def plot_field_components_at_dipole_center(pose_df, desired_currents_df, actual_
     actual_fields = {'Bx': [], 'By': [], 'Bz': []}
 
     for i in range(len(combined_desired)):
-        position = [
+        position = np.array([
             combined_desired['transform.translation.x'].iloc[i],
             combined_desired['transform.translation.y'].iloc[i],
             combined_desired['transform.translation.z'].iloc[i]
-        ]
+        ])
 
         desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
         actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
 
-        A = calibration_fn(np.array(position))
+        A = calibrated_model.get_actuation_matrix(position)
         desired_field = A @ desired_currents
-        actual_field = A @ actual_currents
+        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
 
         for idx, key in enumerate(['Bx', 'By', 'Bz']):
             desired_fields[key].append(desired_field[idx] * 1000)  # Convert to mT
@@ -1055,7 +1302,7 @@ def plot_field_components_at_dipole_center(pose_df, desired_currents_df, actual_
         axs[i].legend()
 
     axs[-1].set_xlabel("Time [s]")
-    fig.suptitle("Actual v/s Desired Field Components at Dipole Center")
+    fig.suptitle("Actual (Non-Linear Model) v/s Desired Field (Linear Approx) Components at Dipole Center")
     plt.tight_layout()
     if save_as and save_as.endswith('.svg'):
         plt.savefig(save_as, format='svg')
@@ -1065,18 +1312,22 @@ def plot_field_components_at_dipole_center(pose_df, desired_currents_df, actual_
     plt.show()
     return fig, axs
 
-def plot_gradient_components_at_dipole_center(pose_df, desired_currents_df, actual_currents_df, calibration_fn,
+def plot_gradient_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
+                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel,
                           save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz) over time 
-    for both actual and desired gradients. Shared x and y axes across subplots.
-    Allows saving as SVG/EMF.
+    for both actual and desired gradients. The desired components are calculated using 
+    the linear actuation matrix since that's what we use during the computation. However,
+    the actual field is computed using the nonlinear model's forward computation function 
+    available through the calibration model class.
+    Shared x and y axes across subplots. Allows saving as SVG/EMF.
 
     Parameters:
         pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
         desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
         actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibration_fn (Callable): Function that maps position to an 8x8 matrix A
+        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
         save_as (str): Filename to save the plot as SVG/EMF (without extension).
         **kwargs: Additional parameters for plt.plot().
     """
@@ -1088,18 +1339,18 @@ def plot_gradient_components_at_dipole_center(pose_df, desired_currents_df, actu
     actual_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
 
     for i in range(len(combined_desired)):
-        position = [
+        position = np.array([
             combined_desired['transform.translation.x'].iloc[i],
             combined_desired['transform.translation.y'].iloc[i],
             combined_desired['transform.translation.z'].iloc[i]
-        ]
+        ])
 
         desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
         actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
 
-        A = calibration_fn(np.array(position))
+        A = calibrated_model.get_actuation_matrix(position)
         desired_field = A @ desired_currents
-        actual_field = A @ actual_currents
+        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
 
         gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
         for idx, key in enumerate(gradient_keys, start=3):
@@ -1116,7 +1367,7 @@ def plot_gradient_components_at_dipole_center(pose_df, desired_currents_df, actu
         axs[i].legend()
 
     axs[-1].set_xlabel("Time [s]")
-    fig.suptitle("Actual v/s Desired Gradients at Dipole Center")
+    fig.suptitle("Actual (Non-Linear Model) v/s Desired Gradients (Linear Approx) at Dipole Center")
     plt.tight_layout()
 
     if save_as and save_as.endswith('.svg'):
@@ -1129,19 +1380,21 @@ def plot_gradient_components_at_dipole_center(pose_df, desired_currents_df, actu
     return fig, axs
 
 def plot_field_components_at_dipole_center_const_actuation_position(
-                          pose_df, desired_currents_df, actual_currents_df, calibration_fn, des_actuation_pos=np.zeros(3),
+                          pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
+                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel, des_actuation_pos=np.zeros(3),
                           save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 3 magnetic field components (Bx, By, Bz) over time for both actual and desired fields.
     Where the desired fields are calculated based on the actuation matrix calcualted at the given 
-    desired position.
+    desired position. However, the actual field is computed using the nonlinear model's forward
+    computation function available through the calibration model class.
     Shared x and y axes across subplots. Allows saving as SVG/EMF.
 
     Parameters:
         pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
         desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
         actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibration_fn (Callable): Function that maps position to an 8x8 matrix A
+        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
         des_actuation_pos (np.ndarray): The position which is used to calculate the desired field values.
             Defaults to origin.
         save_as (str): Filename to save the plot as SVG/EMF (without extension).
@@ -1154,19 +1407,20 @@ def plot_field_components_at_dipole_center_const_actuation_position(
     desired_fields = {'Bx': [], 'By': [], 'Bz': []}
     actual_fields = {'Bx': [], 'By': [], 'Bz': []}
 
+    A = calibrated_model.get_actuation_matrix(des_actuation_pos)
+
     for i in range(len(combined_desired)):
-        position = [
+        position = np.array([
             combined_desired['transform.translation.x'].iloc[i],
             combined_desired['transform.translation.y'].iloc[i],
             combined_desired['transform.translation.z'].iloc[i]
-        ]
+        ])
 
         desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
         actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
 
-        A = calibration_fn(np.array(position))
-        desired_field = calibration_fn(des_actuation_pos) @ desired_currents
-        actual_field = A @ actual_currents
+        desired_field = A @ desired_currents
+        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
 
         for idx, key in enumerate(['Bx', 'By', 'Bz']):
             desired_fields[key].append(desired_field[idx] * 1000)  # Convert to mT
@@ -1182,7 +1436,7 @@ def plot_field_components_at_dipole_center_const_actuation_position(
         axs[i].legend()
 
     axs[-1].set_xlabel("Time [s]")
-    fig.suptitle(f"Actual v/s Desired Field Components at Dipole Center for A({des_actuation_pos})")
+    fig.suptitle(f"Actual (Non-Linear Model) v/s Desired Field Components at Dipole Center for A({des_actuation_pos})")
     plt.tight_layout()
     if save_as and save_as.endswith('.svg'):
         plt.savefig(save_as, format='svg')
@@ -1192,19 +1446,20 @@ def plot_field_components_at_dipole_center_const_actuation_position(
     plt.show()
     return fig, axs
 
-def plot_gradient_components_at_dipole_center_const_actuation_position(
-                          pose_df, desired_currents_df, actual_currents_df, calibration_fn, des_actuation_pos=np.zeros(3),
+def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
+                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel, des_actuation_pos=np.zeros(3),
                           save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz) over time 
-    for both actual and desired gradients. Shared x and y axes across subplots.
-    Allows saving as SVG/EMF.
+    for both actual and desired gradients. However, the actual field is computed using 
+    the nonlinear model's forward computation function available through the calibration 
+    model class. Shared x and y axes across subplots. Allows saving as SVG/EMF.
 
     Parameters:
         pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
         desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
         actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibration_fn (Callable): Function that maps position to an 8x8 matrix A
+        model_fn (Callable): Function that maps position to an 8x8 matrix A
         des_actuation_pos (np.ndarray): The position which is used to calculate the desired field values.
             Defaults to origin.
         save_as (str): Filename to save the plot as SVG/EMF (without extension).
@@ -1217,19 +1472,20 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(
     desired_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
     actual_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
 
+    A = calibrated_model.get_actuation_matrix(des_actuation_pos)
+
     for i in range(len(combined_desired)):
-        position = [
+        position = np.array([
             combined_desired['transform.translation.x'].iloc[i],
             combined_desired['transform.translation.y'].iloc[i],
             combined_desired['transform.translation.z'].iloc[i]
-        ]
+        ])
 
         desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
         actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
 
-        A = calibration_fn(np.array(position))
-        desired_field = calibration_fn(des_actuation_pos) @ desired_currents
-        actual_field = A @ actual_currents
+        desired_field = A @ desired_currents
+        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
 
         gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
         for idx, key in enumerate(gradient_keys, start=3):
@@ -1246,7 +1502,7 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(
         axs[i].legend()
 
     axs[-1].set_xlabel("Time [s]")
-    fig.suptitle(f"Actual v/s Desired Gradients at Dipole Center For A({des_actuation_pos})")
+    fig.suptitle(f"Actual (Non-Linear Model) v/s Desired Gradients at Dipole Center For A({des_actuation_pos})")
     plt.tight_layout()
 
     if save_as and save_as.endswith('.svg'):

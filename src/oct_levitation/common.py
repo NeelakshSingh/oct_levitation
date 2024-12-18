@@ -31,6 +31,7 @@ class OctomagCalibratedModel:
             model.setCalibrationFile(model_path)
             self.calibration = model
             self.__actuation_matrix_method = self.calibration.getActuationMatrix
+            self.__exact_field_map = self.calibration.computeFieldGradient5FromCurrents
         elif calibration_type == "wand_calibration":
             self.calibration = wand.CalibratedField(calibration_folder=calibration_file, **kwargs)
             self.__actuation_matrix_method = self.calibration.get_actuation_matrix
@@ -39,3 +40,6 @@ class OctomagCalibratedModel:
         
     def get_actuation_matrix(self, position: np.ndarray) -> np.ndarray:
         return self.__actuation_matrix_method(position)
+    
+    def get_exact_field_grad5_from_currents(self, position: np.ndarray, currents: np.ndarray) -> np.ndarray:
+        return self.__exact_field_map(position, currents)
