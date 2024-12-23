@@ -1518,13 +1518,63 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: 
 def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                         actual_currents_df: pd.DataFrame,
                                         desired_wrench: pd.DataFrame,
-                                        calibrated_model: object,
+                                        calibrated_model: common.OctomagCalibratedModel,
                                         dipole_strength: float,
                                         dipole_axis: np.ndarray,
                                         save_as: str = None,
                                         save_as_emf: bool = False,
                                         inkscape_path: str = INKSCAPE_PATH,
                                         **kwargs):
+    """
+    Plots the actual and desired wrench (force and torque) components over time for a dipole center,
+    based on the given pose and current data.
+
+    This function computes the actual wrench exerted by the dipole based on the current data and
+    compares it to the desired wrench values. It then plots the components of force (Fx, Fy, Fz) and torque (Taux, Tauy, Tauz) 
+    against time. The plot allows visualization of the agreement between the actual and reference values.
+
+    Parameters:
+        dipole_center_pose_df (pd.DataFrame):
+            DataFrame containing the pose of the dipole center.
+
+        actual_currents_df (pd.DataFrame):
+            DataFrame containing the actual currents (currents_reg_0 to currents_reg_7) applied to the dipole over time.
+            Each row corresponds to a specific time step.
+
+        desired_wrench (pd.DataFrame):
+            DataFrame containing the desired wrench (force and torque) components at each time step. Should have columns 'Fx', 'Fy', 
+            'Fz', 'Taux', 'Tauy', 'Tauz' representing the reference force and torque values.
+
+        calibrated_model (OctomagCalibratedModel):
+            An instance of a model used to calculate the exact field gradients based on the position and currents.
+            It should have a method `get_exact_field_grad5_from_currents(position, currents)` to compute the actual fields.
+
+        dipole_strength (float):
+            The strength of the dipole, which is used to compute the interaction matrix.
+
+        dipole_axis (np.ndarray):
+            A 3D vector representing the axis of the dipole for torque computation.
+
+        save_as (str):
+            The file path where the plot should be saved (in PNG format). If not provided, the plot is not saved.
+
+        save_as_emf (bool):
+            If True, the plot will also be saved in EMF format alongside the PNG file. Default is False.
+
+        inkscape_path (str):
+            Path to the Inkscape executable, used for converting the EMF file to PNG when `save_as_emf` is True. Default is None.
+
+        **kwargs (additional) keyword arguments
+            Additional arguments to be passed to the plotting function (e.g., for customizing the plot appearance).
+
+    Returns:
+        A tuple where the first element is the figure object while the second elements is the axes object.
+    
+    Notes:
+    - The plot consists of two rows: the first row for force components (Fx, Fy, Fz) and the second for torque components (Taux, Tauy, Tauz).
+    - The actual wrench is computed from the dipole's position, rotation, and current data using the calibrated model and interaction matrix.
+    - The plot includes both actual wrench and reference wrench (desired) values for comparison.
+    """
     # Combine pose and current data
     combined_pose_currents = pd.merge_asof(dipole_center_pose_df, actual_currents_df, on='time')
     time = dipole_center_pose_df['time']
@@ -1571,8 +1621,8 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     
     # Force subplots (columns 0, 1, 2)
     for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
-        axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0])
-        axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], linestyle='-')
+        axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], **kwargs)
+        axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
         axes[0, i].set_title(f'{force_component} - Force')
         axes[0, i].grid(True)
         if i == 0:
@@ -1582,8 +1632,8 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
 
     # Torque subplots (columns 0, 1, 2)
     for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
-        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e6, label='Actual Torque', color=colors[2])
-        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e6, label='Reference Torque', color=colors[3], linestyle='-')
+        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e6, label='Actual Torque', color=colors[2], **kwargs)
+        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e6, label='Reference Torque', color=colors[3], **kwargs)
         axes[1, i].set_title(f'{torque_component} - Torque')
         axes[1, i].grid(True)
         if i == 0:
