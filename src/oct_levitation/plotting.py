@@ -1,16 +1,23 @@
+from control_utils.general.utilities import quaternion_to_normal_vector, angles_from_normal_vector
+
 import numpy as np
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib
 from matplotlib.figure import Figure
+
 import oct_levitation.geometry as geometry
 import oct_levitation.common as common
 import oct_levitation.mechanical as mechanical
-import pandas as pd
-from control_utils.general.utilities import quaternion_to_normal_vector, angles_from_normal_vector
-
 import os
+
+import pandas as pd
+
 import subprocess
+
+import scipy.signal as signal
+import scipy.fft as scifft
 
 from typing import Optional, Tuple, List, Callable
 
@@ -35,7 +42,7 @@ xkcd_contrast_colors = {
     "Teal": "#029386",
 }
 
-xkcd_contrast_list = list(xkcd_contrast_colors.items())
+xkcd_contrast_list = list(xkcd_contrast_colors.values())
 
 def get_cmap(n, name='hsv'):
     '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
@@ -1666,3 +1673,160 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
 
     plt.show()    
     return fig, axes
+
+######################################
+# SIGNAL PROCESSING RELATED PLOTS
+######################################
+def plot_fft_from_dataframe(dataframe: pd.DataFrame, 
+                            column_names: list,
+                            label_list: list,
+                            remove_dc: bool = False, 
+                            save_as: str = None, 
+                            save_as_emf: bool = False, 
+                            inkscape_path: str = None):
+    """
+    Computes and plots the Fast Fourier Transform (FFT) for signals from a dataframe.
+    The sampling frequency is derived from the 'time' column in the dataframe. 
+    Shared x-axis across all subplots, with one subplot per signal column.
+
+    Parameters:
+
+        dataframe (pd.DataFrame): 
+            Input dataframe containing the 'time' column and signal columns for FFT computation.
+        column_names (list): 
+            List of column names in the dataframe representing the signals to compute and plot FFT for.
+        save_as (str, optional): 
+            Path to save the plot as an SVG or PNG file (without extension).
+        save_as_emf (bool, optional): 
+            If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
+        inkscape_path (str, optional): 
+            Path to the Inkscape executable for converting to EMF format.
+        **kwargs: 
+            Additional keyword arguments passed to plt.plot().
+    """
+    # Calculate sampling frequency
+    dt = np.mean(np.diff(dataframe['time']))  # Calculate time step
+
+    # Prepare the FFT plot
+    plt.figure(figsize=(10, len(column_names) * 3))
+    for i, (column, label) in enumerate(zip(column_names, label_list)):
+        # Compute FFT
+        signal = dataframe[column].values
+        n = len(signal)
+        fft_values = scifft.fft(signal)
+        fft_frequencies = scifft.fftfreq(n, dt)
+
+        # Only keep positive frequencies
+        pos_mask = fft_frequencies > 0
+        fft_frequencies = fft_frequencies[pos_mask]
+        fft_magnitude = np.abs(fft_values[pos_mask])
+
+        if remove_dc:
+            fft_magnitude[0] = 0
+
+        # Plot FFT
+        plt.subplot(len(column_names), 1, i + 1)
+        plt.plot(fft_frequencies, fft_magnitude, label=f'FFT of {label}', color='tab:blue')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Magnitude')
+        plt.title(f'FFT Plot for {label}')
+        plt.grid(True)
+        plt.legend()
+
+    plt.tight_layout()
+
+    # Save the plot if required
+    if save_as:
+        plt.savefig(save_as, format='svg', dpi=300)
+        if save_as_emf:
+            emf_path = save_as.replace('.svg', '.emf')
+            plt.savefig(emf_path, format='emf', dpi=300)
+            if inkscape_path:
+                os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
+
+    plt.show()
+
+def plot_time_series_and_fft(dataframe: pd.DataFrame, 
+                             column_names: list,
+                             label_list: list,
+                             remove_dc: bool = False, 
+                             save_as: str = None, 
+                             save_as_emf: bool = False, 
+                             inkscape_path: str = None, 
+                             **kwargs):
+    """
+    Plots both the time series data and its corresponding FFT for given columns in the dataframe.
+    The sampling frequency is derived from the 'time' column. Produces a 2 x n subplot layout,
+    where the first row contains the time series and the second row contains the FFT.
+
+    Parameters:
+        dataframe (pd.DataFrame): 
+            Input dataframe containing the 'time' column and signal columns for FFT computation.
+        column_names (list): 
+            List of column names in the dataframe representing the signals to compute and plot FFT for.
+        save_as (str, optional): 
+            Path to save the plot as an SVG or PNG file (without extension).
+        save_as_emf (bool, optional): 
+            If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
+        inkscape_path (str, optional): 
+            Path to the Inkscape executable for converting to EMF format.
+        **kwargs: 
+            Additional keyword arguments passed to plt.plot().
+    """
+    # Ensure the dataframe has a 'time' column
+    if 'time' not in dataframe.columns:
+        raise ValueError("The dataframe must contain a 'time' column.")
+    
+    time = dataframe['time'].values
+    dt = np.mean(np.diff(time))  # Calculate time step
+    
+    # Prepare the figure
+    num_columns = len(column_names)
+    fig, axes = plt.subplots(2, num_columns, figsize=(6 * num_columns, 8), constrained_layout=True)
+    if num_columns == 1:  # If only one signal, axes won't be 2D, so wrap in a list
+        axes = np.array([[axes[0]], [axes[1]]])
+
+    for idx, (column, label) in enumerate(zip(column_names, label_list)):
+        if column not in dataframe.columns:
+            raise ValueError(f"Column '{column}' not found in the dataframe.")
+        
+        signal = dataframe[column].values
+        
+        # Time series plot
+        axes[0, idx].plot(time, signal, label=label, **kwargs)
+        axes[0, idx].set_title(f"Time Series - {label}")
+        axes[0, idx].set_xlabel("Time (s)")
+        axes[0, idx].set_ylabel("Amplitude")
+        axes[0, idx].grid(True)
+        axes[0, idx].legend()
+
+        # FFT calculation
+        fft_vals = scifft.fft(signal)
+        fft_freqs = scifft.fftfreq(len(signal), dt)
+        positive_freqs = fft_freqs[:len(fft_vals)//2]
+        positive_fft_vals = np.abs(fft_vals[:len(fft_vals)//2])
+
+        if remove_dc:
+            positive_fft_vals[0] = 0.0
+
+        # FFT plot
+        axes[1, idx].plot(positive_freqs, positive_fft_vals, label=label, **kwargs)
+        axes[1, idx].set_title(f"FFT - {label}")
+        axes[1, idx].set_xlabel("Frequency (Hz)")
+        axes[1, idx].set_ylabel("Amplitude")
+        axes[1, idx].grid(True)
+        axes[1, idx].legend()
+
+    # Adjust layout and titles
+    fig.suptitle("Time Series and FFT Plots", fontsize=16, weight='bold')
+    
+    # Save the figure if specified
+    if save_as:
+        fig.savefig(f"{save_as}.svg", format='svg')
+        if save_as_emf and inkscape_path:
+            emf_path = f"{save_as}.emf"
+            svg_path = f"{save_as}.svg"
+            import subprocess
+            subprocess.run([inkscape_path, svg_path, '--export-type=emf', '--export-filename', emf_path])
+
+    plt.show()

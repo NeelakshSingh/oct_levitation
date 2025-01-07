@@ -383,3 +383,7 @@ def field_position_dataframe_from_system_state(pose_df: pd.DataFrame, current_df
     # Convert the output dictionary to a DataFrame
     output_df = pd.DataFrame(output_data)
     return output_df
+
+###############################################
+# Signal to noise ratio calculation functions.
+###############################################
