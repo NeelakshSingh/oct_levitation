@@ -2,6 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
+import scipy.fft as scifft
+
+from typing import Dict, Tuple
+
 ###############################################
 # Legacy utility functions from control_utils adapted
 # for use with bagpyext.
@@ -253,8 +257,52 @@ def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
 
 # All functions assume that dataframes were obtained through bagpyext CSV files
 # and the above listed time synced interpolated dataset.
-import pandas as pd
-import numpy as np
+def filter_dataframe_by_time_range(dataframe: pd.DataFrame,  
+                                   t_start: float, 
+                                   t_end: float, 
+                                   renormalize_time: bool = False,
+                                   time_column: str = "time") -> pd.DataFrame:
+    """
+    Filters a dataframe to include only rows within the specified time range.
+
+    Parameters:
+        dataframe (pd.DataFrame): The input dataframe with a time column.
+        time_column (str): The name of the time column in the dataframe.
+        t_start (float): The start of the time range (inclusive).
+        t_end (float): The end of the time range (inclusive).
+        renormalize_time (bool, optional): If True, renormalizes the time column to start from 0. Default is False.
+
+    Returns:
+        pd.DataFrame: A filtered dataframe with rows within the specified time range.
+    """
+    # Filter rows based on the time range
+    filtered_df = dataframe[(dataframe[time_column] >= t_start) & (dataframe[time_column] <= t_end)].copy()
+
+    # Renormalize the time column if specified
+    if renormalize_time:
+        filtered_df[time_column] -= t_start
+
+    return filtered_df
+
+def filter_dataset_by_time_range(dataset: Dict[str, pd.DataFrame],
+                                 time_vec: np.ndarray,
+                                 t_start: float, 
+                                 t_end: float, 
+                                 renormalize_time: bool = False,
+                                 time_column: str = "time") -> Tuple[np.ndarray, Dict[str, pd.DataFrame]]:
+    filtered_dataset = {}
+    time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
+    for key, item in dataset.items():
+        filtered_dataset[key] = filter_dataframe_by_time_range(item, t_start, t_end, renormalize_time, time_column)
+    
+    return time_vec_filtered, filtered_dataset
+
+def downsample_dataframe(dataframe: pd.DataFrame,
+                         fs_new: float,
+                         time_column: str = "time") -> pd.DataFrame:
+    
+    return 
+    
 
 def field_position_dataframe_from_des_currents_reg(pose_df: pd.DataFrame, current_df: pd.DataFrame, calibration_fn) -> pd.DataFrame:
     """
@@ -387,3 +435,30 @@ def field_position_dataframe_from_system_state(pose_df: pd.DataFrame, current_df
 ###############################################
 # Signal to noise ratio calculation functions.
 ###############################################
+def get_signal_fft(signal, dt,
+                   remove_dc: bool = False,
+                   positive_freqs_only: bool = False):
+    n = len(signal)
+    fft_values = scifft.fft(signal)
+    fft_frequencies = scifft.fftfreq(n, dt)
+
+    if remove_dc:
+        fft_values[0] = 0
+    
+    fft_values = np.abs(np.roll(fft_values, len(fft_values)//2))
+    fft_frequencies = np.roll(fft_frequencies, len(fft_frequencies)//2)
+
+    # Only keep positive frequencies
+    if positive_freqs_only:
+        pos_mask = fft_frequencies > 0
+        fft_frequencies = fft_frequencies[pos_mask]
+        fft_values = fft_values[pos_mask]
+    
+    return fft_values, fft_frequencies
+
+def get_signal_variance(signal: np.ndarray):
+    N = len(signal)
+    return (1/(N-1))*np.sum(np.square(signal - np.mean(signal)))
+
+def get_signal_std_deviation(signal: np.ndarray):
+    return np.sqrt(get_signal_variance(signal))

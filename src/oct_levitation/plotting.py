@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 import oct_levitation.geometry as geometry
 import oct_levitation.common as common
 import oct_levitation.mechanical as mechanical
+from oct_levitation.processing_utils import get_signal_fft
 import os
 
 import pandas as pd
@@ -1681,6 +1682,11 @@ def plot_fft_from_dataframe(dataframe: pd.DataFrame,
                             column_names: list,
                             label_list: list,
                             remove_dc: bool = False, 
+                            positive_freqs_only: bool = False,
+                            share_scales: bool = False,
+                            subplot_shape: Optional[Tuple[int]] = None,
+                            figsize: Optional[Tuple[int]] = None,
+                            suptitle: Optional[str] = None,
                             save_as: str = None, 
                             save_as_emf: bool = False, 
                             inkscape_path: str = None):
@@ -1708,30 +1714,39 @@ def plot_fft_from_dataframe(dataframe: pd.DataFrame,
     dt = np.mean(np.diff(dataframe['time']))  # Calculate time step
 
     # Prepare the FFT plot
-    plt.figure(figsize=(10, len(column_names) * 3))
+    if subplot_shape is not None:
+        sshape = subplot_shape
+    else:
+        sshape = (len(column_names), 1)
+    if figsize is not None:
+        fsize = figsize
+    else:
+        fsize = (10, len(column_names) * 3)
+    fig, axs = plt.subplots(sshape[0], sshape[1], figsize=fsize, sharex=share_scales, sharey=share_scales)
     for i, (column, label) in enumerate(zip(column_names, label_list)):
         # Compute FFT
         signal = dataframe[column].values
-        n = len(signal)
-        fft_values = scifft.fft(signal)
-        fft_frequencies = scifft.fftfreq(n, dt)
-
-        # Only keep positive frequencies
-        pos_mask = fft_frequencies > 0
-        fft_frequencies = fft_frequencies[pos_mask]
-        fft_magnitude = np.abs(fft_values[pos_mask])
-
-        if remove_dc:
-            fft_magnitude[0] = 0
+        fft_values, fft_frequencies = get_signal_fft(signal, dt, remove_dc=remove_dc, positive_freqs_only=positive_freqs_only)
 
         # Plot FFT
-        plt.subplot(len(column_names), 1, i + 1)
-        plt.plot(fft_frequencies, fft_magnitude, label=f'FFT of {label}', color='tab:blue')
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('Magnitude')
-        plt.title(f'FFT Plot for {label}')
-        plt.grid(True)
-        plt.legend()
+        if 1 in sshape:
+            ax = axs[i]
+        else:
+            j = i // sshape[1]
+            k = i - j*sshape[1] - 1
+            ax = axs[j, k]
+        ax.plot(fft_frequencies, fft_values, label=f'FFT of {label}', color='tab:blue')
+        ax.set_xlabel('Frequency (Hz)')
+        ax.set_ylabel('Magnitude')
+        title = f'FFT Plot for {label}'
+        if remove_dc:
+            title += ' (DC Removed)'
+        ax.set_title(title)
+        ax.grid(True)
+        ax.legend()
+    
+    if suptitle is not None:
+        fig.suptitle(suptitle)
 
     plt.tight_layout()
 
@@ -1745,6 +1760,7 @@ def plot_fft_from_dataframe(dataframe: pd.DataFrame,
                 os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
 
     plt.show()
+    return fig, axs
 
 def plot_time_series_and_fft(dataframe: pd.DataFrame, 
                              column_names: list,
@@ -1801,17 +1817,18 @@ def plot_time_series_and_fft(dataframe: pd.DataFrame,
         axes[0, idx].legend()
 
         # FFT calculation
-        fft_vals = scifft.fft(signal)
+        fft_vals = np.abs(scifft.fft(signal))
         fft_freqs = scifft.fftfreq(len(signal), dt)
-        positive_freqs = fft_freqs[:len(fft_vals)//2]
-        positive_fft_vals = np.abs(fft_vals[:len(fft_vals)//2])
-
+        title = f"FFT - {label}"
         if remove_dc:
-            positive_fft_vals[0] = 0.0
+            fft_vals[0] = 0.0
+            title += " (DC Removed)"
+        fft_freqs = np.roll(fft_freqs, len(fft_freqs)//2)
+        fft_vals = np.roll(fft_vals, len(fft_vals)//2)
 
         # FFT plot
-        axes[1, idx].plot(positive_freqs, positive_fft_vals, label=label, **kwargs)
-        axes[1, idx].set_title(f"FFT - {label}")
+        axes[1, idx].plot(fft_freqs, fft_vals, label=label, **kwargs)
+        axes[1, idx].set_title(title)
         axes[1, idx].set_xlabel("Frequency (Hz)")
         axes[1, idx].set_ylabel("Amplitude")
         axes[1, idx].grid(True)
@@ -1830,3 +1847,135 @@ def plot_time_series_and_fft(dataframe: pd.DataFrame,
             subprocess.run([inkscape_path, svg_path, '--export-type=emf', '--export-filename', emf_path])
 
     plt.show()
+
+def plot_ffts_from_two_dataframes(dataframe1: pd.DataFrame,
+                                  dataframe2: pd.DataFrame,
+                                  column_names1: List,
+                                  label_list1: List,
+                                  column_names2: Optional[List] = None,
+                                  label_list2: Optional[List] = None,
+                                  label_suffix1: Optional[str] = None,
+                                  label_suffix2: Optional[str] = None,
+                                  clip_frequency: bool = False,
+                                  remove_dc: bool = False,
+                                  positive_freqs_only: bool = False,
+                                  share_scales: bool = False,
+                                  figsize: Optional[Tuple[int]] = None,
+                                  suptitle: Optional[str] = None,
+                                  save_as: str = None,
+                                  save_as_emf: bool = False,
+                                  inkscape_path: str = None
+                                ):
+    """
+    Computes and plots the FFT for signals from two dataframes side by side.
+
+    Parameters:
+        dataframe1, dataframe2 (pd.DataFrame):
+            Input dataframes containing the 'time' column and signal columns for FFT computation.
+        column_names1, column_names2 (list, optional):
+            Lists of column names in the dataframes representing the signals to compute and plot FFT for.
+            If `column_names2` is None, it defaults to `column_names1`.
+        label_list1, label_list2 (list, optional):
+            Labels for the signals from both dataframes. If `label_list2` is None, it defaults to `label_list1`.
+        remove_dc (bool, optional):
+            If True, removes the DC component from the signals before FFT computation.
+        positive_freqs_only (bool, optional):
+            If True, only plots the positive frequencies.
+        share_scales (bool, optional):
+            If True, shares the x and y axes across all subplots.
+        subplot_shape (Tuple[int], optional):
+            Tuple specifying the number of rows and columns for subplots. If None, defaults to a 2-row layout.
+        figsize (Tuple[int], optional):
+            Size of the figure. Defaults to a size proportional to the number of signals.
+        suptitle (str, optional):
+            Overall title for the combined plot.
+        save_as (str, optional):
+            Path to save the plot as an SVG or PNG file (without extension).
+        save_as_emf (bool, optional):
+            If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
+        inkscape_path (str, optional):
+            Path to the Inkscape executable for converting to EMF format.
+
+    Returns:
+        fig, axs: Matplotlib figure and axes objects.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    if column_names2 is None:
+        column_names2 = column_names1
+    if label_list2 is None:
+        label_list2 = label_list1
+
+    # Calculate sampling frequency
+    dt1 = np.mean(np.diff(dataframe1['time']))
+    dt2 = np.mean(np.diff(dataframe2['time']))
+
+    # Determine subplot shape
+    num_signals = len(column_names1)
+    subplot_shape = (num_signals, 2)  # Default to 2 columns (one per dataframe)
+    if figsize is None:
+        figsize = (10, num_signals * 3)
+
+    fig, axs = plt.subplots(subplot_shape[0], subplot_shape[1], figsize=figsize, sharex=share_scales, sharey=share_scales)
+
+    for i, (col1, label1, col2, label2) in enumerate(zip(column_names1, label_list1, column_names2, label_list2)):
+        # Compute FFT for dataframe1
+        signal1 = dataframe1[col1].values
+        fft_values1, fft_frequencies1 = get_signal_fft(signal1, dt1, remove_dc=remove_dc, positive_freqs_only=positive_freqs_only)
+
+        # Compute FFT for dataframe2
+        signal2 = dataframe2[col2].values
+        fft_values2, fft_frequencies2 = get_signal_fft(signal2, dt2, remove_dc=remove_dc, positive_freqs_only=positive_freqs_only)
+
+        # Plot FFT for dataframe1
+        ax1 = axs[i, 0] if len(column_names1) > 1 else axs[0]
+        if label_suffix1 is not None:
+            label1 += " " + label_suffix1
+        if label_suffix2 is not None:
+            label2 += " " + label_suffix2
+        
+        if clip_frequency:
+            f_min = np.max([np.min(fft_frequencies1), np.min(fft_frequencies2)])
+            f_max = np.min([np.max(fft_frequencies1), np.max(fft_frequencies2)])
+            
+            f_mask1 = np.logical_and(fft_frequencies1 > f_min, fft_frequencies1 < f_max)
+            f_mask2 = np.logical_and(fft_frequencies2 > f_min, fft_frequencies2 < f_max)
+
+            fft_frequencies1 = fft_frequencies1[f_mask1]
+            fft_frequencies2 = fft_frequencies2[f_mask2]
+            fft_values1 = fft_values1[f_mask1]
+            fft_values2 = fft_values2[f_mask2]
+
+        ax1.plot(fft_frequencies1, fft_values1, label=f'FFT of {label1}', color='tab:blue')
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Magnitude')
+        ax1.set_title(f'{label1} (Dataframe 1)')
+        ax1.grid(True)
+        ax1.legend()
+
+        # Plot FFT for dataframe2
+        ax2 = axs[i, 1] if len(column_names1) > 1 else axs[1]
+        ax2.plot(fft_frequencies2, fft_values2, label=f'FFT of {label2}', color='tab:orange')
+        ax2.set_xlabel('Frequency (Hz)')
+        ax2.set_ylabel('Magnitude')
+        ax2.set_title(f'{label2} (Dataframe 2)')
+        ax2.grid(True)
+        ax2.legend()
+
+    if suptitle is not None:
+        fig.suptitle(suptitle)
+
+    plt.tight_layout()
+
+    # Save the plot if required
+    if save_as:
+        plt.savefig(save_as, format='svg', dpi=300)
+        if save_as_emf:
+            emf_path = save_as.replace('.svg', '.emf')
+            plt.savefig(emf_path, format='emf', dpi=300)
+            if inkscape_path:
+                os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
+
+    plt.show()
+    return fig, axs
