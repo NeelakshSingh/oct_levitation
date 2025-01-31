@@ -69,7 +69,7 @@ class ControlSimDriver:
 
         self.currents = np.asarray(msg.des_currents_reg)
         if self.currents.shape[0] != 8:
-            
+            rospy.logwarn(f"[Sim Driver] Invalid currents received. Expected shape (8,) received: {self.currents.shape}")
         self.__last_current_recv_time = rospy.Time.now().to_sec()
 
     
