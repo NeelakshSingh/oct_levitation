@@ -3,11 +3,12 @@ import numpy.typing as np_t
 import oct_levitation.geometry as geometry
 import tf.transformations as tr
 import tf2_ros
+import rospy
 
 from dataclasses import dataclass
-from geometry_msgs.msg import Transform
+from geometry_msgs.msg import Transform, TransformStamped
 from oct_levitation.common import Constants
-from typing import List, Dict
+from typing import List, Dict, Union
 
 @dataclass
 class PrincipleAxesAndMomentsOfInertia:
@@ -269,3 +270,35 @@ class MultiDipoleRigidBody:
             )
 
         return ret_dict
+    
+    def get_magnetic_interaction_matrices_from_world_frame(self, world_frame: str, 
+                                                           tf_buffer: tf2_ros.Buffer,
+                                                           full_mat: bool = False, 
+                                                           torque_first: bool = False) -> List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]:
+        """
+        Compute the magnetic interaction matrices for each attached dipole.
+
+        Parameters
+        ----------
+        world_frame : str
+            Name of the world frame to be passed to lookup transform
+
+        Returns
+        -------
+        List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]
+            List of each magnetic interaction matrix function return values, order corresponding to dipole list
+        """
+        mag_list = []
+        for dipole in self.dipole_list:
+            dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
+                                                                     dipole.frame_name,
+                                                                     rospy.Time())
+
+            dipole_magnetization = geometry.get_magnetic_interaction_matrix(dipole_tf=dipole_tf,
+                                                                            dipole_strength=dipole.strength,
+                                                                            dipole_axis=dipole.axis,
+                                                                            full_mat=full_mat,
+                                                                            torque_first=torque_first)
+            mag_list.append(dipole_magnetization)
+        
+        return mag_list
