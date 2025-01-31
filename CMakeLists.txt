@@ -158,6 +158,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/joy_setpoint.py
   scripts/utils/fft_noise_analysis.py
   scripts/utils/euler_pose_converter.py
+  scripts/utils/matlab_sim_driver.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -1,8 +1,13 @@
 import numpy as np
 import numpy.typing as np_t
 import oct_levitation.geometry as geometry
+import tf.transformations as tr
+import tf2_ros
+
 from dataclasses import dataclass
+from geometry_msgs.msg import Transform
 from oct_levitation.common import Constants
+from typing import List, Dict
 
 @dataclass
 class PrincipleAxesAndMomentsOfInertia:
@@ -101,7 +106,25 @@ class CylindricalRingShape(ShapePropertiesInterface):
         return self._volume
 
 @dataclass
-class RigidBodyDipoleInterface:
+class PermanentMagnet:
+    geometry: ShapePropertiesInterface
+    material: MaterialProperties
+
+    def get_dipole_strength(self):
+        return self.material.Br*self.geometry.volume/Constants.mu_0 # kg*m^2/s
+    
+@dataclass
+class MagneticDipole:
+    strength: float
+    axis: np_t.NDArray
+    transform: Transform
+    frame_name: str
+
+    def update_strength_from_permanent_magnets(self, magnet: PermanentMagnet, stack_size: int) -> None:
+        self.strength = stack_size*magnet.get_dipole_strength()
+
+@dataclass
+class SingleDipoleRigidBody:
     """
     Interface for a dipole rigid body and its required mechanical properties.
 
@@ -120,12 +143,10 @@ class RigidBodyDipoleInterface:
         This function takes the current orientation of the rigid body and returns the torque due to gravity.
         It is useful for gravity compensation in control.
     """
-    material_properties: MaterialProperties
     mass_properties: MassProperties
-    geometric_properties: CylindricalRingShape
-    dipole_strength: float
+    dipole: MagneticDipole
     mframe: float
-    dipole_axis: np_t.NDArray
+    pose_frame: str
 
     def get_gravitational_torque(self, msg: geometry.TransformStamped, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
         """
@@ -179,172 +200,72 @@ class RigidBodyDipoleInterface:
         return np.hstack((self.get_gravitational_force(g), self.get_gravitational_torque(msg, g)))
 
 @dataclass
-class TrackingMetadata:
+class MultiDipoleRigidBody:
     """
-    Metadata for tracking a rigid body through an external tracking system.
+    Represents a rigid body with multiple attached magnetic dipoles.
 
-    Parameters
+    Attributes
     ----------
-    pose_frame (str) : Frame name in which the pose of the rigid body is published
+    mass_properties : MassProperties
+        The mass properties of the rigid body, including mass and inertia.
+    mframe : float
+        The reference frame mass multiplier for scaling calculations.
+    pose_frame : str
+        The name of the reference frame in which the rigid body's pose is defined.
+    dipole_list : List[MagneticDipole]
+        A list of magnetic dipoles attached to the rigid body.
     """
+    mass_properties: MassProperties
     pose_frame: str
+    dipole_list: List[MagneticDipole]
 
-##############################################
-# DEFINED RIGID BODY DIPOLES #
-##############################################
+    def get_gravitational_force(self, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
+        """
+        Compute the gravitational force acting on the rigid body.
 
-@dataclass
-class NarrowRingMagnetS1(RigidBodyDipoleInterface):
-    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
-    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
-    dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
-    mframe: float = 2.9e-3
-    # Computed using SolidWorks
-    mass_properties: MassProperties = MassProperties(geometric_properties.volume*material_properties.density + mframe,
-                                                        np.array([[492.29, -74.08, 9.38],
-                                                                  [-74.28, 807.43, 5.19],
-                                                                  [9.38, 5.19, 1251.91]])*1e-9,
-                                                        np.array([[486.01, -78.53, 3.83],
-                                                                  [-78.53, 795.57, 2.12],
-                                                                  [3.83, 2.12, 1241.41]])*1e-9,
-                                                        np.array([1.27, 0.70, 0.87])*1e-3,
-                                                        PrincipleAxesAndMomentsOfInertia(
-                                                            Ix=np.array([0.97, -0.23, 0.00]),
-                                                            Iy=np.array([0.23, 0.97, 0.01]),
-                                                            Iz=np.array([-0.01, -0.01, 1.00]),
-                                                            Px=467.21e-9,
-                                                            Py=814.33e-9,
-                                                            Pz=1241.44e-9
-                                                        ))
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_S1/Origin")
-    dipole_axis: np_t.NDArray = np.array([0, 0, 1]) # Default dipole axis is along the z-axis
+        Parameters
+        ----------
+        g : np_t.NDArray, optional
+            Gravitational acceleration vector in the world frame. Defaults to Earth's gravity 
+            along the negative z-axis.
 
-@dataclass
-class NarrowRingMagnetSymmetricSquareS1(RigidBodyDipoleInterface):
-    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
-    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
-    dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
-    mframe: float = 22.54e-3 # Mass of the square frame in kg
-    # Computed using SolidWorks
-    mass_properties: MassProperties = MassProperties(24.67e-3,
-                                                     np.diag([6918.86, 7712.23, 14125.84])*1e-9,
-                                                     np.diag([6794.76, 7588.13, 14125.84])*1e-9,
-                                                     np.array([0.00, 0.00, 2.24])*1e-3,
-                                                     PrincipleAxesAndMomentsOfInertia(
-                                                            Ix=np.array([-1.00, 0.00, 0.00]),
-                                                            Iy=np.array([0.00, 1.00, 0.00]),
-                                                            Iz=np.array([0.00, 0.00, -1.00]),
-                                                            Px=6794.76e-9,
-                                                            Py=7588.13e-9,
-                                                            Pz=14125.84e-9
-                                                     ))
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_square5_frame_S1/Origin")
-    dipole_axis: np_t.NDArray = np.array([0, 0, 1])
+        Returns
+        -------
+        np_t.NDArray
+            Gravitational force acting on the rigid body in the world frame.
+        """
+        return self.mass_properties.m*g
+    
+    def get_magnetic_interaction_matrices(self, tf_dict: Dict[str, geometry.TransformStamped],
+                                          full_mat: bool = False, torque_first: bool = False) -> Dict[str, np_t.NDArray]:
+        """
+        Compute the magnetic interaction matrices for each attached dipole.
 
-@dataclass
-class NarrowRingMagnetSymmetricXFrameS1(RigidBodyDipoleInterface):
-    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
-    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
-    dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
-    mframe: float = 10.35e-3 # Mass of the X frame in kg
-    # Computed using SolidWorks
-    mass_properties: MassProperties = MassProperties(1.24800000e-02,
-                                                     np.array([[4.06596000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                               [0.00000000e+00, 2.15403000e-06, 0.00000000e+00],
-                                                               [0.00000000e+00, 0.00000000e+00, 5.86103000e-06]]),
-                                                     np.array([[3.98796000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                               [0.00000000e+00, 2.07603000e-06, 0.00000000e+00],
-                                                               [0.00000000e+00, 0.00000000e+00, 5.86103000e-06]]),
-                                                     np.array([0.00000000, 0.00000000, 0.00250000]),
-                                                     PrincipleAxesAndMomentsOfInertia(
-                                                            Ix=np.array([0.00000000, -1.00000000, 0.00000000]),
-                                                            Iy=np.array([-1.00000000, 0.00000000, 0.00000000]),
-                                                            Iz=np.array([0.00000000, 0.00000000, -1.00000000]),
-                                                            Px=2.07603000e-06,
-                                                            Py=3.98796000e-06,
-                                                            Pz=5.86103000e-06
-                                                    ))
+        Parameters
+        ----------
+        tf_dict : Dict[str, geometry.TransformStamped]
+            Dictionary mapping frame names to their corresponding transformation data from vicon or other state estimation stack.
+        full_mat : bool, optional
+            If True, returns the full interaction matrix including force and torque interactions.
+            Defaults to False.
+        torque_first : bool, optional
+            If True, orders torque components before force components in the matrix.
+            Defaults to False.
 
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_X_frame_S1/Origin")
-    dipole_axis: np_t.NDArray = np.array([0, 0, 1])
+        Returns
+        -------
+        Dict[str, np_t.NDArray]
+            Dictionary mapping each dipole's frame name to its corresponding magnetic interaction matrix.
+        """
+        ret_dict = {}
 
-@dataclass
-class NarrowRingMagnetDiscFrameS1(RigidBodyDipoleInterface):
-    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
-    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
-    dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
-    mframe: float = 15.4e-3 # Mass of the X frame in kg
-    # Computed using SolidWorks
-    mass_properties: MassProperties = MassProperties(1.74500000e-02,
-                                                     np.array([[3.26556000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                               [0.00000000e+00, 3.05400000e-06, 0.00000000e+00],
-                                                               [0.00000000e+00, 0.00000000e+00, 5.90095000e-06]]),
-                                                     np.array([[3.16905000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                               [0.00000000e+00, 2.95748000e-06, 0.00000000e+00],
-                                                               [0.00000000e+00, 0.00000000e+00, 5.90095000e-06]]),
-                                                     np.array([0.00000000, 0.00000000, 0.00235000]),
-                                                     PrincipleAxesAndMomentsOfInertia(
-                                                                Ix=np.array([0.00000000, 1.00000000, 0.00000000]),
-                                                                Iy=np.array([-1.00000000, 0.00000000, 0.00000000]),
-                                                                Iz=np.array([0.00000000, 0.00000000, 1.00000000]),
-                                                                Px=2.95748000e-06,
-                                                                Py=3.16905000e-06,
-                                                                Pz=5.90095000e-06
-                                                    ))
+        for dipole in self.dipole_list:
+            ret_dict[dipole.frame_name] = geometry.get_magnetic_interaction_matrix(
+                tf_dict[dipole.frame_name],
+                dipole.strength,
+                dipole_axis=dipole.axis,
+                full_mat=full_mat,
+                torque_first=torque_first
+            )
 
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_X_frame_S1/Origin")
-    dipole_axis: np_t.NDArray = np.array([0, 0, 1])
-
-@dataclass
-class NarrowRingMagnetDisc7mmFrameS1(RigidBodyDipoleInterface):
-    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
-    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
-    dipole_strength: float = material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
-    mframe: float = 15.4e-3 # Mass of the X frame in kg
-    # Computed using SolidWorks
-    mass_properties: MassProperties = MassProperties(2.04e-02,
-                                                    np.array([[4.40783000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                              [0.00000000e+00, 4.19626000e-06, 0.00000000e+00],
-                                                              [0.00000000e+00, 0.00000000e+00, 8.02199000e-06]]),
-                                                    np.array([[4.29998000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                              [0.00000000e+00, 4.08842000e-06, 0.00000000e+00],
-                                                              [0.00000000e+00, 0.00000000e+00, 8.02199000e-06]]),
-                                                    np.array([0.00000000, 0.00000000, -0.00217000]),
-                                                    PrincipleAxesAndMomentsOfInertia(
-                                                            Ix=np.array([0.00000000, 1.00000000, 0.00000000]),
-                                                            Iy=np.array([-1.00000000, 0.00000000, 0.00000000]),
-                                                            Iz=np.array([0.00000000, 0.00000000, 1.00000000]),
-                                                            Px=4.08842000e-06,
-                                                            Py=4.29998000e-06,
-                                                            Pz=8.02199000e-06
-                                                    ))
-
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_7mm_disc_S1/Origin")
-    dipole_axis: np_t.NDArray = np.array([0, 0, 1])
-
-@dataclass
-class NarrowRingMagnetSymmDiscD50T5FrameS3(RigidBodyDipoleInterface):
-    material_properties: MaterialProperties = MaterialProperties(7.5e3, 1.36)
-    geometric_properties: CylindricalRingShape = CylindricalRingShape(4.96e-3, (5.11e-3)/2, (9.95e-3)/2)
-    dipole_strength: float = 3*material_properties.Br*geometric_properties.volume/Constants.mu_0 # kg*m^2/s
-    mframe: float = 16.1e-3 # Mass of the X frame in kg
-    # Computed using SolidWorks
-    mass_properties: MassProperties = MassProperties(1.8300000e-02,
-                                                     np.array([[2.42540000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                               [0.00000000e+00, 2.81576000e-06, 0.00000000e+00],
-                                                               [0.00000000e+00, 0.00000000e+00, 4.84415000e-06]]),
-                                                     np.array([[2.42540000e-06, 0.00000000e+00, 0.00000000e+00],
-                                                               [0.00000000e+00, 2.81575000e-06, 0.00000000e+00],
-                                                               [0.00000000e+00, 0.00000000e+00, 4.84415000e-06]]),
-                                                     np.array([0.00000000, 0.00000000, -0.00002000]),
-                                                     PrincipleAxesAndMomentsOfInertia(
-                                                             Ix=np.array([1.00000000, 0.00000000, 0.00000000]),
-                                                             Iy=np.array([0.00000000, 1.00000000, 0.00000000]),
-                                                             Iz=np.array([0.00000000, 0.00000000, 1.00000000]),
-                                                             Px=2.42540000e-06,
-                                                             Py=2.81575000e-06,
-                                                             Pz=4.84415000e-06
-                                                     ))
-
-    tracking_data: TrackingMetadata = TrackingMetadata("vicon/small_ring_symm_disc_D50T5/Origin")
-    dipole_axis: np_t.NDArray = np.array([0, 0, 1])
+        return ret_dict
