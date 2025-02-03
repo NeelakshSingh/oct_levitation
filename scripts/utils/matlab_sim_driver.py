@@ -7,6 +7,7 @@ import oct_levitation.geometry as geometry
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3
 from enum import Enum
+from functools import partial
 
 from tnb_mns_driver.msg import DesCurrentsReg
 
@@ -21,7 +22,18 @@ we advertise this wrench over a topic to which simulators can subscribe.
 Always use bodies initialized with the Multidipole rigid body interface in order to use this script.
 """
 
-RigidBody = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
+RigidBody = rigid_bodies.TwoDipoleDisc100x15_6HKCM10x3
+
+class OperationModes(Enum):
+    DESIRED_CURRENTS = 0
+    DISABLE_WRENCH_PUB = 1
+
+def get_operation_mode(value: int) -> OperationModes:
+    """Returns the corresponding OperationModes enum for a given integer value."""
+    try:
+        return OperationModes(value)
+    except ValueError:
+        raise ValueError(f"Invalid operation mode: {value}. Must be one of {list(OperationModes)}")
     
 class ControlSimDriver:
     
@@ -32,7 +44,7 @@ class ControlSimDriver:
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param("~mpem_cal_file", "mc3ao8s_md200_handp.yaml")
-        self.operation_mode = rospy.get_param("~operation_mode_int", 0)
+        self.operation_mode = get_operation_mode(rospy.get_param("~operation_mode_int", 0))
 
         # Initializing the forward model.
         self.mpem_model = mag_manip.ForwardModelMPEM()
@@ -57,12 +69,38 @@ class ControlSimDriver:
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster()
 
         self.wrench_pub_list = [rospy.Publisher(topic_name, WrenchStamped, queue_size=100) for topic_name in topic_names]
 
+        # Due to issues with handling string message fields in simulink the pose topics are currently published
+        # without the child frame. We will republish them with the child frame added.
+        vicon_pose_pub = rospy.Publisher(RigidBody.pose_frame, TransformStamped, queue_size=1)
+        self.matlab_vicon_pose_sub = rospy.Subscriber(RigidBody.pose_frame + "_no_frame",
+                                          TransformStamped,
+                                          partial(self.republish_transform_with_child_frame, 
+                                                  child_frame=RigidBody.pose_frame,
+                                                  republisher=vicon_pose_pub))
+        
+        self.__vicon_topics_republished = False
+        
+        self.matlab_dipole_pose_subs = []
+
+        for dipole in RigidBody.dipole_list:
+            self.matlab_dipole_pose_subs.append(
+                rospy.Subscriber(
+                    dipole.frame_name + "_no_frame",
+                    TransformStamped,
+                    partial(self.republish_transform_with_child_frame,
+                            child_frame=dipole.frame_name,
+                            republisher=rospy.Publisher(dipole.frame_name, TransformStamped, queue_size=1))
+                )
+            )
+
         # Starting the matlab wrench publishing routine
-        rospy.sleep(0.1)
-        self.main_timer = rospy.Timer(rospy.Duration(1/self.operating_frequency), self.main_communication_loop)
+        if self.operation_mode != OperationModes.DISABLE_WRENCH_PUB:
+            rospy.sleep(0.1)
+            self.main_timer = rospy.Timer(rospy.Duration(1/self.operating_frequency), self.main_communication_loop)
     
     def currents_callback(self, msg: DesCurrentsReg) -> None:
         if self.__current_timeout_triggered:
@@ -74,10 +112,20 @@ class ControlSimDriver:
             rospy.logwarn(f"[Sim Driver] Invalid currents received. Expected shape (8,) received: {self.currents.shape}")
         self.__last_current_recv_time = rospy.Time.now().to_sec()
 
+    def republish_transform_with_child_frame(self, msg:TransformStamped, child_frame: str, republisher: rospy.Publisher):
+        self.__vicon_topics_republished = True
+        msg.child_frame_id = child_frame
+        msg.header.frame_id = "vicon/world"
+        msg.header.stamp = rospy.Time.now() # Restamping the data otherwise for some reason tf throws redundant data warning
+        self.tf_broadcaster.sendTransform(msg)
+        republisher.publish(msg)
     
     def main_communication_loop(self, event) -> None:
         # In every instant we will compute the wrench at the actual dipole frames based on 
         # the world frame and then publish it to the topics.
+        if not self.__vicon_topics_republished:
+            rospy.loginfo_once("Waiting for Vicon topics to be republished. Delaying main loop by 1 sec.")
+            return
         time = rospy.Time.now().to_sec()
         if time - self.__last_current_recv_time > self.currents_recv_timeout:
             if not self.__current_timeout_triggered:
@@ -118,6 +166,5 @@ class ControlSimDriver:
             self.wrench_pub_list[idx].publish(wrench_msg)
 
 if __name__ == "__main__":
-    # Rest of the logic goes here
     driver = ControlSimDriver()
     rospy.spin()
