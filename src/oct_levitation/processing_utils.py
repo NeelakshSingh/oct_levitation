@@ -7,8 +7,8 @@ import scipy.fft as scifft
 from typing import Dict, Tuple
 
 ###############################################
-# Legacy utility functions from control_utils adapted
-# for use with bagpyext.
+# Legacy utility functions from Jasan's
+# control_utils adapted for use with bagpyext.
 ###############################################
 
 def read_scalar_stamped(topicname, dwd):
