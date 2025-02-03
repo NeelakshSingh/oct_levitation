@@ -71,7 +71,7 @@ class ControlSimDriver:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
 
-        self.wrench_pub_list = [rospy.Publisher(topic_name, WrenchStamped, queue_size=100) for topic_name in topic_names]
+        self.wrench_pub_list = RigidBody.dipole_wrench_topic_list
 
         # Due to issues with handling string message fields in simulink the pose topics are currently published
         # without the child frame. We will republish them with the child frame added.
@@ -80,7 +80,8 @@ class ControlSimDriver:
                                           TransformStamped,
                                           partial(self.republish_transform_with_child_frame, 
                                                   child_frame=RigidBody.pose_frame,
-                                                  republisher=vicon_pose_pub))
+                                                  republisher=vicon_pose_pub),
+                                          queue_size= 1)
         
         self.__vicon_topics_republished = False
         
@@ -93,7 +94,8 @@ class ControlSimDriver:
                     TransformStamped,
                     partial(self.republish_transform_with_child_frame,
                             child_frame=dipole.frame_name,
-                            republisher=rospy.Publisher(dipole.frame_name, TransformStamped, queue_size=1))
+                            republisher=rospy.Publisher(dipole.frame_name, TransformStamped, queue_size=1)),
+                    queue_size=1
                 )
             )
 

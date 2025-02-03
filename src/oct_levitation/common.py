@@ -2,8 +2,6 @@ import numpy as np
 import os
 import wand_calibration as wand
 
-import tf.transformations as tr
-
 from mag_manip import mag_manip
 from dataclasses import dataclass
 

@@ -4,6 +4,7 @@ import oct_levitation.geometry as geometry
 import tf.transformations as tr
 import tf2_ros
 import rospy
+import os
 
 from dataclasses import dataclass
 from geometry_msgs.msg import Transform, TransformStamped
@@ -116,6 +117,7 @@ class PermanentMagnet:
     
 @dataclass
 class MagneticDipole:
+    name: str
     strength: float
     axis: np_t.NDArray
     transform: Transform
@@ -216,9 +218,21 @@ class MultiDipoleRigidBody:
     dipole_list : List[MagneticDipole]
         A list of magnetic dipoles attached to the rigid body.
     """
+    name: str
     mass_properties: MassProperties
     pose_frame: str
     dipole_list: List[MagneticDipole]
+
+    # Default arguments
+    com_wrench_topic_prefix: str = "com_wrench" # object_name/wrench
+    dipole_wrench_topic_prefix: str = "wrench" # dipole_name/wrench
+
+    def __post_init__(self):
+        # initialize topic names
+        self.com_wrench_topic = os.path.join(self.name, self.com_wrench_topic_prefix)
+
+        self.dipole_wrench_topic_list = [os.path.join(self.name, dipole.name, self.dipole_wrench_topic_prefix)
+                                         for dipole in self.dipole_list]
 
     def get_gravitational_force(self, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
         """
@@ -237,42 +251,21 @@ class MultiDipoleRigidBody:
         """
         return self.mass_properties.m*g
     
-    def get_magnetic_interaction_matrices(self, tf_dict: Dict[str, geometry.TransformStamped],
-                                          full_mat: bool = False, torque_first: bool = False) -> Dict[str, np_t.NDArray]:
-        """
-        Compute the magnetic interaction matrices for each attached dipole.
-
-        Parameters
-        ----------
-        tf_dict : Dict[str, geometry.TransformStamped]
-            Dictionary mapping frame names to their corresponding transformation data from vicon or other state estimation stack.
-        full_mat : bool, optional
-            If True, returns the full interaction matrix including force and torque interactions.
-            Defaults to False.
-        torque_first : bool, optional
-            If True, orders torque components before force components in the matrix.
-            Defaults to False.
-
-        Returns
-        -------
-        Dict[str, np_t.NDArray]
-            Dictionary mapping each dipole's frame name to its corresponding magnetic interaction matrix.
-        """
-        ret_dict = {}
-
+    def get_dipole_transforms(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world"):
+        dipole_tf_list = []
         for dipole in self.dipole_list:
-            ret_dict[dipole.frame_name] = geometry.get_magnetic_interaction_matrix(
-                tf_dict[dipole.frame_name],
-                dipole.strength,
-                dipole_axis=dipole.axis,
-                full_mat=full_mat,
-                torque_first=torque_first
-            )
+            dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
+                                                                     dipole.frame_name,
+                                                                     rospy.Time())
+            dipole_tf_list.append(dipole_tf)
 
-        return ret_dict
+        return dipole_tf_list
     
-    def get_magnetic_interaction_matrices_from_world_frame(self, world_frame: str, 
-                                                           tf_buffer: tf2_ros.Buffer,
+    def get_vicon_frame_transform(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world"):
+        return tf_buffer.lookup_transform(world_frame, self.pose_frame, rospy.Time())
+    
+    def get_magnetic_interaction_matrices_from_world_frame(self,tf_buffer: tf2_ros.Buffer,
+                                                           world_frame: str = "vicon/world", 
                                                            full_mat: bool = False, 
                                                            torque_first: bool = False) -> List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]:
         """

@@ -154,12 +154,19 @@ catkin_install_python(PROGRAMS
   scripts/lqri_torque_control.py
   scripts/lqri_z_control.py
   scripts/lqri_xyz_control.py
+
+  # Z Control Nodes
+  scripts/z_controllers/z_control_com_wrench.py
+
+  # Utilities
   scripts/utils/dynamics_simulator.py
   scripts/utils/joy_setpoint.py
   scripts/utils/fft_noise_analysis.py
   scripts/utils/euler_pose_converter.py
   scripts/utils/matlab_sim_driver.py
   scripts/utils/clock_publisher.py
+
+
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
