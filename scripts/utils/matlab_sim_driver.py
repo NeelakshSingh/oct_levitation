@@ -22,42 +22,6 @@ Always use bodies initialized with the Multidipole rigid body interface in order
 """
 
 RigidBody = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
-
-class OperationModes(Enum):
-    """
-    Enumeration of operation modes for interacting with any rigid body dynamics simulator.
-
-    Attributes:
-    -----------
-    DESIRED_CURRENTS (int):  
-        Takes desired currents as inputs and uses the MPEM model to convert them into forces  
-        at dipole centers before publishing them. This mode is the final step for performance  
-        verification after developing current allocation strategies and ensuring dipole wrench  
-        control performance.  
-
-        Before using this mode, validate wrench allocation performance at dipoles using  
-        the COM_WRENCH and DIPOLE_WRENCH modes.  
-
-    COM_WRENCH (int):  
-        Takes the desired wrench at the center of mass (COM) as input. This mode is useful for  
-        testing pose controllers in their early stages without force allocation.  
-
-    DIPOLE_WRENCH (int):  
-        Takes desired wrenches at dipole centers as inputs. This mode is useful for testing pose  
-        controllers with force allocation among dipole centers, once good direct COM control  
-        performance has been established.  
-    """
-    DESIRED_CURRENTS = 0
-    COM_WRENCH = 1
-    DIPOLE_WRENCH = 2
-    DIRECT_WRENCH_PASS_THROUGH = 3
-
-def get_operation_mode(value: int) -> OperationModes:
-    """Returns the corresponding OperationModes enum for a given integer value."""
-    try:
-        return OperationModes(value)
-    except ValueError:
-        raise ValueError(f"Invalid operation mode: {value}. Must be one of {list(OperationModes)}")
     
 class ControlSimDriver:
     
