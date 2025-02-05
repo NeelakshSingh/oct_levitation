@@ -31,23 +31,25 @@ class DirectCOMWrenchZController(ControlSessionNodeBase):
         C = np.array([[1, 0]]) # We only observer position and not velocity
 
         ## Setting up the DLQR parameters for exact system emulation.
-        self.A_d, self.B_d, self.C_d, D_d, dt = signal.cont2discrete((A, B, C, 0), dt=self.control_rate,
+        self.A_d, self.B_d, self.C_d, D_d, dt = signal.cont2discrete((A, B, C, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([4.0, 4.0])
+        Q = np.diag([1.0, 1.0])
         R = 1
         self.K, S, E = ct.dlqr(self.A_d, self.B_d, Q, R)
         rospy.loginfo(f"Control gain for forces: {self.K}")
 
         ## Setting up the DLQE parameters for a simple state observer
-        G_process_noise = np.zeros((2, 1)) # Assuming no noise
-        QN = 0 # Assuming no process noise covariance TUNE
-        RN = 0 # Assuming no sensor noise covariance TUNE
+        G_process_noise = np.zeros((2, 1)) + 1e-6 # Assuming no noise
+        QN = 1e-6 # Assuming no process noise covariance TUNE
+        RN = 1e-6 # Assuming no sensor noise covariance TUNE
 
         self.L, P, E_obs = ct.dlqe(self.A_d, G_process_noise, self.C_d, QN, RN)
         rospy.loginfo(f"Observer gain for position, velocity: {self.L}")
 
         # Let's get initial state estimates for all the COM linear coordinates
-        initial_tf = self.rigid_body_dipole.get_vicon_frame_transform(self.tf_buffer)
+        # initial_tf = self.tf_buffer.lookup_transform(self.world_frame, self.rigid_body_dipole.pose_frame,
+        #                                          rospy.Time())
+        initial_tf = TransformStamped()
         self.x_state_estimate = np.array([[
             initial_tf.transform.translation.x,
             0.0
@@ -55,31 +57,47 @@ class DirectCOMWrenchZController(ControlSessionNodeBase):
         self.z_state_estimate = np.array([[
             initial_tf.transform.translation.z,
             0.0
-        ]])
-        self.y_state_estimte = np.array([[
+        ]]).T
+        self.y_state_estimate = np.array([[
             initial_tf.transform.translation.y,
             0.0
-        ]])
+        ]]).T
+
+        self.F_com_des = np.zeros(3)
 
         # Ideally the same controllers work for all X, Y, Z
         self.Ki_z = 0 # works well for a mass mismatch of around 10g TUNED
         self.last_p_com = np.zeros(3)
-        self.z_err_integral = 0.0
+        self.z_err_integral = np.zeros((2,1))
 
         self.com_home_position = np.array([0.0, 0.0, 0.02])
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
 
-    def observer_forward_pass(self, y: float, x_e: np.array, u: float) -> np.array:
-        return self.A_d @ x_e + self.B_d @ u + self.L @ (y - self.C_d @ x_e)
+    def observer_forward_pass(self, y: np.array, x_e: np.array, u: float) -> np.array:
+        # integrating the estimated state by a single step
+        # rospy.loginfo(f"y: {y}")
+        # rospy.loginfo(f"x_e: {x_e}")
+        # rospy.loginfo(f"u: {u}")
+        # rospy.loginfo(f"Ad: {self.A_d}")
+        # rospy.loginfo(f"Bd: {self.B_d}")
+        # rospy.loginfo(f"Cd: {self.C_d}")
+        # rospy.loginfo(f"L: {self.L}")
+
+        x_e_next = self.A_d @ x_e + self.B_d @ u + self.L @ (y - self.C_d @ x_e)
+
+        # rospy.loginfo(f"x_e_next: {x_e_next}")
+        return x_e_next
     
     def control_logic(self):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.control_input_message = VectorStamped() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
+        self.estimated_state_msg = VectorStamped() # Empty state estimate message
 
         self.desired_currents_msg.header.stamp = rospy.Time.now()
         self.com_wrench_msg.header.stamp = rospy.Time.now()
         self.control_input_message.header.stamp = rospy.Time.now()
+        self.estimated_state_msg.header.stamp = rospy.Time.now()
 
         com_tf: TransformStamped = self.tf_buffer.lookup_transform(self.world_frame, self.rigid_body_dipole.pose_frame,
                                                  rospy.Time())
@@ -88,18 +106,44 @@ class DirectCOMWrenchZController(ControlSessionNodeBase):
                                 com_tf.transform.translation.y,
                                 com_tf.transform.translation.z])
         
+        ### NORMAL FINITE DIFFERENCES
         com_position_err = self.com_home_position - com_position
         self.z_err_integral += com_position_err[2]/self.control_rate
+
         self.p_com_dot = (com_position - self.last_p_com)*self.control_rate
         self.last_p_com = com_position
 
         self.Fz = self.K @ np.array([[com_position_err[2], self.p_com_dot[2]]]).T + \
-                    self.Ki_z*self.z_err_integral + self.mass*common.Constants.g
+                    self.Ki_z*self.z_err_integral
         
         self.Fx = self.K @ np.array([[com_position_err[0], self.p_com_dot[0]]]).T
         self.Fy = self.K @ np.array([[com_position_err[1], self.p_com_dot[1]]]).T
+        ### NORMAL FINITE DIFFERENCES
 
-        self.F_com_des = np.array([self.Fx, self.Fy, self.Fz])
+        ### WITH STATE OBSERVER
+        # self.x_state_estimate = self.observer_forward_pass(np.array([[com_position[0]]]), self.x_state_estimate, np.array([[self.F_com_des[0]]]))
+        # self.y_state_estimate = self.observer_forward_pass(np.array([[com_position[1]]]), self.y_state_estimate, np.array([[self.F_com_des[1]]]))
+        # self.z_state_estimate = self.observer_forward_pass(np.array([[com_position[2]]]), self.z_state_estimate, np.array([[self.F_com_des[2]]]))
+
+        # self.x_state_estimate = self.observer_forward_pass(np.array([[com_position[0]]]), self.x_state_estimate, np.array([[0]]))
+        # self.y_state_estimate = self.observer_forward_pass(np.array([[com_position[1]]]), self.y_state_estimate, np.array([[0]]))
+        # self.z_state_estimate = self.observer_forward_pass(np.array([[com_position[2]]]), self.z_state_estimate, np.array([[0]]))
+
+        # self.estimated_state_msg.vector = [self.x_state_estimate[0],
+        #                                    self.y_state_estimate[0],
+        #                                    self.z_state_estimate[0],
+        #                                    self.x_state_estimate[1],
+        #                                    self.y_state_estimate[1],
+        #                                    self.z_state_estimate[1]
+        #                                    ]
+
+        # self.Fx = -self.K @ (self.x_state_estimate - np.array([[self.com_home_position[0], 0.0]]).T)
+        # self.Fy = -self.K @ (self.y_state_estimate - np.array([[self.com_home_position[1], 0.0]]).T)
+        # self.Fz = -self.K @ (self.z_state_estimate - np.array([[self.com_home_position[2], 0.0]]).T) + \
+        #           -self.Ki_z * self.z_err_integral 
+        ### STATE OBSERVER ENDS
+
+        self.F_com_des = np.array([self.Fx[0,0], self.Fy[0,0], self.Fz[0,0] + self.mass*common.Constants.g])
 
         # Allocating them among the dipoles. Note that for pure translational
         # allocation no transform is required and we can just split the forces
@@ -134,6 +178,8 @@ class DirectCOMWrenchZController(ControlSessionNodeBase):
         # This can ideally be posed as an optimal current allocation problem through a simple
         # QP with quadratic cost and linear constraints.
 
+        ## Publishing all custom defined messages
+        self.estimated_state_pub.publish(self.estimated_state_msg)
 
         
 

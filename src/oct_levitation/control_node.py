@@ -35,13 +35,13 @@ class ControlSessionNodeBase:
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
 
         self.control_input_publisher: rospy.Publisher = None # Need to set it in post init
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         self.post_init()
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
 
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED)
 
         if self.publish_desired_com_wrenches:
