@@ -7,6 +7,7 @@ import rospy
 import os
 
 from dataclasses import dataclass
+from mag_manip import mag_manip
 from geometry_msgs.msg import Transform, TransformStamped
 from oct_levitation.common import Constants
 from typing import List, Dict, Union
@@ -251,7 +252,7 @@ class MultiDipoleRigidBody:
         """
         return self.mass_properties.m*g
     
-    def get_dipole_transforms(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world"):
+    def get_dipole_transforms(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world") -> List[TransformStamped]:
         dipole_tf_list = []
         for dipole in self.dipole_list:
             dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
@@ -261,7 +262,7 @@ class MultiDipoleRigidBody:
 
         return dipole_tf_list
     
-    def get_vicon_frame_transform(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world"):
+    def get_vicon_frame_transform(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world") -> TransformStamped:
         return tf_buffer.lookup_transform(world_frame, self.pose_frame, rospy.Time())
     
     def get_magnetic_interaction_matrices_from_world_frame(self,tf_buffer: tf2_ros.Buffer,
@@ -295,3 +296,43 @@ class MultiDipoleRigidBody:
             mag_list.append(dipole_magnetization)
         
         return mag_list
+    
+    def get_current_wrench_matrices_from_world_frame_mpem(self,tf_buffer: tf2_ros.Buffer,
+                                                          mpem_model: mag_manip.ForwardModelMPEM,
+                                                           world_frame: str = "vicon/world", 
+                                                           full_mat: bool = False, 
+                                                           torque_first: bool = False) -> List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]:
+        """
+        Compute the magnetic interaction matrices for each attached dipole.
+
+        Parameters
+        ----------
+        world_frame : str
+            Name of the world frame to be passed to lookup transform
+
+        Returns
+        -------
+        List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]
+            List of each magnetic interaction matrix function return values, order corresponding to dipole list
+        """
+        MA_list = []
+        for dipole in self.dipole_list:
+            dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
+                                                                     dipole.frame_name,
+                                                                     rospy.Time())
+
+            dipole_magnetization = geometry.get_magnetic_interaction_matrix(dipole_tf=dipole_tf,
+                                                                            dipole_strength=dipole.strength,
+                                                                            dipole_axis=dipole.axis,
+                                                                            full_mat=full_mat,
+                                                                            torque_first=torque_first)
+            
+            A = mpem_model.getActuationMatrix(np.array([
+                dipole_tf.transform.translation.x,
+                dipole_tf.transform.translation.y,
+                dipole_tf.transform.translation.z
+            ]))
+
+            MA_list.append( dipole_magnetization @ A )
+        
+        return MA_list

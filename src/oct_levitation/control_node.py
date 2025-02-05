@@ -8,6 +8,8 @@ from tnb_mns_driver.msg import DesCurrentsReg
 from mag_manip import mag_manip
 from typing import List
 
+from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
+
 class ControlSessionNodeBase:
     """
     This class contains all the basic functionalities that a ROS Node implementing a levitation controller
@@ -27,6 +29,7 @@ class ControlSessionNodeBase:
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = None # Set this in post init
+        self.HARDWARE_CONNECTED = False;
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
@@ -39,6 +42,7 @@ class ControlSessionNodeBase:
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED)
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher = rospy.Publisher(self.rigid_body_dipole.com_wrench_topic,
