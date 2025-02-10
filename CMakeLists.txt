@@ -158,6 +158,9 @@ catkin_install_python(PROGRAMS
   # Z Control Nodes
   scripts/z_controllers/z_control_com_wrench.py
 
+  # Yaw Control Nodes
+  scripts/yaw_controllers/yaw_control_com_wrench.py
+
   # Utilities
   scripts/utils/dynamics_simulator.py
   scripts/utils/joy_setpoint.py
@@ -165,6 +168,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/euler_pose_converter.py
   scripts/utils/matlab_sim_driver.py
   scripts/utils/clock_publisher.py
+  scripts/utils/fake_pose_publisher.py
 
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

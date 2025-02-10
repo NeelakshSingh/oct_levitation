@@ -289,6 +289,8 @@ def euler_zyx_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
     scipy_rotation = scitf.Rotation.from_quat(q)
     euler = scipy_rotation.as_euler('ZYX') # caps for intrinsic
+    # Change euler to r, p, y form
+    euler = np.array([euler[2], euler[1], euler[0]])
     return euler
 
 def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
@@ -303,6 +305,23 @@ def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
         q: Quaternion in the form [x, y, z, w]
     """
     scipy_rotation = scitf.Rotation.from_euler('XYZ', euler)
+    q = scipy_rotation.as_quat()
+    return q
+
+def quaternion_from_euler_zyx(euler: np.ndarray) -> np.ndarray:
+    """
+    Wrapper for scipy's Rotation class for converting XYZ tait-bryan intrinsic angles
+    to quaternion.
+
+    Parameters:
+        euler (np.ndarray): The euler angles in the form [roll, pitch, yaw]
+    
+    Returns:
+        q: Quaternion in the form [x, y, z, w]
+    """
+    # Change euler to y,p,r form
+    euler = np.array([euler[2], euler[1], euler[0]])
+    scipy_rotation = scitf.Rotation.from_euler('ZYX', euler)
     q = scipy_rotation.as_quat()
     return q
 

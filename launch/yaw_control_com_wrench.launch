@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="oct_levitation" name="yaw_com_control" type="yaw_control_com_wrench.py" output="screen"/>
+    <node pkg="oct_levitation" name="fake_pose_publisher" type="fake_pose_publisher.py" output="screen"/>
+</launch>

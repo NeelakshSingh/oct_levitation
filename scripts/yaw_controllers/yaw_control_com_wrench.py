@@ -14,6 +14,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
     def post_init(self):
+        self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency\
         self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
@@ -47,6 +48,10 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         B_norm = np.linalg.inv(Tx) @ B @ Tu
         C_norm = np.linalg.inv(Ty) @ C @ Tx
 
+        # A_norm = A
+        # B_norm = B
+        # C_norm = C
+
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
@@ -56,6 +61,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         # Denormalize the control gains.
         self.K = Tu @ K_norm @ np.linalg.inv(Tx)
+        # self.K = K_norm
 
         self.T_pos_x = geometry.transformation_matrix_from_quaternion(geometry.IDENTITY_QUATERNION,
                                                                  np.array([30e-3, 0, 0]))
@@ -134,6 +140,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         # Getting the desired COM wrench.
         yaw_dot = (yaw - self.last_yaw)/self.dt
         self.last_yaw = yaw
+        # rospy.loginfo(f"Yaw: {np.rad2deg(yaw)}, Yaw dot: {np.rad2deg(yaw_dot)}")
         x = np.array([[yaw, yaw_dot]]).T
         u = -self.K @ x
         self.control_input_message.vector = u.flatten()
@@ -144,4 +151,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
         des_currents = np.linalg.pinv(JMA) @ com_wrench_des
-        self.desired_currents_msg.currents = des_currents.flatten()
+        self.desired_currents_msg.des_currents_reg = des_currents.flatten()
+
+if __name__ == "__main__":
+    controller = DirectCOMWrenchYawController()
+    rospy.spin()
