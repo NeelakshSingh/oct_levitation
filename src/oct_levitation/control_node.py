@@ -3,7 +3,7 @@ import rospy
 import oct_levitation.mechanical as mechanical
 import tf2_ros
 
-from geometry_msgs.msg import WrenchStamped
+from geometry_msgs.msg import WrenchStamped, TransformStamped
 from tnb_mns_driver.msg import DesCurrentsReg
 from mag_manip import mag_manip
 from typing import List
@@ -37,10 +37,12 @@ class ControlSessionNodeBase:
         self.control_input_publisher: rospy.Publisher = None # Need to set it in post init
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.tfsub_callback_style_control_loop = True
 
         self.post_init()
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
+        self.tf_sub_topic = self.rigid_body_dipole.pose_frame
 
         init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED)
 
@@ -63,11 +65,14 @@ class ControlSessionNodeBase:
 
         # Start the timer
         timer_start_delay = rospy.get_param("~timer_start_delay", 1) # seconds
-        rospy.sleep(timer_start_delay) # This delay is used to stop the timer until important topics like the transforms
-                                       # have been advertised.
-        self.main_timer = rospy.Timer(rospy.Duration(1/self.control_rate), self.main_timer_loop)
+        if not self.tfsub_callback_style_control_loop:
+            rospy.sleep(timer_start_delay) # This delay is used to stop the timer until important topics like the transforms
+                                        # have been advertised.
+            self.main_timer = rospy.Timer(rospy.Duration(1/self.control_rate), self.main_timer_loop)
+        else:
+            self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
+                                           queue_size=1)
 
-    
     def post_init(self):
         """
         This function is always called at the end of the init function in the base class. Make sure to
@@ -81,7 +86,7 @@ class ControlSessionNodeBase:
         """
         raise NotImplementedError("The post init function has not been implemented yet.")
     
-    def control_logic(self):
+    def timer_control_logic(self):
         """
         Implement all the important calculations and controller logic in this function.
         Set all the empty messages which are supposed to be published. The following
@@ -95,9 +100,38 @@ class ControlSessionNodeBase:
         """
         raise NotImplementedError("Control logic must be implemented")
     
-    def main_timer_loop(self, event):
+    def callback_control_logic(self, tf_msg: TransformStamped):
+        """
+        Implement all the important calculations and controller logic in this function.
+        Set all the empty messages which are supposed to be published. The following
+        mandatory attributed must be set:
+            1. self.desired_currents_msg : DesCurrentsReg
+            2. self.control_input_message
 
-        self.control_logic()
+        The following optional attributed must be set.
+            1. self.com_wrench_msg : WrenchStamped (if publish_desired_com_wrenches is True)
+            2. self.dipole_wrench_messages: List[WrenchStamped] (if publish_desired_dipole_wrenches is True)
+        """
+        raise NotImplementedError("Control logic must be implemented")\
+        
+    def tfsub_callback(self, tf_msg: TransformStamped):
+        self.callback_control_logic(tf_msg)
+        # Publishing all the mandatory messages. They are all
+        # set by the control_logic if it is implemented acc to
+        # the specifications.
+        self.control_input_publisher.publish(self.control_input_message)
+        self.currents_publisher.publish(self.desired_currents_msg)
+
+        if self.publish_desired_com_wrenches:
+            self.com_wrench_publisher.publish(self.com_wrench_msg)
+        
+        if self.publish_desired_dipole_wrenches:
+            for publisher, msg in zip(self.dipole_wrench_publishers, self.dipole_wrench_messages):
+                publisher.publish(msg)
+
+    def main_timer_loop(self, event: rospy.timer.TimerEvent):
+
+        self.timer_control_logic()
 
         # Publishing all the mandatory messages. They are all
         # set by the control_logic if it is implemented acc to

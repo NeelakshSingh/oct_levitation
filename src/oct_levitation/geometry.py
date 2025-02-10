@@ -4,6 +4,7 @@ import scipy.spatial.transform as scitf
 from geometry_msgs.msg import TransformStamped
 
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
+IDENTITY_QUATERNION = np.array([0, 0, 0, 1]) # Identity quaternion
 
 def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
     """
@@ -269,6 +270,25 @@ def euler_xyz_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
     scipy_rotation = scitf.Rotation.from_quat(q)
     euler = scipy_rotation.as_euler('XYZ') # caps for intrinsic
+    return euler
+
+def euler_zyx_from_quaternion(q: np.ndarray) -> np.ndarray:
+    """
+    Wrapper for scipy's Rotation class to convert a quaternion to euler angles.
+    If you are wondering why I made this instead of directly using scipy's methods,
+    well it is because it is super easy to mix the intrinsic and extrinsic notations
+    and get the wrong results with scipy.
+    
+    Parameters
+    ----------
+        q: Quaternion in the form [x, y, z, w]
+
+    Returns
+    -------
+        euler: 3x1 array in the form [roll, pitch, yaw] (in rad)
+    """
+    scipy_rotation = scitf.Rotation.from_quat(q)
+    euler = scipy_rotation.as_euler('ZYX') # caps for intrinsic
     return euler
 
 def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
