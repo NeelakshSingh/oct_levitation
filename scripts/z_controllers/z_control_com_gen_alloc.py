@@ -6,7 +6,9 @@ import control as ct
 import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
 import oct_levitation.common as common
+import oct_levitation.numerical as numerical
 
+from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
 from control_utils.msg import VectorStamped
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
@@ -17,7 +19,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
     def post_init(self):
         self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
-        self.control_rate = 100 # Set it to the vicon frequency\
+        self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
         self.publish_desired_com_wrenches = True
         self.control_input_publisher = rospy.Publisher("/com_wrench_z_control/control_input",
@@ -25,8 +27,12 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         self.estimated_state_pub = rospy.Publisher("/com_wrench_z_control/estimated_position_and_velocity",
                                                    VectorStamped, queue_size=1)
-        self.jma_condition_pub = rospy.Publisher("/com_wrench_z_control/jma_condition",
-                                                    VectorStamped, queue_size=1)
+        
+        self.publish_jma_condition = True
+        self.warn_jma_condition = False
+        if self.publish_jma_condition:
+            self.jma_condition_pub = rospy.Publisher("/com_wrench_z_control/jma_condition",
+                                                        VectorStamped, queue_size=1)
         
         # Overestimating mass is quite bad and leads to strong overshoots due to gravity compensation.
         # So I remove a few grams from the estimate.
@@ -75,6 +81,18 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         
         self.last_z = 0.0
         self.dt = 1/self.control_rate
+
+        ## Using tustin's method to calculate a filtered derivative in discrete time.
+        # The filter is a first order low pass filter.
+        f_filter = 20
+        Tf = 1/(2*np.pi*f_filter)
+        self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
+        self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
+        self.z_dot = 0.0
+
+        # For finite differences. Just use
+        # self.diff_alpha = 1/self.dt
+        # self.diff_beta = 0
 
     def jm_currents_to_wrench_gen_alloc(self, origin_tf: TransformStamped) -> np.ndarray:
         # Hardcoding the dipole offsets now.
@@ -134,7 +152,56 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         # The final allocation matrix is just the sum of JMA
 
-        return J_pos_x @ M_pos_x @ A_pos_x + J_neg_x @ M_neg_x @ A_neg_x
+        JMA = J_pos_x @ M_pos_x @ A_pos_x + J_neg_x @ M_neg_x @ A_neg_x
+
+        if self.publish_jma_condition:
+            jma_condition_msg = VectorStamped()
+            jma_condition_msg.header.stamp = rospy.Time.now()
+            jma_condition = np.linalg.cond(JMA)
+            jma_condition_msg.vector = [jma_condition]
+            self.jma_condition_pub.publish(jma_condition_msg)
+
+        if self.warn_jma_condition:
+            condition_check_tol = 11e3
+            if jma_condition > condition_check_tol:
+                np.set_printoptions(linewidth=np.inf)
+                ezyx = geometry.euler_zyx_from_quaternion(np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w]))
+                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, Yaw: {ezyx[2]}, Z: {origin_tf.transform.translation.z}
+                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
+                                    \n JMA: \n {JMA}""")
+                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
+                J_stack = np.hstack([J_pos_x, J_neg_x])
+                rospy.loginfo_once(f"""[Condition Debug] J Stack Rank: {np.linalg.matrix_rank(J_stack)},
+                                Should ideally be 6 for full row rank. 
+                                J Stack Condition Number: {np.linalg.cond(J_stack)}""")
+                
+                M_diag = block_diag(M_pos_x, M_neg_x)
+                rospy.loginfo_once(f"""[Condition Debug] M Diag Rank: {np.linalg.matrix_rank(M_diag)},
+                                    Should ideally be 10 for 12 rows and 2 uncontrollable directions.
+                                    Condition number will be inf because its not full rank.""")
+                
+                JM_stack = np.hstack([J_pos_x @ M_pos_x, J_neg_x @ M_neg_x])
+                rospy.loginfo_once(f"""[Condition Debug] JM Stack Rank: {np.linalg.matrix_rank(JM_stack)},
+                                    Should ideally be 6 for full row rank.
+                                    JM Stack Condition Number: {np.linalg.cond(JM_stack)}""")
+                
+                A_stack = np.vstack([A_pos_x, A_neg_x])
+                rospy.loginfo_once(f"""[Condition Debug] A Stack Rank: {np.linalg.matrix_rank(A_stack)},
+                                    Should ideally be 8 for full column rank.
+                                    A Stack Condition Number: {np.linalg.cond(A_stack)}""")
+                
+                rospy.loginfo_once(f"""[Condition Debug] JMA Rank: {np.linalg.matrix_rank(JMA)},
+                                    Should ideally be 6 for full row rank.
+                                    JMA Condition Number: {np.linalg.cond(JMA)}""")
+                
+                rospy.loginfo_once(f"""[Condition Debug] Let's look at individual dipole allocations.""")
+                JMA_pos = J_pos_x @ M_pos_x @ A_pos_x
+                JMA_neg = J_neg_x @ M_neg_x @ A_neg_x
+                rospy.loginfo_once(f"""[Condition Debug] JMA Pos Rank: {np.linalg.matrix_rank(JMA_pos)},
+                                    JMA Neg Rank: {np.linalg.matrix_rank(JMA_neg)}
+                                    Should ideally be 5 because they cannot control all 6 DOFs alone. Condition numbers will be inf.""")
+        
+        return JMA
     
     def jm_fieldgrad_to_wrench_zero_rp(self, yaw: float):
         JM = []
@@ -202,19 +269,14 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.estimated_state_msg.header.stamp = rospy.Time.now()
 
         # Hardcoding the dipole offsets now.
-        JMA = self.jm_currents_to_wrench_zero_rp(tf_msg)
-        jma_condition_msg = VectorStamped()
-        jma_condition_msg.header.stamp = rospy.Time.now()
-        jma_condition_msg.vector = [np.linalg.cond(JMA)]
-        self.jma_condition_pub.publish(jma_condition_msg)
-        # rospy.loginfo(f"Z: {tf_msg.transform.translation.z}, JMA Condition: {np.linalg.cond(JMA)}")
+        JMA = self.jm_currents_to_wrench_gen_alloc(tf_msg)
 
         # Getting the desired COM wrench.
         z_com = tf_msg.transform.translation.z
-        z_dot = (z_com - self.last_z)/self.dt
+        self.z_dot = self.diff_alpha*(z_com - self.last_z) + self.diff_beta*self.z_dot
         self.last_z = z_com
         # rospy.loginfo(f"Z: {z_com}, Z dot: {z_dot}")
-        x = np.array([[z_com, z_dot]]).T
+        x = np.array([[z_com, self.z_dot]]).T
         # u = -self.K @ x
         u = -self.K @ x + self.mass*common.Constants.g
         self.control_input_message.vector = u.flatten()
@@ -226,7 +288,9 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         com_wrench_des = np.array([0, 0, 0, 0, 0, F_z])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
-        des_currents = np.linalg.pinv(JMA) @ com_wrench_des
+        # Let's solve for the currents using ridge regression. This will help against
+        # poor conditioning of the JMA matrix.
+        des_currents = numerical.solve_tikhonov_regularization(JMA, com_wrench_des, 1e-3)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":

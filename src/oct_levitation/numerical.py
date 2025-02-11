@@ -2,6 +2,20 @@ import numpy as np
 import numpy.typing as np_t
 from typing import Union, Iterable
 
+def solve_tikhonov_regularization(A: np_t.ArrayLike, b: np_t.ArrayLike, alpha: float) -> np_t.ArrayLike:
+    """
+    This function solves the Tikhonov regularized least squares problem.
+
+    Parameters:
+        A (np_t.ArrayLike): The matrix A in the least squares problem.
+        b (np_t.ArrayLike): The vector b in the least squares problem.
+        alpha (float): The regularization parameter.
+
+    Returns:
+        np_t.ArrayLike: The solution to the least squares problem.
+    """
+    return np.linalg.solve(A.T @ A + alpha*np.eye(A.shape[1]), A.T @ b)
+
 class FirstOrderDifferentiator:
     def __init__(self, alpha: float):
         """

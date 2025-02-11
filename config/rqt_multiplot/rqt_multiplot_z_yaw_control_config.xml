@@ -109,7 +109,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_z_control/control_input</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -122,7 +122,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_z_control/control_input</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
@@ -146,7 +146,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>JMA Condition Number</title>
+                            <title>Fz</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -187,7 +187,7 @@
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>vector/0</field>
+                                    <field>vector/1</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -220,7 +220,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Fz</title>
+                            <title>Tz</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -764,11 +764,11 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_z_control/estimated_position_and_velocity</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>vector/0</field>
+                                    <field>vector/2</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -777,7 +777,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_z_control/estimated_position_and_velocity</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
@@ -801,7 +801,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>JMA Condition Number</title>
+                            <title>Yaw</title>
                         </curve_0>
                     </curves>
                     <legend>

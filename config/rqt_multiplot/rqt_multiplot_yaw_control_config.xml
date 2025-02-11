@@ -35,11 +35,11 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/vicon/two_dipole_disc_80x15/Origin</topic>
-                                    <type>geometry_msgs/TransformStamped</type>
+                                    <topic>/com_wrench_yaw_control/control_input</topic>
+                                    <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>transform/translation/z</field>
+                                    <field>vector/0</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -48,8 +48,8 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/vicon/two_dipole_disc_80x15/Origin</topic>
-                                    <type>geometry_msgs/TransformStamped</type>
+                                    <topic>/com_wrench_yaw_control/control_input</topic>
+                                    <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
                             <color>
@@ -72,7 +72,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Z Position</title>
+                            <title>Tz</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -109,7 +109,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_yaw_control/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -122,7 +122,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_yaw_control/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
@@ -183,11 +183,11 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/control_input</topic>
-                                    <type>control_utils/VectorStamped</type>
+                                    <topic>/vicon/two_dipole_disc_80x15/Origin</topic>
+                                    <type>geometry_msgs/TransformStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>vector/0</field>
+                                    <field>transform/translation/z</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -196,8 +196,8 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/control_input</topic>
-                                    <type>control_utils/VectorStamped</type>
+                                    <topic>/vicon/two_dipole_disc_80x15/Origin</topic>
+                                    <type>geometry_msgs/TransformStamped</type>
                                 </y_axis>
                             </axes>
                             <color>
@@ -220,7 +220,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Fz</title>
+                            <title>Z Position</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -259,7 +259,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/estimated_position_and_velocity</topic>
+                                    <topic>/com_wrench_yaw_control/estimated_position_and_velocity</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -272,7 +272,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/estimated_position_and_velocity</topic>
+                                    <topic>/com_wrench_yaw_control/estimated_position_and_velocity</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
@@ -296,7 +296,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Z Dot</title>
+                            <title>Yaw Dot</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -764,7 +764,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_yaw_control/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -777,7 +777,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/com_wrench_yaw_control/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
