@@ -6,6 +6,19 @@ from geometry_msgs.msg import TransformStamped
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
 IDENTITY_QUATERNION = np.array([0, 0, 0, 1]) # Identity quaternion
 
+def check_if_unit_quaternion(q: np.ndarray):
+    """
+    Check if the quaternion is a unit quaternion.
+    """
+    return np.isclose(np.linalg.norm(q), 1.0)
+
+def check_if_unit_quaternion_raise_error(q: np.ndarray):
+    """
+    Check if the quaternion is a unit quaternion.
+    """
+    if not check_if_unit_quaternion(q):
+        raise ValueError("Quaternion must be a unit quaternion.")
+
 def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -18,7 +31,7 @@ def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
                      [v[2], 0, -v[0]],
                      [-v[1], v[0], 0]])
 
-def get_homoegeneous_vector(v: np.ndarray) -> np.ndarray:
+def get_homogeneous_vector(v: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
@@ -50,10 +63,20 @@ def rotation_matrix_from_quaternion(q: np.ndarray) -> np.ndarray:
     ----------
         q: Quaternion in the form [x, y, z, w]
     """
+    check_if_unit_quaternion_raise_error(q)
     q = q/(np.linalg.norm(q) + EPSILON_TOLERANCE)
     qx = get_skew_symmetric_matrix(q[:3])
     R = (2*q[3]**2 - 1)*np.eye(3) + 2*q[3]*qx + 2*np.outer(q[:3], q[:3])
     return R
+
+def get_normal_vector_from_quaternion(q: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        q: Quaternion in the form [x, y, z, w]
+    """
+    R = rotation_matrix_from_quaternion(q)
+    return R[:, 2]
 
 def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
@@ -83,7 +106,7 @@ def transform_vector_from_quaternion(q: np.ndarray, p: np.ndarray, v: np.ndarray
     Returns:
         v_tf: 3x1 transformed vector 
     """
-    v_homo = get_homoegeneous_vector(v)
+    v_homo = get_homogeneous_vector(v)
     v_tf_homo = transformation_matrix_from_quaternion(q, p).dot(v_homo)
     return get_non_homoegeneous_vector(v_tf_homo)
 
@@ -129,6 +152,7 @@ def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     ----------
         q: Quaternion in the form [x, y, z, w]
     """
+    check_if_unit_quaternion_raise_error(q)
     q = q/(np.linalg.norm(q) + EPSILON_TOLERANCE)
     return np.block([[q[3], -q[:3].reshape(1, 3)],
                      [q[:3].reshape(3, 1), q[3]*np.eye(3) + get_skew_symmetric_matrix(q[:3])]])
@@ -139,6 +163,7 @@ def get_right_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     ----------
         q: Quaternion in the form [x, y, z, w]
     """
+    check_if_unit_quaternion_raise_error(q)
     q = q/(np.linalg.norm(q) + EPSILON_TOLERANCE)
     return np.block([[q[3], -q[:3].reshape(1, 3)],
                      [q[:3].reshape(3, 1), q[3]*np.eye(3) - get_skew_symmetric_matrix(q[:3])]])
@@ -345,17 +370,53 @@ def angle_residual(a: float, b: float):
         residual -= 2*np.pi
     return residual
 
+def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
+                                                   full_mat: float = False,
+                                                   torque_first: bool = False) -> np.ndarray:
+    """
+    This function returns the magnetic interaction matrix of a dipole.
+    This is purely defined by the orientation of the dipole and its strength.
+    Args:
+        dipole_moment (float): The dipole moment vector of the dipole.
+        full_mat (float): Whether to return the full magnetic interaction matrix. 
+                          If False, it returns the tuple (M_F, M_Tau) for the force and
+                          torque magnetization matrices respectively. Defaults to False.
+        torque_first (bool): Whether to return the torque block first or the force block first\
+                             when full_mat is set to True.
+                             If True, then [[M_Tau], [M_F]] is returned and vice versa.
+    
+    Returns:
+        np.ndarray: The magnetic interaction matrix of the dipole
+    """
+    M_F = np.array([
+                [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
+                [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
+                [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
+            ])
+    M_Tau = np.array([
+                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
+                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
+            ])
+    if full_mat:
+        if torque_first:
+            return np.vstack((M_Tau, M_F))
+        else:
+            return np.vstack((M_F, M_Tau))
+    else:
+        return M_F, M_Tau
+
 def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
                                     dipole_strength:float,
                                     full_mat: float = False,
                                     torque_first: bool = False,
-                                    dipole_axis: np.ndarray = np.array([0, 0, 1])):
+                                    dipole_axis: np.ndarray = np.array([0, 0, 1])) -> np.ndarray:
     """
     This function returns the magnetic interaction matrix of a dipole.
     This is purely defined by the orientation of the dipole and its strength.
 
     Args:
-        dipole_tf (np.ndarray): Quaternion of the form [qx, qy, qz, qw].
+        dipole_quaternion (np.ndarray): Quaternion of the form [qx, qy, qz, qw].
         dipole_strength (float): The strength of the dipole.
         full_mat (float): Whether to return the full magnetic interaction matrix. 
                           If False, it returns the tuple (M_F, M_Tau) for the force and
@@ -375,23 +436,9 @@ def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
     dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
     dipole_moment = dipole_strength*dipole_axis
 
-    M_F = np.array([
-                [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
-                [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
-                [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
-            ])
-    M_Tau = np.array([
-                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
-            ])
-    if full_mat:
-        if torque_first:
-            return np.vstack((M_Tau, M_F))
-        else:
-            return np.vstack((M_F, M_Tau))
-    else:
-        return M_F, M_Tau
+    return magnetic_interaction_matrix_from_dipole_moment(dipole_moment,
+                                                          full_mat=full_mat,
+                                                          torque_first=torque_first)
 
 def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                     dipole_strength:float,

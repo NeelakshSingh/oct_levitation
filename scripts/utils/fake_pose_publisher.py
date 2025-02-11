@@ -11,7 +11,8 @@ class FakePosePublisher:
         self.tf_topic = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3.pose_frame
         self.T = 10 # cycle period in seconds
         self.omega = 2*np.pi/self.T
-        self.amplitude = np.pi/4
+        # self.amplitude = np.pi/4
+        self.amplitude = 3e-2
         self.start_time = rospy.Time.now().to_sec()
 
         self.f_pub = 100
@@ -26,11 +27,14 @@ class FakePosePublisher:
         pose.child_frame_id = self.tf_topic
         pose.transform.translation.x = 0.0
         pose.transform.translation.y = 0.0
-        pose.transform.translation.z = 0.0
         
-        yaw = self.amplitude*np.sin(self.omega*t)
-        quaternion = geometry.quaternion_from_euler_zyx(np.array([0, 0, yaw]))
-        pose.transform.rotation = Quaternion(*quaternion)
+        pose.transform.rotation = Quaternion(0, 0, 0, 1)
+        # yaw = self.amplitude*np.sin(self.omega*t)
+        # quaternion = geometry.quaternion_from_euler_zyx(np.array([0, 0, yaw]))
+        # pose.transform.rotation = Quaternion(*quaternion)
+
+        pose.transform.translation.z = self.amplitude*np.sin(self.omega*t)
+
         self.tf_pub.publish(pose)
     
     def run(self):

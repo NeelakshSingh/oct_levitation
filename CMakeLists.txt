@@ -157,9 +157,11 @@ catkin_install_python(PROGRAMS
 
   # Z Control Nodes
   scripts/z_controllers/z_control_com_wrench.py
+  scripts/z_controllers/z_control_com_gen_alloc.py
 
   # Yaw Control Nodes
   scripts/yaw_controllers/yaw_control_com_wrench.py
+  scripts/yaw_controllers/yaw_control_com_gen_alloc.py
 
   # Utilities
   scripts/utils/dynamics_simulator.py
