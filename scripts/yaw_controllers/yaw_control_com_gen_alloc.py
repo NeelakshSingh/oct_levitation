@@ -96,7 +96,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.last_yaw = 0.0
         self.dt = 1/self.control_rate
 
-        self.calibration_file = "octomag_5point.yaml"
+        # self.calibration_file = "octomag_5point.yaml"
 
     def jm_currents_to_wrench_zero_rp(self, origin_tf: TransformStamped) -> np.ndarray:
         # Hardcoding the dipole offsets now.
@@ -132,7 +132,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
             dipole_neg_strength = -dipole_neg_strength
             dipole_pos_strength = -dipole_pos_strength
 
-        M_pos_x = geometry.magnetic_interaction_grad5_to_force(
+        M_pos_x = geometry.magnetic_interaction_matrix_from_dipole_moment(
             dipole_pos_strength*p_pos_x_normal,
             full_mat=True, torque_first=True)
         
@@ -230,8 +230,6 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         A_grad5 = np.vstack([self.A_pos_x, self.A_neg_x])
 
         return J_pinv, Mf, A_grad5
-        
-
     
     def callback_control_logic(self, tf_msg: TransformStamped):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
@@ -246,23 +244,23 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         # Hardcoding the dipole offsets now.
         com_quaternion : Quaternion = tf_msg.transform.rotation
-        # com_euler_zyx = geometry.euler_zyx_from_quaternion(
-        #     np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w])
-        # )
+        com_euler_zyx = geometry.euler_zyx_from_quaternion(
+            np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w])
+        )
 
-        # yaw = com_euler_zyx[2]
-        quat_rot = com_quaternion
-        x_axis = quaternion_to_x_axis([quat_rot.x, quat_rot.y, quat_rot.z, quat_rot.w])
-        yaw = np.arctan2(x_axis[1], x_axis[0])
+        yaw = com_euler_zyx[2]
+        # quat_rot = com_quaternion
+        # x_axis = quaternion_to_x_axis([quat_rot.x, quat_rot.y, quat_rot.z, quat_rot.w])
+        # yaw = np.arctan2(x_axis[1], x_axis[0])
 
-        # JMA = self.jm_currents_to_wrench_zero_rp(tf_msg)
+        JMA = self.jm_currents_to_wrench_zero_rp(tf_msg)
 
         # Getting the desired COM wrench.
         yaw_dot = (yaw - self.last_yaw)/self.dt
         self.last_yaw = yaw
         # rospy.loginfo(f"Yaw: {np.rad2deg(yaw)}, Yaw dot: {np.rad2deg(yaw_dot)}")
         x = np.array([[yaw, yaw_dot]]).T
-        u = self.K @ x
+        u = -self.K @ x
         self.control_input_message.vector = u.flatten()
         self.estimated_state_msg.vector = x.flatten()
 
@@ -281,8 +279,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
         # Use tikhonov regularization instead to get around poorly conditioned matrix near the origin
         # for some yaw values.
-        # des_currents = np.linalg.pinv(JMA) @ com_wrench_des
-        # des_currents = numerical.solve_tikhonov_regularization(JMA, com_wrench_des, 1e-3)
+        des_currents = np.linalg.pinv(JMA) @ com_wrench_des
+        des_currents = numerical.solve_tikhonov_regularization(JMA, com_wrench_des, 1e-3)
 
         # Jasan's allocation
         J_pinv, Mf, A_grad5_stack = self.allocation_jasan(tf_msg) # uses last_yaw
