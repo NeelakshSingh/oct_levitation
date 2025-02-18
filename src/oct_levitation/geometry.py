@@ -1,6 +1,8 @@
 import numpy as np
 import scipy.spatial.transform as scitf
 
+from scipy.linalg import block_diag
+
 from geometry_msgs.msg import TransformStamped
 
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
@@ -370,6 +372,17 @@ def angle_residual(a: float, b: float):
         residual -= 2*np.pi
     return residual
 
+def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray:
+    M_F = np.array([
+                [ dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
+                [ 0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
+                [-dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
+            ])
+    return M_F
+
+def magnetic_interaction_field_to_torque(dipole_moment: np.ndarray) -> np.ndarray:
+    return get_skew_symmetric_matrix(dipole_moment)
+
 def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
                                                    full_mat: float = False,
                                                    torque_first: bool = False) -> np.ndarray:
@@ -388,21 +401,13 @@ def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
     Returns:
         np.ndarray: The magnetic interaction matrix of the dipole
     """
-    M_F = np.array([
-                [ 0.0,               0.0,               0.0,               dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
-                [ 0.0,               0.0,               0.0,               0.0,              dipole_moment[0],  0.0,              dipole_moment[1], dipole_moment[2]],
-                [ 0.0,               0.0,               0.0,              -dipole_moment[2],  0.0,              dipole_moment[0], -dipole_moment[2], dipole_moment[1]]
-            ])
-    M_Tau = np.array([
-                [ 0.0,              -dipole_moment[2],  dipole_moment[1],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [ dipole_moment[2],  0.0,              -dipole_moment[0],   0.0,              0.0,              0.0,              0.0,              0.0 ],
-                [-dipole_moment[1],  dipole_moment[0],  0.0,                0.0,              0.0,              0.0,              0.0,              0.0 ],
-            ])
+    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
+    M_Tau = magnetic_interaction_field_to_torque(dipole_moment)
     if full_mat:
         if torque_first:
-            return np.vstack((M_Tau, M_F))
+            return block_diag(M_Tau, M_F)
         else:
-            return np.vstack((M_F, M_Tau))
+            return block_diag(M_F, M_Tau)
     else:
         return M_F, M_Tau
 

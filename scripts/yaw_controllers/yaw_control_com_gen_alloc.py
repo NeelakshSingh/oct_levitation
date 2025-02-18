@@ -13,6 +13,22 @@ from control_utils.msg import VectorStamped
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
 
+def quaternion_to_x_axis(q):
+    """
+    Returns the x-axis from a unit-quaternion (Hamilton - convention)
+
+    Args:
+        q (np.array): (4,) quaternion of form [x, y, z, w]
+    returns:
+        np.array: (3,) x-axis
+    """
+
+    x_1 = 1 - 2 * (q[1] ** 2 + q[2] ** 2)
+    x_2 = 2 * (q[0] * q[1] + q[2] * q[3])
+    x_3 = 2 * (q[0] * q[2] - q[1] * q[3])
+
+    return np.array([x_1, x_2, x_3])
+
 class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
     def post_init(self):
@@ -67,8 +83,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
         # Denormalize the control gains.
-        self.K = Tu @ K_norm @ np.linalg.inv(Tx)
-        # self.K = np.array([[0.081811855327392,0.00637044424414062]])
+        # self.K = Tu @ K_norm @ np.linalg.inv(Tx)
+        self.K = np.array([[0.081811855327392,0.00637044424414062]])
         rospy.loginfo(f"Control gain for Tz: {self.K}")
         # self.K = K_norm
 
@@ -80,7 +96,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.last_yaw = 0.0
         self.dt = 1/self.control_rate
 
-        # self.calibration_file = "octomag_5point.yaml"
+        self.calibration_file = "octomag_5point.yaml"
 
     def jm_currents_to_wrench_zero_rp(self, origin_tf: TransformStamped) -> np.ndarray:
         # Hardcoding the dipole offsets now.
@@ -116,7 +132,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
             dipole_neg_strength = -dipole_neg_strength
             dipole_pos_strength = -dipole_pos_strength
 
-        M_pos_x = geometry.magnetic_interaction_matrix_from_dipole_moment(
+        M_pos_x = geometry.magnetic_interaction_grad5_to_force(
             dipole_pos_strength*p_pos_x_normal,
             full_mat=True, torque_first=True)
         
@@ -135,10 +151,10 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         J_neg_x = mechanical_jacobian(p_neg_x, com_position)
         
         # Getting the actuation matrices.
-        # self.A_pos_x = self.mpem_model.getActuationMatrix(np.array([30e-3, 0, 0]))
-        # self.A_neg_x = self.mpem_model.getActuationMatrix(np.array([-30e-3, 0, 0]))
-        self.A_pos_x = self.mpem_model.getActuationMatrix(p_pos_x)
-        self.A_neg_x = self.mpem_model.getActuationMatrix(p_neg_x)
+        self.A_pos_x = self.mpem_model.getActuationMatrix(np.array([30e-3, 0, 0]))
+        self.A_neg_x = self.mpem_model.getActuationMatrix(np.array([-30e-3, 0, 0]))
+        # self.A_pos_x = self.mpem_model.getActuationMatrix(p_pos_x)
+        # self.A_neg_x = self.mpem_model.getActuationMatrix(p_neg_x)
 
         # The final allocation matrix is just the sum of JMA
 
@@ -193,6 +209,30 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         return JMA
     
+    def allocation_jasan(self, origin_tf: TransformStamped) -> np.ndarray:
+        """
+        This function follows the same allocation style used by Jasan in his implementation.
+        """
+        yaw = self.last_yaw
+        z = 1
+        if self.south_pole_up: z = -1
+        dipole_strength = self.rigid_body_dipole.dipole_list[0].strength
+        Mf_pos_x = geometry.magnetic_interaction_grad5_to_force(
+            dipole_strength*np.array([0, 0, z]))
+        
+        Mf_neg_x = geometry.magnetic_interaction_grad5_to_force(
+            dipole_strength*np.array([0, 0, z]))
+        
+        Mf = block_diag(Mf_pos_x, Mf_neg_x)
+        J_pinv = np.array([-np.sin(self.last_yaw), np.cos(self.last_yaw), np.sin(self.last_yaw), -np.cos(self.last_yaw)])/(2*30e-3)
+        self.A_pos_x = self.mpem_model.getActuationMatrix(np.array([30e-3, 0, 0]))[3:, :]
+        self.A_neg_x = self.mpem_model.getActuationMatrix(np.array([-30e-3, 0, 0]))[3:, :]
+        A_grad5 = np.vstack([self.A_pos_x, self.A_neg_x])
+
+        return J_pinv, Mf, A_grad5
+        
+
+    
     def callback_control_logic(self, tf_msg: TransformStamped):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.control_input_message = VectorStamped() # Empty message
@@ -206,20 +246,23 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         # Hardcoding the dipole offsets now.
         com_quaternion : Quaternion = tf_msg.transform.rotation
-        com_euler_zyx = geometry.euler_zyx_from_quaternion(
-            np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w])
-        )
+        # com_euler_zyx = geometry.euler_zyx_from_quaternion(
+        #     np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w])
+        # )
 
-        yaw = com_euler_zyx[2]
+        # yaw = com_euler_zyx[2]
+        quat_rot = com_quaternion
+        x_axis = quaternion_to_x_axis([quat_rot.x, quat_rot.y, quat_rot.z, quat_rot.w])
+        yaw = np.arctan2(x_axis[1], x_axis[0])
 
-        JMA = self.jm_currents_to_wrench_zero_rp(tf_msg)
+        # JMA = self.jm_currents_to_wrench_zero_rp(tf_msg)
 
         # Getting the desired COM wrench.
         yaw_dot = (yaw - self.last_yaw)/self.dt
         self.last_yaw = yaw
         # rospy.loginfo(f"Yaw: {np.rad2deg(yaw)}, Yaw dot: {np.rad2deg(yaw_dot)}")
         x = np.array([[yaw, yaw_dot]]).T
-        u = -self.K @ x
+        u = self.K @ x
         self.control_input_message.vector = u.flatten()
         self.estimated_state_msg.vector = x.flatten()
 
@@ -239,7 +282,15 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         # Use tikhonov regularization instead to get around poorly conditioned matrix near the origin
         # for some yaw values.
         # des_currents = np.linalg.pinv(JMA) @ com_wrench_des
-        des_currents = numerical.solve_tikhonov_regularization(JMA, com_wrench_des, 1e-3)
+        # des_currents = numerical.solve_tikhonov_regularization(JMA, com_wrench_des, 1e-3)
+
+        # Jasan's allocation
+        J_pinv, Mf, A_grad5_stack = self.allocation_jasan(tf_msg) # uses last_yaw
+        planar_forces = J_pinv * Tau_z
+        full_force = np.concatenate((planar_forces[:2], np.zeros(1), planar_forces[2:4], np.zeros(1)))
+        full_grad_task = np.linalg.pinv(Mf) @ full_force
+        des_currents = np.linalg.pinv(A_grad5_stack) @ full_grad_task
+
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":

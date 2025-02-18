@@ -17,7 +17,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
@@ -36,11 +36,13 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         
         # Overestimating mass is quite bad and leads to strong overshoots due to gravity compensation.
         # So I remove a few grams from the estimate.
-        self.mass = self.rigid_body_dipole.mass_properties.m - 0.01 # Subtracting 10 grams from the mass.
-        self.k_lin_z = 1e-3 # Friction damping parameter, to be tuned. Originally because of the rod.
+        self.mass = self.rigid_body_dipole.mass_properties.m # Subtracting 10 grams from the mass.
+        self.k_lin_z = 1e-1 # Friction damping parameter, to be tuned. Originally because of the rod.
 
         self.Iz = self.rigid_body_dipole.mass_properties.I_bf[2, 2]
-        self.k_z = 1e-4 # Damping parameter, to be tuned. Originally because of the rod.
+        self.k_z = 1e-1 # Damping parameter, to be tuned. Originally because of the rod.
+        self.Ki_z = 5 # Integrator gain for z-control feedforward term estimation.
+        self.Ki_yaw = 1 # Integrator gain for yaw control
 
         self.south_pole_up = True
         
@@ -70,12 +72,13 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([10.0, 1.0])
+        Q = 1e-4*np.diag([10.0, 1.0])
         R = 1
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
         # Denormalize the control gains.
         self.K_z_c = Tu @ K_norm @ np.linalg.inv(Tx)
+        rospy.loginfo(f"Control gain for forces: {self.K_z_c}")
         # self.K = K_norm
         # <<<< Z CONTROL DESIGN <<<<
 
@@ -85,7 +88,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         B = np.array([[0, 1/self.Iz]]).T
         C = np.array([[1, 0]])
 
-        yaw_max = np.deg2rad(30)
+        yaw_max = np.deg2rad(90)
         yaw_dot_max = 5*yaw_max
         u_max = 1e-4 # Assume very small maximum torque.
 
@@ -105,12 +108,13 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([10.0, 1.0])
+        Q = 1e-4*np.diag([10, 1])
         R = 1
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
         # Denormalize the control gains.
         self.K_yaw_c = Tu @ K_norm @ np.linalg.inv(Tx)
+        rospy.loginfo(f"Control gain for yaw: {self.K_yaw_c}")
         # <<<< YAW CONTROL DESIGN <<<<
 
         self.T_pos_x = geometry.transformation_matrix_from_quaternion(geometry.IDENTITY_QUATERNION,
@@ -130,6 +134,13 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.yaw_dot = 0.0
         self.last_yaw = 0.0
         self.last_z = 0.0
+        self.z_integral = 0.0
+        self.yaw_integral = 0.0
+
+        # Defining the home values
+        # self.home_z = 0.012963104349697106
+        self.home_z = 0.02
+        self.home_yaw = np.deg2rad(10.0)
 
         # For finite differences. Just use
         # self.diff_alpha = 1/self.dt
@@ -327,11 +338,25 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
         # rospy.loginfo(f"Z: {z_com}, Z dot: {z_dot}")
         x_z = np.array([[z_com, self.z_dot]]).T
+        x_z_ref = np.array([[self.home_z, 0.0]]).T
         x_yaw = np.array([[yaw, self.yaw_dot]]).T
-        u_fz = -self.K_z_c @ x_z + self.mass*common.Constants.g
-        u_tz = -self.K_yaw_c @ x_yaw
+        x_yaw_ref = np.array([[self.home_yaw, 0.0]]).T
+        yaw_error = x_yaw - x_yaw_ref
+        z_error = x_z - x_z_ref
+        self.z_integral += z_error[0, 0]*self.dt
+        self.yaw_integral += yaw_error[0, 0]*self.dt
+        u_fz = -self.K_z_c @ z_error + self.mass*common.Constants.g
+
+        ### >>>> Z INTEGRATOR FOR ESTIMATING THE FEEDFORWARD TERM >>>>
+        # z_integrator_mass_contrib = self.Ki_z*self.z_integral/common.Constants.g
+        # if np.abs(z_error[0, 0]) < 1e-3:
+        #     rospy.loginfo(f"Z error: {z_error[0, 0]}, Z integral feedforward compensation mass estimate: {z_integrator_mass_contrib}")
+        # u_fz = -self.K_z_c @ z_error - self.Ki_z*self.z_integral
+        ### <<<< Z INTEGRATOR FOR ESTIMATING THE FEEDFORWARD TERM <<<<
+
+        u_tz = -self.K_yaw_c @ yaw_error - self.Ki_yaw*self.yaw_integral
         self.control_input_message.vector = [u_fz[0,0], u_tz[0,0]]
-        self.estimated_state_msg.vector = np.concatenate([x_z.flatten(), x_yaw.flatten()])
+        self.estimated_state_msg.vector = np.concatenate([z_error.flatten(), np.rad2deg(yaw_error).flatten()])
 
         self.estimated_state_pub.publish(self.estimated_state_msg)
 

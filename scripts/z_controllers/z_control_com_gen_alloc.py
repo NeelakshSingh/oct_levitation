@@ -17,7 +17,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
@@ -66,7 +66,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([10.0, 1.0])
+        Q = 1e-2*np.diag([10.0, 1.0])
         R = 1
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
@@ -86,13 +86,14 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         # The filter is a first order low pass filter.
         f_filter = 20
         Tf = 1/(2*np.pi*f_filter)
-        self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
-        self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
+        # self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
+        # self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
         self.z_dot = 0.0
+        self.home_z = 0.02
 
         # For finite differences. Just use
-        # self.diff_alpha = 1/self.dt
-        # self.diff_beta = 0
+        self.diff_alpha = 1/self.dt
+        self.diff_beta = 0
 
     def jm_currents_to_wrench_gen_alloc(self, origin_tf: TransformStamped) -> np.ndarray:
         # Hardcoding the dipole offsets now.
@@ -162,7 +163,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
             self.jma_condition_pub.publish(jma_condition_msg)
 
         if self.warn_jma_condition:
-            condition_check_tol = 11e3
+            condition_check_tol = 9e3
             if jma_condition > condition_check_tol:
                 np.set_printoptions(linewidth=np.inf)
                 ezyx = geometry.euler_zyx_from_quaternion(np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w]))
@@ -277,10 +278,12 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.last_z = z_com
         # rospy.loginfo(f"Z: {z_com}, Z dot: {z_dot}")
         x = np.array([[z_com, self.z_dot]]).T
+        x_z_ref = np.array([[self.home_z, 0.0]]).T
+        z_error = x - x_z_ref
         # u = -self.K @ x
-        u = -self.K @ x + self.mass*common.Constants.g
+        u = -self.K @ z_error + self.mass*common.Constants.g
         self.control_input_message.vector = u.flatten()
-        self.estimated_state_msg.vector = x.flatten()
+        self.estimated_state_msg.vector = z_error.flatten()
 
         self.estimated_state_pub.publish(self.estimated_state_msg)
 

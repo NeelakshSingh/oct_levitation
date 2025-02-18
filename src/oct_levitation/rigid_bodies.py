@@ -71,7 +71,7 @@ TwoDipoleDisc100x15_6HKCM10x3 = MultiDipoleRigidBody(
 
 TwoDipoleDisc80x15_6HKCM10x3 = MultiDipoleRigidBody(
     name="two_dipole_disc_80x15",
-    mass_properties = MassProperties(0.0937,
+    mass_properties = MassProperties(0.096,
                                      np.array([[3.56773200e-05, 0.00000000e+00, 0.00000000e+00],
                                                [0.00000000e+00, 5.32428400e-05, 0.00000000e+00],
                                                [0.00000000e+00, 0.00000000e+00, 8.46661400e-05]]),
