@@ -29,10 +29,12 @@ class FakePosePublisher:
         pose.child_frame_id = self.tf_topic
         pose.transform.translation.x = 0.0
         pose.transform.translation.y = 0.0
-        # pose.transform.translation.z = 0.0007252745435843604
+        # pose.transform.translation.z = 0.0007252745435843604 # ILL CONDIOTIONED POINT
+        pose.transform.translation.z = 0.0129
         
-        pose.transform.rotation = Quaternion(0, 0, 0, 1)
-        yaw = self.yaw_amplitude*np.sin(self.omega*t)
+        # pose.transform.rotation = Quaternion(0, 0, 0, 1)
+        # yaw = self.yaw_amplitude*np.sin(self.omega*t)
+        yaw = np.deg2rad(15)
         quaternion = geometry.quaternion_from_euler_zyx(np.array([0, 0, yaw]))
         pose.transform.rotation = Quaternion(*quaternion)
 
