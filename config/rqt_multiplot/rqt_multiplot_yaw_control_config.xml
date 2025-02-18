@@ -764,7 +764,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_yaw_control/jma_condition</topic>
+                                    <topic>/com_wrench_yaw_control/estimated_position_and_velocity</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -777,7 +777,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_yaw_control/jma_condition</topic>
+                                    <topic>/com_wrench_yaw_control/estimated_position_and_velocity</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
@@ -801,7 +801,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>JMA Condition Number</title>
+                            <title>Yaw</title>
                         </curve_0>
                     </curves>
                     <legend>

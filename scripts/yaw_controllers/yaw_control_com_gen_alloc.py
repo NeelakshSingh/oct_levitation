@@ -5,6 +5,7 @@ import control as ct
 
 import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
+import oct_levitation.numerical as numerical
 
 from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
@@ -15,7 +16,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency\
         self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
@@ -31,7 +32,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
             self.jma_condition_pub = rospy.Publisher("/com_wrench_yaw_control/jma_condition",
                                                         VectorStamped, queue_size=1)
         self.Iz = self.rigid_body_dipole.mass_properties.I_bf[2, 2]
-        self.k_z = 1e-4 # Damping parameter, to be tuned. Originally because of the rod.
+        self.k_z = 1e-1 # Damping parameter, to be tuned. Originally because of the rod.
+        # self.Tz_deadzone = 0.25 # Deadzone for the torque control. # LEADS TO OSCILLATIONS
 
         self.south_pole_up = True
         
@@ -60,12 +62,14 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([10.0, 1.0])
+        Q = np.diag([1e6, 1e5])
         R = 1
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
         # Denormalize the control gains.
         self.K = Tu @ K_norm @ np.linalg.inv(Tx)
+        # self.K = np.array([[0.081811855327392,0.00637044424414062]])
+        rospy.loginfo(f"Control gain for Tz: {self.K}")
         # self.K = K_norm
 
         self.T_pos_x = geometry.transformation_matrix_from_quaternion(geometry.IDENTITY_QUATERNION,
@@ -75,6 +79,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         
         self.last_yaw = 0.0
         self.dt = 1/self.control_rate
+
+        # self.calibration_file = "octomag_5point.yaml"
 
     def jm_currents_to_wrench_zero_rp(self, origin_tf: TransformStamped) -> np.ndarray:
         # Hardcoding the dipole offsets now.
@@ -129,12 +135,14 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         J_neg_x = mechanical_jacobian(p_neg_x, com_position)
         
         # Getting the actuation matrices.
-        A_pos_x = self.mpem_model.getActuationMatrix(p_pos_x)
-        A_neg_x = self.mpem_model.getActuationMatrix(p_neg_x)
+        # self.A_pos_x = self.mpem_model.getActuationMatrix(np.array([30e-3, 0, 0]))
+        # self.A_neg_x = self.mpem_model.getActuationMatrix(np.array([-30e-3, 0, 0]))
+        self.A_pos_x = self.mpem_model.getActuationMatrix(p_pos_x)
+        self.A_neg_x = self.mpem_model.getActuationMatrix(p_neg_x)
 
         # The final allocation matrix is just the sum of JMA
 
-        JMA = J_pos_x @ M_pos_x @ A_pos_x + J_neg_x @ M_neg_x @ A_neg_x
+        JMA = J_pos_x @ M_pos_x @ self.A_pos_x + J_neg_x @ M_neg_x @ self.A_neg_x
 
         if self.publish_jma_condition:
             jma_condition_msg = VectorStamped()
@@ -144,7 +152,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
             self.jma_condition_pub.publish(jma_condition_msg)
 
         if self.warn_jma_condition:
-            condition_check_tol = 11e3
+            condition_check_tol = 9e3
             if jma_condition > condition_check_tol:
                 np.set_printoptions(linewidth=np.inf)
                 ezyx = geometry.euler_zyx_from_quaternion(np.array([com_quaternion.x, com_quaternion.y, com_quaternion.z, com_quaternion.w]))
@@ -167,7 +175,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
                                     Should ideally be 6 for full row rank.
                                     JM Stack Condition Number: {np.linalg.cond(JM_stack)}""")
                 
-                A_stack = np.vstack([A_pos_x, A_neg_x])
+                A_stack = np.vstack([self.A_pos_x, self.A_neg_x])
                 rospy.loginfo_once(f"""[Condition Debug] A Stack Rank: {np.linalg.matrix_rank(A_stack)},
                                     Should ideally be 8 for full column rank.
                                     A Stack Condition Number: {np.linalg.cond(A_stack)}""")
@@ -177,8 +185,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
                                     JMA Condition Number: {np.linalg.cond(JMA)}""")
                 
                 rospy.loginfo_once(f"""[Condition Debug] Let's look at individual dipole allocations.""")
-                JMA_pos = J_pos_x @ M_pos_x @ A_pos_x
-                JMA_neg = J_neg_x @ M_neg_x @ A_neg_x
+                JMA_pos = J_pos_x @ M_pos_x @ self.A_pos_x
+                JMA_neg = J_neg_x @ M_neg_x @ self.A_neg_x
                 rospy.loginfo_once(f"""[Condition Debug] JMA Pos Rank: {np.linalg.matrix_rank(JMA_pos)},
                                     JMA Neg Rank: {np.linalg.matrix_rank(JMA_neg)}
                                     Should ideally be 5 because they cannot control all 6 DOFs alone. Condition numbers will be inf.""")
@@ -218,10 +226,20 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.estimated_state_pub.publish(self.estimated_state_msg)
 
         Tau_z = u[0, 0]
+        # Let's apply inverted deadzone, since this is without gravity compensation.
+        # LEADS TO OSCILLATIONS, SO COMMENTED OUT
+        # if Tau_z > 0.0:
+        #     Tau_z += self.Tz_deadzone
+        # elif Tau_z < 0.0:
+        #     Tau_z -= self.Tz_deadzone
+
         com_wrench_des = np.array([0, 0, Tau_z, 0, 0, 0])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
-        des_currents = np.linalg.pinv(JMA) @ com_wrench_des
+        # Use tikhonov regularization instead to get around poorly conditioned matrix near the origin
+        # for some yaw values.
+        # des_currents = np.linalg.pinv(JMA) @ com_wrench_des
+        des_currents = numerical.solve_tikhonov_regularization(JMA, com_wrench_des, 1e-3)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":

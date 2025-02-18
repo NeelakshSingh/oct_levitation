@@ -21,8 +21,6 @@ class ControlSessionNodeBase:
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
-        self.mpem_model = mag_manip.ForwardModelMPEM()
-        self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
 
         self.control_rate = rospy.get_param("~control_rate", 100)
 
@@ -40,6 +38,8 @@ class ControlSessionNodeBase:
         self.tfsub_callback_style_control_loop = True
 
         self.post_init()
+        self.mpem_model = mag_manip.ForwardModelMPEM()
+        self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
