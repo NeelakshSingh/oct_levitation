@@ -29,10 +29,58 @@ def quaternion_to_x_axis(q):
 
     return np.array([x_1, x_2, x_3])
 
+class LimitFreezeFilter:
+
+    def __init__(self, max_lim: float, min_limit: float, lim_tol: float = 1e-3):
+        """
+        For this filter to work properly 
+        """
+        self.max_lim = max_lim
+        self.min_lim = min_limit
+        self.lim_tol = lim_tol
+        self.last_max_lim_breached = False
+        self.last_min_lim_breached = False
+        self.last_max_lim_breach_value = None
+        self.last_min_lim_breach_value = None
+    
+    def filter(self, value: np.ndarray) -> float:
+        if self.last_max_lim_breach_value is None:
+            self.last_max_lim_breach_value = value
+        
+        if self.last_min_lim_breach_value is None:
+            self.last_min_lim_breach_value = value
+
+        if np.any(np.abs(value - self.max_lim) < self.lim_tol):
+            self.last_max_lim_breach_value = value
+
+        if np.any(np.abs(value - self.min_lim) < self.lim_tol):
+            self.last_min_lim_breach_value = value
+        
+        if np.any(value > self.max_lim) and not np.any(value < self.min_lim):
+            self.last_max_lim_breached = True
+            if self.last_min_lim_breached:
+                self.last_min_lim_breached = False
+            return self.last_max_lim_breach_value
+        elif np.any(value < self.min_lim) and not np.any(value > self.max_lim):
+            self.last_min_lim_breached = True
+            if self.last_max_lim_breached:
+                self.last_max_lim_breached = False
+            return self.last_min_lim_breach_value
+        elif np.any(value > self.max_lim) and np.any(value < self.min_lim):
+            self.last_max_lim_breached = True
+            self.last_min_lim_breached = True
+            return self.last_max_lim_breach_value
+
+        return value
+
+    def __call__(self, *args, **kwds):
+        return self.filter(*args, **kwds)
+
+
 class DirectCOMWrenchYawController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
         rospy.loginfo("[Yaw Control General Allocation] Hardware connected: {}".format(self.HARDWARE_CONNECTED))
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency\
@@ -79,7 +127,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([1e6, 1e5])
+        Q = np.diag([10000, 100])
         R = 1
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
@@ -96,6 +144,10 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         
         self.last_yaw = 0.0
         self.dt = 1/self.control_rate
+
+        self.Tau_z_max = 0.018 # Maximum torque in Nm
+
+        self.current_limit_freezer = LimitFreezeFilter(7.0, -7.0, 1.0)
 
         # self.calibration_file = "octomag_5point.yaml"
 
@@ -295,8 +347,10 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         J_pos_x = mechanical_jacobian(p_pos_x, com_position)
         J_neg_x = mechanical_jacobian(p_neg_x, com_position)
 
-        A_pos_x = self.mpem_model.getActuationMatrix(np.array([30e-3, 0, 0]))
-        A_neg_x = self.mpem_model.getActuationMatrix(np.array([-30e-3, 0, 0])) # just reuse the same one from jasan's allocation for comparison.
+        # A_pos_x = self.mpem_model.getActuationMatrix(np.array([30e-3, 0, 0]))
+        # A_neg_x = self.mpem_model.getActuationMatrix(np.array([-30e-3, 0, 0])) # just reuse the same one from jasan's allocation for comparison.
+        A_pos_x = self.mpem_model.getActuationMatrix(p_pos_x)
+        A_neg_x = self.mpem_model.getActuationMatrix(p_neg_x) # just reuse the same one from jasan's allocation for comparison.
 
         Agrad5_pos_x = A_pos_x[3:, :]
         Agrad5_neg_x = A_neg_x[3:, :]
@@ -328,8 +382,8 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         des_currents_jm_grad5 = np.linalg.pinv(A_grad5_stack) @ dipole_jm_grad5
 
         # Let's see if some SVD based approximation leads to better results.
-        Alloc_mat = J_full @ M_full @ A_full
-        U, S, Vt = np.linalg.svd(Alloc_mat)
+        # Alloc_mat = J_full @ M_full @ A_full
+        # U, S, Vt = np.linalg.svd(Alloc_mat)
 
         __dud_line_for_breakpoint_hehehe = False
         return des_currents_jm_field_grad
@@ -370,6 +424,7 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.estimated_state_pub.publish(self.estimated_state_msg)
 
         Tau_z = u[0, 0]
+        Tau_z = np.clip(Tau_z, -self.Tau_z_max, self.Tau_z_max)
         # Let's apply inverted deadzone, since this is without gravity compensation.
         # LEADS TO OSCILLATIONS, SO COMMENTED OUT
         # if Tau_z > 0.0:
