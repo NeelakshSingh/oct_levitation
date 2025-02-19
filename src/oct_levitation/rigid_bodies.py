@@ -28,6 +28,13 @@ HKCMDiscMagnet10x3 = PermanentMagnet(
     material=N35Material
 )
 
+RingMagnet10x5x5 = PermanentMagnet(
+    geometry=CylindricalRingShape(
+        t=5e-3, Ri=5e-3/2, Ro=5e-3
+    ),
+    material=N35Material
+)
+
 ##############################################
 # RIGID BODIES #
 ##############################################
@@ -102,6 +109,36 @@ TwoDipoleDisc80x15_6HKCM10x3 = MultiDipoleRigidBody(
             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole
             transform=Transform(Vector3(-30e-3, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/two_dipole_disc_80x15/DipoleNegX"
+        )
+    ]
+)
+
+POMDiscCenterRingDipole = MultiDipoleRigidBody(
+    name="pom_disc_80x22",
+    mass_properties = MassProperties(1.57330000e-01,
+                                    np.array([[6.93584300e-05, 4.17310000e-07, 2.95500000e-07],
+                                              [4.17310000e-07, 6.21933200e-05, -4.92530000e-07],
+                                              [2.95500000e-07, -4.92530000e-07, 1.16048330e-04]]),
+                                    np.array([[6.93334500e-05, 4.20260000e-07, 2.89540000e-07],
+                                              [4.20260000e-07, 6.21714900e-05, -4.82600000e-07],
+                                              [2.89540000e-07, -4.82600000e-07, 1.16041640e-04]]),
+                                    np.array([0.00011000, -0.00018000, 0.00036000]),
+                                    PrincipleAxesAndMomentsOfInertia(
+                                        Ix=np.array([-0.06000000, -1.00000000, 0.01000000]),
+                                        Iy=np.array([1.00000000, -0.06000000, 0.01000000]),
+                                        Iz=np.array([-0.01000000, 0.01000000, 1.00000000]),
+                                        Px=6.21429000e-05,
+                                        Py=6.93558800e-05,
+                                        Pz=1.16047800e-04
+                                    )),
+    pose_frame = "vicon/pom_disc_80x22/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterRingDipole",
+            strength=RingMagnet10x5x5.get_dipole_strength()*6, # Built by symmetric stacking of 6 magnets
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/pom_disc_80x22/Origin"
         )
     ]
 )
