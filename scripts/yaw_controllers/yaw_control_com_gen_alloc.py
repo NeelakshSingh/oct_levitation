@@ -327,6 +327,10 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         dipole_jm_grad5 = np.concatenate([dipole_jm_field_grad[3:8], dipole_jm_field_grad[11:]])
         des_currents_jm_grad5 = np.linalg.pinv(A_grad5_stack) @ dipole_jm_grad5
 
+        # Let's see if some SVD based approximation leads to better results.
+        Alloc_mat = J_full @ M_full @ A_full
+        U, S, Vt = np.linalg.svd(Alloc_mat)
+
         __dud_line_for_breakpoint_hehehe = False
         return des_currents_jm_field_grad
     
