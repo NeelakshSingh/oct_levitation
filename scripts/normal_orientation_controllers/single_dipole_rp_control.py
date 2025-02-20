@@ -1,0 +1,145 @@
+import rospy
+import numpy as np
+import scipy.signal as signal
+import control as ct
+
+import oct_levitation.rigid_bodies as rigid_bodies
+import oct_levitation.geometry as geometry
+import oct_levitation.common as common
+import oct_levitation.numerical as numerical
+
+from scipy.linalg import block_diag
+from oct_levitation.control_node import ControlSessionNodeBase
+from control_utils.msg import VectorStamped
+from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
+from tnb_mns_driver.msg import DesCurrentsReg
+
+class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
+
+    def post_init(self):
+        self.HARDWARE_CONNECTED = False
+        self.tfsub_callback_style_control_loop = True
+        self.control_rate = 100 # Set it to the vicon frequency
+        self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
+        self.publish_desired_com_wrenches = True
+        self.publish_desired_dipole_wrenches = False
+        
+        self.control_input_publisher = rospy.Publisher("/com_single_dipole_normal_orientation_control/control_input",
+                                                       VectorStamped, queue_size=1)
+        
+        # Extra publishers which I wrote only in the post init and are not mandatory end with the shorthand pub.
+        self.error_state_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/error_states",
+                                                         VectorStamped, queue_size=1)
+        
+        self.control_gain_publisher = rospy.Publisher("/com_single_dipole_normal_orientation_control/control_gains",
+                                                      VectorStamped, queue_size=1)
+        
+        self.publish_jma_condition = True
+
+        if self.publish_jma_condition:
+            self.jma_condition_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/jma_condition",
+                                                     VectorStamped, queue_size=1)
+            
+        self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
+        # We just consider the average of the inertia for both x and y dimensions. Of course this will change in reality
+        # thanks to the changing orientation since are about to directly compute torques in the inertial frame.
+        # For better accuracy we will need to eventually design torque control in the body fixed frame, but for small
+        # angles we are fine with such approximations.
+
+        A = np.array([[0, 1], [0, 0]])
+        B = np.array([[0, 1/self.Iavg]]).T
+        C = np.array([[1, 0]])
+
+        A_d, B_d, C_d, D_d, dt = signal.cont2discrete((A, B, C, 0), dt=1/self.control_rate, method='zoh')
+
+        Q = np.diag([100, 10])
+        R = 1
+        self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
+        rospy.loginfo(f"Control gains for Tx, Ty: {self.K}")
+
+        ## Using tustin's method to calculate a filtered derivative in discrete time.
+        # The filter is a first order low pass filter.
+        f_filter = 20
+        Tf = 1/(2*np.pi*f_filter)
+        self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
+        self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
+
+        self.phi_dot = 0.0
+        self.theta_dot = 0.0
+
+        self.home_phi = 0.0
+        self.home_theta = 0.0
+
+        self.last_phi = 0.0
+        self.last_theta = 0.0
+
+    def simplified_Tauxy_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float) -> np.ndarray:
+        dipole_quaternion, dipole_position = geometry.arrays_from_tf_msg(tf_msg)
+        s_d = self.rigid_body_dipole.dipole_list[0].strength
+        dipole_moment = s_d*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
+        M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
+        # Rejecting the singular row since we are almost always nearly upright.
+        M_tau = M_tau[:2]
+        A_tau = self.mpem_model.getActuationMatrix(np.zeros(3))[:2]
+
+        Tau_des = np.array([[Tau_x, Tau_y]]).T
+
+        des_currents = np.linalg.inv(M_tau @ A_tau) @ Tau_des
+
+        return des_currents.flatten()
+
+    def callback_control_logic(self, tf_msg: TransformStamped):
+        self.desired_currents_msg = DesCurrentsReg() # Empty message
+        self.control_input_message = VectorStamped() # Empty message
+        self.com_wrench_msg = WrenchStamped() # Empty message
+        self.error_state_msg = VectorStamped() # Empty state estimate message
+
+        self.desired_currents_msg.header.stamp = rospy.Time.now()
+        self.com_wrench_msg.header.stamp = rospy.Time.now()
+        self.control_input_message.header.stamp = rospy.Time.now()
+        self.error_state_msg.header.stamp = rospy.Time.now()
+
+        # Getting the desired COM wrench.
+        dipole_quaternion = np.array([
+            tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
+        ])
+
+        e_zyx = geometry.euler_zyx_from_quaternion(dipole_quaternion)
+
+        phi = e_zyx[0]
+        theta = e_zyx[1]
+
+        self.phi_dot = self.diff_alpha*(phi - self.last_phi) + self.diff_beta*self.phi_dot
+        self.theta_dot = self.diff_alpha*(theta - self.last_theta) + self.diff_beta*self.theta_dot
+
+        x_phi = np.array([[[phi, self.phi_dot]]]).T
+        x_theta = np.array([[[theta, self.theta_dot]]]).T
+
+        r_phi = np.array([[self.home_phi, 0.0]]).T
+        r_theta = np.array([[self.home_theta, 0.0]]).T
+
+        phi_error = x_phi - r_phi
+        theta_error = x_theta - r_theta
+
+        u_phi = -self.K @ phi_error
+        u_theta = -self.K @ theta_error
+
+        Tau_x = u_phi[0, 0]
+        Tau_y = u_theta[0, 0]
+
+        self.error_state_msg.vector = np.concatenate((phi_error.flatten(), theta_error.flatten()))
+        self.error_state_pub.publish(self.error_state_msg)
+
+        com_wrench_des = np.array([Tau_x, Tau_y, 0.0, 0.0, 0.0, 0.0])
+        self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
+        self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
+
+        # Performing the simplified allocation for the two torques.
+        des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
+
+        self.desired_currents_msg.des_currents_reg = des_currents
+
+
+if __name__ == "__main__":
+    controller = SingleDipoleNormalOrientationController()
+    rospy.spin()

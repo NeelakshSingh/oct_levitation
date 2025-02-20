@@ -142,3 +142,33 @@ POMDiscCenterRingDipole = MultiDipoleRigidBody(
         )
     ]
 )
+
+Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
+    name="onyx_disc_80x22",
+    mass_properties = MassProperties(8.51500000e-02,
+                                     np.array([[3.37872600e-05, -1.45300000e-07, -6.66800000e-08],
+                                               [-1.45300000e-07, 3.02408200e-05, -1.11150000e-07],
+                                               [-6.66800000e-08, -1.11150000e-07, 5.90235300e-05]]),
+                                     np.array([[3.37844000e-05, -1.45960000e-07, -6.58400000e-08],
+                                               [-1.45960000e-07, 3.02386600e-05, -1.09760000e-07],
+                                               [-6.58400000e-08, -1.09760000e-07, 5.90220300e-05]]),
+                                     np.array([-0.00007000, -0.00011000, 0.00014000]),
+                                     PrincipleAxesAndMomentsOfInertia(
+                                         Ix=np.array([0.04000000, -1.00000000, 0.00000000]),
+                                         Iy=np.array([1.00000000, 0.04000000, 0.00000000]),
+                                         Iz=np.array([0.00000000, 0.00000000, 1.00000000]),
+                                         Px=3.02322700e-05,
+                                         Py=3.37902000e-05,
+                                         Pz=5.90226200e-05
+                                    )),
+    pose_frame = "vicon/onyx_disc_80x22/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterRingDipole",
+            strength=RingMagnet10x5x5.get_dipole_strength()*6, # Built by symmetric stacking of 6 magnets
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/pom_disc_80x22/Origin"
+        )
+    ]
+)

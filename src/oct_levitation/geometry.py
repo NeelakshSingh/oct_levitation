@@ -21,6 +21,26 @@ def check_if_unit_quaternion_raise_error(q: np.ndarray):
     if not check_if_unit_quaternion(q):
         raise ValueError("Quaternion must be a unit quaternion.")
 
+def arrays_from_tf_msg(tf_msg: TransformStamped):
+    """
+    Parameters
+    ----------
+        tf_msg: geometry_msgs/TransformStamped type object.
+    
+    Returns
+    -------
+        Tuple(np.ndarray, np.ndarray): The quaternion [x, y, z, w] and the translation [x, y, z] as arrays
+    """
+    translation = np.array([
+        tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
+    ])
+
+    rotation = np.array([
+        tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
+    ])
+
+    return rotation, translation
+
 def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -76,9 +96,32 @@ def get_normal_vector_from_quaternion(q: np.ndarray) -> np.ndarray:
     Parameters
     ----------
         q: Quaternion in the form [x, y, z, w]
+
+    Returns
+    -------
+        v: 3x1 normal vector of the local frame expressed in the world frame.
     """
     R = rotation_matrix_from_quaternion(q)
     return R[:, 2]
+
+def get_normal_alpha_beta_from_quaternion(q: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        q: Quaternion in the form [x, y, z, w]
+
+    Returns
+    -------
+        v: 2 element array containing the angles of the local frame normal
+           with the world XZ and YZ planes. First element is the angle alpha
+           with the YZ plane and the second element is the angle beta with the
+           new XZ plane obtained after the first YZ rotation. This seems to be
+           similar to YXZ intrinsic euler rotations.
+    """
+    n = get_normal_vector_from_quaternion(q)
+    alpha = np.arctan2(n[0], n[2])
+    beta = np.arcsin(-n[1])
+    return np.array([alpha, beta])
 
 def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
@@ -384,8 +427,8 @@ def magnetic_interaction_field_to_torque(dipole_moment: np.ndarray) -> np.ndarra
     return get_skew_symmetric_matrix(dipole_moment)
 
 def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
-                                                   full_mat: float = False,
-                                                   torque_first: bool = False) -> np.ndarray:
+                                                   full_mat: float = True,
+                                                   torque_first: bool = True) -> np.ndarray:
     """
     This function returns the magnetic interaction matrix of a dipole.
     This is purely defined by the orientation of the dipole and its strength.
@@ -413,8 +456,8 @@ def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
 
 def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
                                     dipole_strength:float,
-                                    full_mat: float = False,
-                                    torque_first: bool = False,
+                                    full_mat: float = True,
+                                    torque_first: bool = True,
                                     dipole_axis: np.ndarray = np.array([0, 0, 1])) -> np.ndarray:
     """
     This function returns the magnetic interaction matrix of a dipole.
@@ -447,8 +490,8 @@ def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
 
 def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                     dipole_strength:float,
-                                    full_mat: float = False,
-                                    torque_first: bool = False,
+                                    full_mat: float = True,
+                                    torque_first: bool = True,
                                     dipole_axis: np.ndarray = np.array([0, 0, 1])):
     """
     This function returns the magnetic interaction matrix of a dipole.

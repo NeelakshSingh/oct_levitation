@@ -35,7 +35,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/vicon/two_dipole_disc_80x15/Origin</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin</topic>
                                     <type>geometry_msgs/TransformStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -48,7 +48,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/vicon/two_dipole_disc_80x15/Origin</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin</topic>
                                     <type>geometry_msgs/TransformStamped</type>
                                 </y_axis>
                             </axes>

@@ -5,6 +5,7 @@ import tf2_ros
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped
 from tnb_mns_driver.msg import DesCurrentsReg
+from control_utils.msg import VectorStamped
 from mag_manip import mag_manip
 from typing import List
 
@@ -32,10 +33,19 @@ class ControlSessionNodeBase:
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
 
+        self.control_gain_publisher: rospy.Publisher = None
+
         self.control_input_publisher: rospy.Publisher = None # Need to set it in post init
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.tfsub_callback_style_control_loop = True
+        
+        # Set empty messages to be set in the main control logic.
+        self.desired_currents_msg : DesCurrentsReg = None
+        self.com_wrench_msg : WrenchStamped = None
+        self.dipole_wrench_messages: List[WrenchStamped] = None
+        self.control_input_message: VectorStamped = None
+        self.control_gains_message: VectorStamped = None
 
         self.post_init()
         self.mpem_model = mag_manip.ForwardModelMPEM()
@@ -57,11 +67,6 @@ class ControlSessionNodeBase:
         
         self.currents_publisher = rospy.Publisher("tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=1)
 
-        # Set empty messages to be set in the main control logic.
-        self.desired_currents_msg : DesCurrentsReg = None
-        self.com_wrench_msg : WrenchStamped = None
-        self.dipole_wrench_messages: List[WrenchStamped] = None
-        self.control_input_message = None
 
         # Start the timer
         timer_start_delay = rospy.get_param("~timer_start_delay", 1) # seconds
@@ -138,6 +143,7 @@ class ControlSessionNodeBase:
         # the specifications.
         self.control_input_publisher.publish(self.control_input_message)
         self.currents_publisher.publish(self.desired_currents_msg)
+        self.control_gain_publisher.publish(self.control_gains_message)
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher.publish(self.com_wrench_msg)
