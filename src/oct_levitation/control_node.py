@@ -125,6 +125,7 @@ class ControlSessionNodeBase:
         # set by the control_logic if it is implemented acc to
         # the specifications.
         self.control_input_publisher.publish(self.control_input_message)
+        self.control_gain_publisher.publish(self.control_gains_message)
         self.currents_publisher.publish(self.desired_currents_msg)
 
         if self.publish_desired_com_wrenches:

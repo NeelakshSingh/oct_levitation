@@ -35,6 +35,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
                                                       VectorStamped, queue_size=1)
         
         self.publish_jma_condition = True
+        self.south_pole_up = True
 
         if self.publish_jma_condition:
             self.jma_condition_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/jma_condition",
@@ -45,22 +46,29 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # thanks to the changing orientation since are about to directly compute torques in the inertial frame.
         # For better accuracy we will need to eventually design torque control in the body fixed frame, but for small
         # angles we are fine with such approximations.
+        k_rot = 1e-2 # rotational damping term
 
-        A = np.array([[0, 1], [0, 0]])
+        A = np.array([[0, 1], [0, -k_rot/self.Iavg]])
         B = np.array([[0, 1/self.Iavg]]).T
         C = np.array([[1, 0]])
 
         A_d, B_d, C_d, D_d, dt = signal.cont2discrete((A, B, C, 0), dt=1/self.control_rate, method='zoh')
 
-        Q = np.diag([100, 10])
+        Q = np.diag([1e-2, 1e-1])
         R = 1
-        self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
+        # self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
+        self.K = np.array([[0.0045055, 0.00066943]]).T # Tuned for overdamped PD response.
         rospy.loginfo(f"Control gains for Tx, Ty: {self.K}")
+
+        self.control_gains_message = VectorStamped()
+        # self.control_gains_message.header.stamp = rospy.Time.now()
+        # self.control_gains_message.vector = self.K.flatten().tolist()
 
         ## Using tustin's method to calculate a filtered derivative in discrete time.
         # The filter is a first order low pass filter.
         f_filter = 20
-        Tf = 1/(2*np.pi*f_filter)
+        # Tf = 1/(2*np.pi*f_filter)
+        Tf = 0.00039996 # From PDF MATLAB PID Tuner
         self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
         self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
 
@@ -77,14 +85,16 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         dipole_quaternion, dipole_position = geometry.arrays_from_tf_msg(tf_msg)
         s_d = self.rigid_body_dipole.dipole_list[0].strength
         dipole_moment = s_d*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
+        if self.south_pole_up:
+            dipole_moment = -dipole_moment
         M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
         # Rejecting the singular row since we are almost always nearly upright.
         M_tau = M_tau[:2]
-        A_tau = self.mpem_model.getActuationMatrix(np.zeros(3))[:2]
+        A_field = self.mpem_model.getActuationMatrix(np.zeros(3))[:3]
 
         Tau_des = np.array([[Tau_x, Tau_y]]).T
 
-        des_currents = np.linalg.inv(M_tau @ A_tau) @ Tau_des
+        des_currents = np.linalg.pinv(M_tau @ A_field) @ Tau_des
 
         return des_currents.flatten()
 
@@ -112,8 +122,11 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.phi_dot = self.diff_alpha*(phi - self.last_phi) + self.diff_beta*self.phi_dot
         self.theta_dot = self.diff_alpha*(theta - self.last_theta) + self.diff_beta*self.theta_dot
 
-        x_phi = np.array([[[phi, self.phi_dot]]]).T
-        x_theta = np.array([[[theta, self.theta_dot]]]).T
+        self.last_phi = phi
+        self.last_theta = theta
+
+        x_phi = np.array([[phi, self.phi_dot]]).T
+        x_theta = np.array([[theta, self.theta_dot]]).T
 
         r_phi = np.array([[self.home_phi, 0.0]]).T
         r_theta = np.array([[self.home_theta, 0.0]]).T
@@ -129,6 +142,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
         self.error_state_msg.vector = np.concatenate((phi_error.flatten(), theta_error.flatten()))
         self.error_state_pub.publish(self.error_state_msg)
+        self.control_input_message.vector = [Tau_x, Tau_y]
 
         com_wrench_des = np.array([Tau_x, Tau_y, 0.0, 0.0, 0.0, 0.0])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])

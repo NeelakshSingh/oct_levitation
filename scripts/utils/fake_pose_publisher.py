@@ -41,8 +41,10 @@ class FakePosePublisher:
         pose.transform.rotation = Quaternion(0, 0, 0, 1)
         yaw = self.yaw_amplitude*np.sin(self.omega*t)        
 
-        roll = self.roll_amplitude*np.sin(self.omega_roll*t)
-        pitch = self.pitch_amplitude*np.sin(self.omega_pitch*t)
+        # roll = self.roll_amplitude*np.sin(self.omega_roll*t)
+        # pitch = self.pitch_amplitude*np.sin(self.omega_pitch*t)
+        roll = np.deg2rad(15)
+        pitch = np.deg2rad(15)
 
         quaternion = geometry.quaternion_from_euler_zyx(np.array([roll, pitch, yaw]))
         pose.transform.rotation = Quaternion(*quaternion)
