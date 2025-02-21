@@ -81,6 +81,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.last_phi = 0.0
         self.last_theta = 0.0
 
+        self.__first_reading = True
+
     def simplified_Tauxy_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float) -> np.ndarray:
         dipole_quaternion, dipole_position = geometry.arrays_from_tf_msg(tf_msg)
         s_d = self.rigid_body_dipole.dipole_list[0].strength
@@ -125,6 +127,11 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
         phi = e_zyx[0]
         theta = e_zyx[1]
+
+        if self.__first_reading:
+            self.last_phi = phi
+            self.last_theta = theta
+            self.__first_reading = False
 
         self.phi_dot = self.diff_alpha*(phi - self.last_phi) + self.diff_beta*self.phi_dot
         self.theta_dot = self.diff_alpha*(theta - self.last_theta) + self.diff_beta*self.theta_dot
