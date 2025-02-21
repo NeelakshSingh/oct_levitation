@@ -57,7 +57,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Q = np.diag([1e-2, 1e-1])
         R = 1
         # self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
-        self.K = np.array([[0.0045055, 0.00066943]]).T # Tuned for overdamped PD response.
+        self.K = np.array([[0.0045055, 0.00066943]]) # Tuned for overdamped PD response.
         rospy.loginfo(f"Control gains for Tx, Ty: {self.K}")
 
         self.control_gains_message = VectorStamped()
@@ -95,6 +95,13 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Tau_des = np.array([[Tau_x, Tau_y]]).T
 
         des_currents = np.linalg.pinv(M_tau @ A_field) @ Tau_des
+
+        if self.publish_jma_condition:
+            jma_condition_msg = VectorStamped()
+            jma_condition_msg.header.stamp = rospy.Time.now()
+            jma_condition = np.linalg.cond(M_tau @ A_field)
+            jma_condition_msg.vector = [jma_condition]
+            self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents.flatten()
 

@@ -8,7 +8,7 @@ from geometry_msgs.msg import TransformStamped, Quaternion
 class FakePosePublisher:
     def __init__(self):
         rospy.init_node("fake_pose_publisher")
-        self.tf_topic = rigid_bodies.POMDiscCenterRingDipole.pose_frame
+        self.tf_topic = rigid_bodies.Onyx80x22DiscCenterRingDipole.pose_frame
         self.T = 10 # cycle period in seconds
         self.omega = 2*np.pi/self.T
         # self.yaw_amplitude = 2*np.pi/3
