@@ -57,10 +57,10 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Q = np.diag([1e-2, 1e-1])
         R = 1
         # self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
-        self.K_theta = np.array([[0.0045055, 0.00066943]]) # Tuned for overdamped PD response.
-        self.K_phi = np.array([[0.0063449, 0.0009356]]) # Tuned to include the external disc
-        # self.K_theta = np.array([[0.00829789566492576,0.000924926621820855]]) # Tuned for overdamped PD response.
-        # self.K_phi = np.array([[0.0101054837272838,0.00124597367951398]]) # Tuned to include the external disc
+        # self.K_theta = np.array([[0.0045055, 0.00066943]]) # Tuned for overdamped PD response.
+        # self.K_phi = np.array([[0.0063449, 0.0009356]]) # Tuned to include the external disc
+        self.K_theta = np.array([[0.00829789566492576,0.000924926621820855]]) # Tuned for overdamped PD response.
+        self.K_phi = np.array([[0.0101054837272838,0.00124597367951398]]) # Tuned to include the external disc
 
         rospy.loginfo(f"Control gains for Tx: {self.K_phi}, Ty: {self.K_theta}")
 
@@ -74,11 +74,16 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # Tf = 1/(2*np.pi*f_filter)
         Tf = 0.00039996 # From PDF MATLAB PID Tuner
         Tf_phi = 0.002319
-        self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
-        self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
+        # self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
+        # self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
 
-        self.diff_alpha_phi = 2*self.control_rate/(2*self.control_rate*Tf_phi + 1)
-        self.diff_beta_phi = (2*self.control_rate*Tf_phi - 1)/(2*self.control_rate*Tf_phi + 1)
+        # self.diff_alpha_phi = 2*self.control_rate/(2*self.control_rate*Tf_phi + 1)
+        # self.diff_beta_phi = (2*self.control_rate*Tf_phi - 1)/(2*self.control_rate*Tf_phi + 1)
+
+        self.diff_alpha = self.control_rate
+        self.diff_beta = 0
+        self.diff_alpha_phi = self.control_rate
+        self.diff_beta_phi = 0
 
         self.phi_dot = 0.0
         self.theta_dot = 0.0
