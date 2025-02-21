@@ -17,7 +17,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -57,8 +57,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Q = np.diag([1e-2, 1e-1])
         R = 1
         # self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
-        self.K = np.array([[0.0045055, 0.00066943]]) # Tuned for overdamped PD response.
-        rospy.loginfo(f"Control gains for Tx, Ty: {self.K}")
+        self.K_theta = np.array([[0.0045055, 0.00066943]]) # Tuned for overdamped PD response.
+        self.K_phi = np.array([[0.0063449, 0.0009356]]) # Tuned to include the external disc
+        # self.K_theta = np.array([[0.00829789566492576,0.000924926621820855]]) # Tuned for overdamped PD response.
+        # self.K_phi = np.array([[0.0101054837272838,0.00124597367951398]]) # Tuned to include the external disc
+
+        rospy.loginfo(f"Control gains for Tx: {self.K_phi}, Ty: {self.K_theta}")
 
         self.control_gains_message = VectorStamped()
         # self.control_gains_message.header.stamp = rospy.Time.now()
@@ -69,8 +73,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         f_filter = 20
         # Tf = 1/(2*np.pi*f_filter)
         Tf = 0.00039996 # From PDF MATLAB PID Tuner
+        Tf_phi = 0.002319
         self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
         self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
+
+        self.diff_alpha_phi = 2*self.control_rate/(2*self.control_rate*Tf_phi + 1)
+        self.diff_beta_phi = (2*self.control_rate*Tf_phi - 1)/(2*self.control_rate*Tf_phi + 1)
 
         self.phi_dot = 0.0
         self.theta_dot = 0.0
@@ -124,16 +132,21 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         ])
 
         e_zyx = geometry.euler_zyx_from_quaternion(dipole_quaternion)
+        e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
 
-        phi = e_zyx[0]
-        theta = e_zyx[1]
+        # phi = e_zyx[0]
+        # theta = e_zyx[1]
+        phi = e_xyz[0]
+        theta = e_xyz[1]
+        # phi, theta = geometry.get_normal_alpha_beta_from_quaternion(dipole_quaternion)
+        # theta, phi = geometry.get_normal_alpha_beta_from_quaternion(dipole_quaternion)
 
         if self.__first_reading:
             self.last_phi = phi
             self.last_theta = theta
             self.__first_reading = False
 
-        self.phi_dot = self.diff_alpha*(phi - self.last_phi) + self.diff_beta*self.phi_dot
+        self.phi_dot = self.diff_alpha_phi*(phi - self.last_phi) + self.diff_beta_phi*self.phi_dot
         self.theta_dot = self.diff_alpha*(theta - self.last_theta) + self.diff_beta*self.theta_dot
 
         self.last_phi = phi
@@ -148,8 +161,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         phi_error = x_phi - r_phi
         theta_error = x_theta - r_theta
 
-        u_phi = -self.K @ phi_error
-        u_theta = -self.K @ theta_error
+        u_phi = -self.K_phi @ phi_error
+        u_theta = -self.K_theta @ theta_error
 
         Tau_x = u_phi[0, 0]
         Tau_y = u_theta[0, 0]
