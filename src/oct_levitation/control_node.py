@@ -77,6 +77,9 @@ class ControlSessionNodeBase:
         else:
             self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
                                            queue_size=1)
+        
+        self.control_gain_publisher.publish(self.control_gains_message)
+
 
     def post_init(self):
         """
@@ -144,7 +147,6 @@ class ControlSessionNodeBase:
         # the specifications.
         self.control_input_publisher.publish(self.control_input_message)
         self.currents_publisher.publish(self.desired_currents_msg)
-        self.control_gain_publisher.publish(self.control_gains_message)
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher.publish(self.com_wrench_msg)

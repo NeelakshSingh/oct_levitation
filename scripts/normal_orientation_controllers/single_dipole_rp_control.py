@@ -32,7 +32,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
                                                          VectorStamped, queue_size=1)
         
         self.control_gain_publisher = rospy.Publisher("/com_single_dipole_normal_orientation_control/control_gains",
-                                                      VectorStamped, queue_size=1)
+                                                      VectorStamped, queue_size=1, latch=True)
         
         self.publish_jma_condition = True
         self.south_pole_up = True
@@ -59,21 +59,26 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # self.K, S, E = ct.dlqr(A_d, B_d, Q, R)
         # self.K_theta = np.array([[0.0045055, 0.00066943]]) # Tuned for overdamped PD response.
         # self.K_phi = np.array([[0.0063449, 0.0009356]]) # Tuned to include the external disc
-        self.K_theta = np.array([[0.00829789566492576,0.000924926621820855]]) # Tuned for overdamped PD response.
-        self.K_phi = np.array([[0.0101054837272838,0.00124597367951398]]) # Tuned to include the external disc
+        # self.K_theta = np.array([[0.00829789566492576,0.000924926621820855]]) # Jasan's Gains
+        # self.K_phi = np.array([[0.0101054837272838,0.00124597367951398]]) # Jasan's Gains
+
+        # self.K_theta = np.array([[0.00859, 0.0007965]]) # Tuned for overdamped PD response.
+        self.K_theta = np.array([[0.009982, 0.0007758]]) # Tuned for overdamped PD response.
+        self.K_phi = np.array([[0.02121, 0.001454]]) # Tuned to include the external disc
 
         rospy.loginfo(f"Control gains for Tx: {self.K_phi}, Ty: {self.K_theta}")
 
         self.control_gains_message = VectorStamped()
-        # self.control_gains_message.header.stamp = rospy.Time.now()
-        # self.control_gains_message.vector = self.K.flatten().tolist()
+        self.control_gains_message.header.stamp = rospy.Time.now()
 
         ## Using tustin's method to calculate a filtered derivative in discrete time.
         # The filter is a first order low pass filter.
-        f_filter = 20
+        # f_filter = 40
         # Tf = 1/(2*np.pi*f_filter)
-        Tf = 0.00039996 # From PDF MATLAB PID Tuner
-        Tf_phi = 0.002319
+        # Tf_phi = Tf
+        # Tf = 0.00039996 # From PDF MATLAB PID Tuner
+        # Tf_phi = 0.002319
+        # self.control_gains_message.vector = np.concatenate((self.K_phi.flatten(), self.K_theta.flatten(), np.array([Tf, Tf_phi])))
         # self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
         # self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
 
@@ -84,6 +89,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.diff_beta = 0
         self.diff_alpha_phi = self.control_rate
         self.diff_beta_phi = 0
+        self.control_gains_message.vector = np.concatenate((self.K_phi.flatten(), self.K_theta.flatten()))
 
         self.phi_dot = 0.0
         self.theta_dot = 0.0
@@ -143,7 +149,6 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # theta = e_zyx[1]
         phi = e_xyz[0]
         theta = e_xyz[1]
-        # phi, theta = geometry.get_normal_alpha_beta_from_quaternion(dipole_quaternion)
         # theta, phi = geometry.get_normal_alpha_beta_from_quaternion(dipole_quaternion)
 
         if self.__first_reading:
