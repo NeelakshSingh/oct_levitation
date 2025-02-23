@@ -6,6 +6,7 @@ import tf2_ros
 from geometry_msgs.msg import WrenchStamped, TransformStamped
 from tnb_mns_driver.msg import DesCurrentsReg
 from control_utils.msg import VectorStamped
+from std_msgs.msg import String
 from mag_manip import mag_manip
 from typing import List
 
@@ -32,6 +33,10 @@ class ControlSessionNodeBase:
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
+        self.metadata_topic = rospy.get_param("~metadata_pub_topic", "control_session/metadata")
+
+        self.metadata_pub = rospy.Publisher(self.metadata_topic, String, latch=True, queue_size=1)
+        self.metadata_msg : String = None
 
         self.control_gain_publisher: rospy.Publisher = None
 
@@ -47,12 +52,15 @@ class ControlSessionNodeBase:
         self.control_input_message: VectorStamped = None
         self.control_gains_message: VectorStamped = None
 
+        self.tracking_poses_on = True
+
         self.post_init()
         self.mpem_model = mag_manip.ForwardModelMPEM()
         self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
+        self.tf_reference_sub_topic = self.tf_sub_topic + "_reference"
 
         init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED)
 
@@ -78,7 +86,14 @@ class ControlSessionNodeBase:
             self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
                                            queue_size=1)
         
+        self.tf_reference_sub = None
+        self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
+        if self.tracking_poses_on:
+            self.tf_reference_sub = rospy.Subscriber(self.tf_reference_sub_topic, TransformStamped,
+                                                     self.tf_reference_sub_callback, queue_size=1)
+        
         self.control_gain_publisher.publish(self.control_gains_message)
+        self.metadata_pub.publish(self.metadata_msg)
 
 
     def post_init(self):
@@ -120,7 +135,10 @@ class ControlSessionNodeBase:
             1. self.com_wrench_msg : WrenchStamped (if publish_desired_com_wrenches is True)
             2. self.dipole_wrench_messages: List[WrenchStamped] (if publish_desired_dipole_wrenches is True)
         """
-        raise NotImplementedError("Control logic must be implemented")\
+        raise NotImplementedError("Control logic must be implemented")
+    
+    def tf_reference_sub_callback(self, tf_ref_msg: TransformStamped):
+        self.last_reference_tf_msg = tf_ref_msg
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         self.callback_control_logic(tf_msg)

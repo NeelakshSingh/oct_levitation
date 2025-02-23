@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -205,7 +206,7 @@ def read_data(dwd, topics, interpolate_topic, input_type=None):
 
     return variables
 
-def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
+def read_data_pandas(dwd, topics, interpolate_topic):
     #%% Import:
     print("------------------READ DATA---------------------")
 
@@ -251,6 +252,12 @@ def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
 
     return time, interp_dfs
 
+def read_data_pandas_all(dwd, interpolate_topic):
+    print(f"Reading data from directory: {dwd}")
+    csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv")]
+    print(f"Found {len(csv_list)} CSV files: {csv_list}")
+    return read_data_pandas(dwd, csv_list, interpolate_topic)
+
 ###############################################
 # DATA CONVERSION AND PROCESSING FUNCTIONS
 ###############################################
@@ -290,6 +297,10 @@ def filter_dataset_by_time_range(dataset: Dict[str, pd.DataFrame],
                                  t_end: float, 
                                  renormalize_time: bool = False,
                                  time_column: str = "time") -> Tuple[np.ndarray, Dict[str, pd.DataFrame]]:
+    print(f"Filtering dataset with {len(dataset)} keys within time range {t_start} to {t_end}")
+    filtered_dataset = {}
+    time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
+    print(f"Original time vector length: {len(time_vec)}, Filtered time vector length: {len(time_vec_filtered)}")
     filtered_dataset = {}
     time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
     for key, item in dataset.items():

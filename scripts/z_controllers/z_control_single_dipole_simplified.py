@@ -12,6 +12,7 @@ from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
 from control_utils.msg import VectorStamped
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
+from std_msgs.msg import String
 from tnb_mns_driver.msg import DesCurrentsReg
 
 class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
@@ -28,8 +29,8 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.estimated_state_pub = rospy.Publisher("/com_wrench_z_control/estimated_position_and_velocity",
                                                    VectorStamped, queue_size=1)
         
-        self.control_gains_publisher = rospy.Publisher("/com_wrench_z_control/control_gains",
-                                                 VectorStamped, queue_size=1)
+        self.control_gain_publisher = rospy.Publisher("/com_wrench_z_control/control_gains",
+                                                 VectorStamped, queue_size=1, latch=True)
         
         self.publish_jma_condition = True
         if self.publish_jma_condition:
@@ -82,7 +83,6 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
         self.control_gains_message = VectorStamped()
         self.control_gains_message.header.stamp = rospy.Time.now()
-        self.control_gains_message.vector = self.K.flatten()
         # self.K = K_norm
         rospy.loginfo(f"[Z Control Single Dipole Simplified], Control gain K:{self.K}")
 
@@ -98,16 +98,18 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         # The filter is a first order low pass filter.
         f_filter = 20
         Tf = 1/(2*np.pi*f_filter)
-        self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
-        self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
+        # self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
+        # self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
         self.z_dot = 0.0
-        self.home_z = 0.02
 
         # For finite differences. Just use
-        # self.diff_alpha = 1/self.dt
-        # self.diff_beta = 0
+        self.diff_alpha = 1/self.dt
+        self.diff_beta = 0
 
         # self.calibration_file = "octomag_5point.yaml"
+        self.control_gains_message.vector = np.concatenate((self.K.flatten(), np.array([self.diff_alpha, self.diff_beta])))
+        self.metadata_msg = String()
+        self.metadata_msg.data = f"Calibration File: {self.calibration_file}"
 
     def simplified_Fz_allocation(self, tf_msg: TransformStamped, Fz_des: float):
         quaternion = np.array([
@@ -115,6 +117,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         ])
         # normal = geometry.get_normal_vector_from_quaternion(quaternion)
         normal = np.array([0, 0, -1])
+        # normal = np.array([0, 0, 1]) # FOR OCTOMAG FILE ONLY
         s_d = self.rigid_body_dipole.dipole_list[0].strength
         dipole_vector = s_d * normal
         dipole_position = np.array([
@@ -151,7 +154,8 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.last_z = z_com
         # rospy.loginfo(f"Z: {z_com}, Z dot: {z_dot}")
         x = np.array([[z_com, self.z_dot]]).T
-        x_z_ref = np.array([[self.home_z, 0.0]]).T
+        x_z_ref = np.array([[self.last_reference_tf_msg.transform.translation.z, 0.0]]).T
+        # rospy.loginfo(f"x_z_ref: {x_z_ref}")
         z_error = x - x_z_ref
         u = -self.K @ z_error + self.mass*common.Constants.g
         self.control_input_message.vector = u.flatten()

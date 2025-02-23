@@ -7,8 +7,8 @@ from geometry_msgs.msg import TransformStamped, Quaternion
 
 class FakePosePublisher:
     def __init__(self):
-        rospy.init_node("fake_pose_publisher")
-        self.tf_topic = rigid_bodies.Onyx80x22DiscCenterRingDipole.pose_frame
+        rospy.init_node("reference_pose_publisher")
+        self.tf_topic = rigid_bodies.Onyx80x22DiscCenterRingDipole.pose_frame + "_reference"
         self.T = 2 # cycle period in seconds
         self.omega = 2*np.pi/self.T
         # self.yaw_amplitude = 2*np.pi/3
@@ -19,7 +19,7 @@ class FakePosePublisher:
         self.omega_roll = 2*np.pi*self.f_roll
         self.f_pitch = 0.1
         self.omega_pitch = 2*np.pi*self.f_pitch
-        self.z_amplitude = 0.5e-2
+        self.z_amplitude = 1e-2
         # self.amplitude = 0.0007252745435843604 # This one for z will lead to poor conditioning of JMA matrix.
         self.start_time = rospy.Time.now().to_sec()
 

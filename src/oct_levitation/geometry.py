@@ -6,20 +6,21 @@ from scipy.linalg import block_diag
 from geometry_msgs.msg import TransformStamped
 
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
+CLOSE_CHECK_TOLERANCE = 1e-3
 IDENTITY_QUATERNION = np.array([0, 0, 0, 1]) # Identity quaternion
 
 def check_if_unit_quaternion(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
-    return np.isclose(np.linalg.norm(q), 1.0)
+    return np.isclose(np.linalg.norm(q), 1.0, rtol=CLOSE_CHECK_TOLERANCE)
 
 def check_if_unit_quaternion_raise_error(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
     if not check_if_unit_quaternion(q):
-        raise ValueError("Quaternion must be a unit quaternion.")
+        raise ValueError(f"Quaternion must be a unit quaternion. Received: {q}")
 
 def arrays_from_tf_msg(tf_msg: TransformStamped):
     """

@@ -896,7 +896,7 @@
                                 <lines_interpolate>false</lines_interpolate>
                                 <pen_style>1</pen_style>
                                 <pen_width>1</pen_width>
-                                <render_antialias>false</render_antialias>
+                                <render_antialias>true</render_antialias>
                                 <steps_invert>false</steps_invert>
                                 <sticks_baseline>0</sticks_baseline>
                                 <sticks_orientation>2</sticks_orientation>
@@ -947,7 +947,7 @@
                                 <lines_interpolate>false</lines_interpolate>
                                 <pen_style>1</pen_style>
                                 <pen_width>1</pen_width>
-                                <render_antialias>false</render_antialias>
+                                <render_antialias>true</render_antialias>
                                 <steps_invert>false</steps_invert>
                                 <sticks_baseline>0</sticks_baseline>
                                 <sticks_orientation>2</sticks_orientation>

@@ -176,6 +176,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/matlab_sim_driver.py
   scripts/utils/clock_publisher.py
   scripts/utils/fake_pose_publisher.py
+  scripts/utils/reference_pose_publisher.py
 
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
