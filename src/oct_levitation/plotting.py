@@ -234,51 +234,51 @@ def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple 
     """
     assert state_history.shape[1] == 12, "State history should have 12 columns"
     fig, axs = plt.subplots(2, 6, figsize=figsize)
-    axs[0, 0].plot(state_history[:, 0], label='x')
+    axs[0, 0].plot(state_history[:, 0]*1e3, label='x')
     axs[0, 0].set_title('x')
     axs[0, 0].set_xlabel('Time')
-    axs[0, 0].set_ylabel('Position (m)')
-    axs[0, 1].plot(state_history[:, 1], label='y')
+    axs[0, 0].set_ylabel('Position (mm)')
+    axs[0, 1].plot(state_history[:, 1]*1e3, label='y')
     axs[0, 1].set_title('y')
     axs[0, 1].set_xlabel('Time')
-    axs[0, 1].set_ylabel('Position (m)')
-    axs[0, 2].plot(state_history[:, 2], label='z')
+    axs[0, 1].set_ylabel('Position (mm)')
+    axs[0, 2].plot(state_history[:, 2]*1e3, label='z')
     axs[0, 2].set_title('z')
     axs[0, 2].set_xlabel('Time')
-    axs[0, 2].set_ylabel('Position (m)')
-    axs[0, 3].plot(state_history[:, 3], label='vx')
+    axs[0, 2].set_ylabel('Position (mm)')
+    axs[0, 3].plot(state_history[:, 3]*1e3, label='vx')
     axs[0, 3].set_title('vx')
     axs[0, 3].set_xlabel('Time')
-    axs[0, 3].set_ylabel('Velocity (m/s)')
-    axs[0, 4].plot(state_history[:, 4], label='vy')
+    axs[0, 3].set_ylabel('Velocity (mm/s)')
+    axs[0, 4].plot(state_history[:, 4]*1e3, label='vy')
     axs[0, 4].set_title('vy')
     axs[0, 4].set_xlabel('Time')
-    axs[0, 4].set_ylabel('Velocity (m/s)')
-    axs[0, 5].plot(state_history[:, 5], label='vz')
+    axs[0, 4].set_ylabel('Velocity (mm/s)')
+    axs[0, 5].plot(state_history[:, 5]*1e3, label='vz')
     axs[0, 5].set_title('vz')
     axs[0, 5].set_xlabel('Time')
-    axs[0, 5].set_ylabel('Velocity (m/s)')
-    axs[1, 0].plot(state_history[:, 6], label='phi')
+    axs[0, 5].set_ylabel('Velocity (mm/s)')
+    axs[1, 0].plot(np.rad2deg(state_history[:, 6]), label='phi')
     axs[1, 0].set_title('phi')
     axs[1, 0].set_xlabel('Time')
     axs[1, 0].set_ylabel('Angle (rad)')
-    axs[1, 1].plot(state_history[:, 7], label='theta')
+    axs[1, 1].plot(np.rad2deg(state_history[:, 7]), label='theta')
     axs[1, 1].set_title('theta')
     axs[1, 1].set_xlabel('Time')
     axs[1, 1].set_ylabel('Angle (rad)')
-    axs[1, 2].plot(state_history[:, 8], label='psi')
+    axs[1, 2].plot(np.rad2deg(state_history[:, 8]), label='psi')
     axs[1, 2].set_title('psi')
     axs[1, 2].set_xlabel('Time')
     axs[1, 2].set_ylabel('Angle (rad)')
-    axs[1, 3].plot(state_history[:, 9], label='wx')
+    axs[1, 3].plot(np.rad2deg(state_history[:, 9]), label='wx')
     axs[1, 3].set_title('wx')
     axs[1, 3].set_xlabel('Time')
     axs[1, 3].set_ylabel('Angular Velocity (rad/s)')
-    axs[1, 4].plot(state_history[:, 10], label='wy')
+    axs[1, 4].plot(np.rad2deg(state_history[:, 10]), label='wy')
     axs[1, 4].set_title('wy')
     axs[1, 4].set_xlabel('Time')
     axs[1, 4].set_ylabel('Angular Velocity (rad/s)')
-    axs[1, 5].plot(state_history[:, 11], label='wz')
+    axs[1, 5].plot(np.rad2deg(state_history[:, 11]), label='wz')
     axs[1, 5].set_title('wz')
     axs[1, 5].set_xlabel('Time')
     axs[1, 5].set_ylabel('Angular Velocity (rad/s)')
@@ -294,10 +294,10 @@ def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (1
     assert state_history.shape[1] == 12, "State history should have 12 columns"
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot(state_history[:, 0], state_history[:, 1], state_history[:, 2])
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
+    ax.plot(state_history[:, 0]*1e3, state_history[:, 1]*1e3, state_history[:, 2]*1e3)
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
     if save_as and save_as.endswith('.svg'):
         plt.savefig(save_as, format='svg')
         if save_as_emf:
@@ -417,8 +417,8 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Extract reference position and orientation
-    reference_position = reference_pose[:3]*1000
-    reference_orientation = np.rad2deg(reference_pose[3:])
+    reference_position = reference_pose[:3]*1000 # in mm
+    reference_orientation = reference_pose[3:] # Reference orientation is taken as quaternion
 
     # Convert quaternions to Euler angles
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
@@ -481,6 +481,7 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
     - reference_position (np.ndarray): Array of size 3 [x, y, z] representing the constant reference position.
     """
     time = actual_poses['time'].values
+    # All positions are in mm
     actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
     reference_position = reference_position*1000
 
@@ -645,11 +646,13 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
     # Compute actual alpha and beta from quaternions
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
     actual_yx = np.array([geometry.get_normal_alpha_beta_from_quaternion(q/np.linalg.norm(q)) for q in actual_orientations])
+
+    # Convert to degrees
     actual_xy = np.rad2deg(np.roll(actual_yx, 1, axis=1))
     reference_angles = np.rad2deg(reference_angles)
     
-    # Extract desired torques Tx and Ty
-    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values
+    # Extract desired torques Tx and Ty, in mN-m
+    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values*1e3
     
     # Create subplots
     fig, axs = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
@@ -668,7 +671,7 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
         axs[1, i].plot(time, torques[:, i], label=f"{torque} Desired")
         axs[1, i].set_title(f"Desired {torque} on COM expressed in world frame")
         axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Torque (mN-mm)")
+        axs[1, i].set_ylabel("Torque (mN-m)")
         axs[1, i].legend()
 
     if scale_equal:
@@ -704,11 +707,11 @@ def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
     """
     time = rp_error_states_df['time'].values
     
-    alpha_beta_error = rp_error_states_df[['vector_0', 'vector_2']].to_numpy()
-    alpha_beta_velocity_error = rp_error_states_df[['vector_1', 'vector_3']].to_numpy()
+    alpha_beta_error = np.rad2deg(rp_error_states_df[['vector_0', 'vector_2']].to_numpy()) # deg
+    alpha_beta_velocity_error = np.rad2deg(rp_error_states_df[['vector_1', 'vector_3']].to_numpy()) # deg/sec
     
     # Extract desired torques Tx and Ty
-    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values
+    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].to_numpy()*1e3 # Convert to mN-m
     
     # Create subplots
     fig, axs = plt.subplots(3, 2, figsize=(14, 8), sharex=True)
@@ -725,14 +728,14 @@ def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
         axs[1, i].plot(time, alpha_beta_velocity_error[:, i], label=f"{angle}")
         axs[1, i].set_title(f"{angle} Error of Body Fixed Frame")
         axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Angle (deg)")
+        axs[1, i].set_ylabel("Angle (deg/sec)")
         axs[1, i].legend()
     
     for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
         axs[2, i].plot(time, torques[:, i], label=f"{torque} Desired")
         axs[2, i].set_title(f"Desired {torque} on COM expressed in world frame")
         axs[2, i].set_xlabel("Time (s)")
-        axs[2, i].set_ylabel("Torque (mN-mm)")
+        axs[2, i].set_ylabel("Torque (mN-m)")
         axs[2, i].legend()
 
     if scale_equal:
@@ -976,7 +979,7 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
     reference_angles_deg = np.rad2deg(np.roll(reference_angles, 1, axis=1))
     
     # Extract desired torques Tx and Ty
-    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values
+    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values*1e3
     
     # Create subplots
     fig, axs = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
@@ -996,7 +999,7 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
         axs[1, i].plot(time, torques[:, i], label=f"{torque} Desired")
         axs[1, i].set_title(f"Desired {torque} on COM expressed in world frame")
         axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Torque (mN-mm)")
+        axs[1, i].set_ylabel("Torque (mN-m)")
         axs[1, i].legend()
 
     if scale_equal:
@@ -1244,7 +1247,7 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
     plt.show()
     return fig, axs
 
-def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
+def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
                                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
@@ -1268,7 +1271,7 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # Plot actual positions
+    # Plot actual positions, CONVERTED TO mm
     ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot reference positions (non-constant)
@@ -1345,7 +1348,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # Plot actual positions
+    # Plot actual positions, CONVERTED TO mm
     ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot constant reference position (horizontal line)
@@ -1456,6 +1459,8 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
 
 def plot_forces_and_torques(ft_df: pd.DataFrame,
                             title: str="Desired Forces and Torques",
+                            torque_in_mNm: bool = True,
+                            force_in_N: bool = False,
                             save_as: str=None,
                             save_as_emf: bool=False,
                             inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
@@ -1468,14 +1473,25 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
                            'array_0' = Fx, 'array_1' = Fy, 'array_2' = Fz
                            'array_3' = Tx, 'array_4' = Ty, 'array_5' = Tz
     """
+    force_units = "mN"
+    force_multiplier = 1e3
+    torque_units = "Nm"
+    torque_multipler = 1
+    if force_in_N:
+        force_units = "N"
+        force_multiplier = 1
+    if torque_in_mNm:
+        torque_units = "mN-m"
+        torque_multiplier = 1e3
+
     # Extract relevant columns
     time = ft_df['time']
-    Fx = ft_df['array_0'] * 1e3  # Convert to mN
-    Fy = ft_df['array_1'] * 1e3
-    Fz = ft_df['array_2'] * 1e3
-    Tx = ft_df['array_3'] * 1e6  # Convert to mN-mm
-    Ty = ft_df['array_4'] * 1e6
-    Tz = ft_df['array_5'] * 1e6
+    Fx = ft_df['array_0'] * force_multiplier  # Convert to mN
+    Fy = ft_df['array_1'] * force_multiplier
+    Fz = ft_df['array_2'] * force_multiplier
+    Tx = ft_df['array_3'] * torque_multipler  # Convert to mN-mm
+    Ty = ft_df['array_4'] * torque_multipler
+    Tz = ft_df['array_5'] * torque_multipler
 
     # Create subplots: 2 rows, 3 columns
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
@@ -1483,7 +1499,7 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
 
     # Plot forces (mN)
     axes[0, 0].plot(time, Fx, color='b')
-    axes[0, 0].set_ylabel('Force (mN)')
+    axes[0, 0].set_ylabel(f'Force ({force_units})')
     axes[0, 0].set_title('Fx')
 
     axes[0, 1].plot(time, Fy, color='g')
@@ -1498,7 +1514,7 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
 
     # Plot torques (mN-mm)
     axes[1, 0].plot(time, Tx, color='b')
-    axes[1, 0].set_ylabel('Torque (mN-mm)')
+    axes[1, 0].set_ylabel(f'Torque ({torque_units})')
     axes[1, 0].set_title('Tx')
 
     axes[1, 1].plot(time, Ty, color='g')
@@ -1533,6 +1549,8 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
 
 def plot_forces_and_torques_from_wrench_stamped(ft_df: pd.DataFrame,
                                                 title: str,
+                                                torque_in_mNm: bool = True,
+                                                force_in_N: bool = False,
                                                 save_as: str=None,
                                                 save_as_emf: bool=False,
                                                 inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
@@ -1546,7 +1564,7 @@ def plot_forces_and_torques_from_wrench_stamped(ft_df: pd.DataFrame,
                             "wrench.torque.y": "array_4",
                             "wrench.torque.z": "array_5"
                         }, errors="raise", inplace=False)
-    return plot_forces_and_torques(ft_df, title, save_as, save_as_emf, inkscape_path, **kwargs)
+    return plot_forces_and_torques(ft_df, title, torque_in_mNm, force_in_N, save_as, save_as_emf, inkscape_path, **kwargs)
 
 def plot_3d_quiver(dataframe: pd.DataFrame, 
                    scale_factor: float=1.0, 
@@ -1571,6 +1589,7 @@ def plot_3d_quiver(dataframe: pd.DataFrame,
     if not required_columns.issubset(dataframe.columns):
         raise ValueError(f"Dataframe must contain the columns: {required_columns}")
     
+    # Converting distances to mm and fields to mT
     Px, Py, Pz = dataframe['Px'] * 1000, dataframe['Py'] * 1000, dataframe['Pz'] * 1000
     Bx, By, Bz = dataframe['Bx'] * 1000, dataframe['By'] * 1000, dataframe['Bz'] * 1000
     Bx_scaled, By_scaled, Bz_scaled = Bx * scale_factor, By * scale_factor, Bz * scale_factor
@@ -1882,9 +1901,9 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: 
         actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
 
         gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
-        for idx, key in enumerate(gradient_keys, start=3):
-            desired_gradients[key].append(desired_field[idx] * 1000)
-            actual_gradients[key].append(actual_field[idx] * 1000)
+        for idx, key in enumerate(gradient_keys, start=3): 
+            desired_gradients[key].append(desired_field[idx] * 1000) # Converting all readings to mT/m
+            actual_gradients[key].append(actual_field[idx] * 1000) # Converting all readings to mT/m
 
     # Plot the gradient components with shared axes
     fig, axs = plt.subplots(5, 1, figsize=(12, 10), sharex=True, sharey=True)
@@ -2013,7 +2032,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     
     fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
     
-    # Force subplots (columns 0, 1, 2)
+    # Force subplots (columns 0, 1, 2), Forces converted to mN
     for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
         axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], **kwargs)
         axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
@@ -2024,14 +2043,14 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
         if i == 2:
             axes[0, i].legend(loc='upper right')
 
-    # Torque subplots (columns 0, 1, 2)
+    # Torque subplots (columns 0, 1, 2), Torques converted to mN-m
     for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
-        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]], label='Actual Torque', color=colors[2], **kwargs)
-        axes[1, i].plot(time, desired_wrench[key_map[torque_component]], label='Reference Torque', color=colors[3], **kwargs)
+        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], **kwargs)
+        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
         axes[1, i].set_title(f'{torque_component} - Torque')
         axes[1, i].grid(True)
         if i == 0:
-            axes[1, i].set_ylabel('Torque (mN-mm)')
+            axes[1, i].set_ylabel('Torque (mN-m)')
         if i == 2:
             axes[1, i].legend(loc='upper right')
 

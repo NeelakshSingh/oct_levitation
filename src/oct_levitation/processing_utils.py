@@ -1,11 +1,12 @@
 import os
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
 import scipy.fft as scifft
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Union
 
 ###############################################
 # Legacy utility functions from Jasan's
@@ -252,10 +253,13 @@ def read_data_pandas(dwd, topics, interpolate_topic):
 
     return time, interp_dfs
 
-def read_data_pandas_all(dwd, interpolate_topic):
+def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: str, topic_exclude_list: List[str] = []) -> Dict[str, pd.DataFrame]:
     print(f"Reading data from directory: {dwd}")
-    csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv")]
+    csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv") and f[:-4] not in topic_exclude_list]
     print(f"Found {len(csv_list)} CSV files: {csv_list}")
+    if len(csv_list) == 0:
+        warnings.warn("No CSV files were found. If you are accessing the rosbag folder, make\
+                      sure that you run bagpyext first.")
     return read_data_pandas(dwd, csv_list, interpolate_topic)
 
 ###############################################

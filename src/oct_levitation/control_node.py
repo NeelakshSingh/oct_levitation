@@ -3,7 +3,7 @@ import rospy
 import oct_levitation.mechanical as mechanical
 import tf2_ros
 
-from geometry_msgs.msg import WrenchStamped, TransformStamped
+from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
 from control_utils.msg import VectorStamped
 from std_msgs.msg import String
@@ -36,7 +36,7 @@ class ControlSessionNodeBase:
         self.metadata_topic = rospy.get_param("~metadata_pub_topic", "control_session/metadata")
 
         self.metadata_pub = rospy.Publisher(self.metadata_topic, String, latch=True, queue_size=1)
-        self.metadata_msg : String = None
+        self.metadata_msg : String = String()
 
         self.control_gain_publisher: rospy.Publisher = None
 
@@ -88,6 +88,7 @@ class ControlSessionNodeBase:
         
         self.tf_reference_sub = None
         self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
+        self.last_reference_tf_msg.transform.rotation = Quaternion(0, 0, 0, 1)
         if self.tracking_poses_on:
             self.tf_reference_sub = rospy.Subscriber(self.tf_reference_sub_topic, TransformStamped,
                                                      self.tf_reference_sub_callback, queue_size=1)
@@ -146,7 +147,6 @@ class ControlSessionNodeBase:
         # set by the control_logic if it is implemented acc to
         # the specifications.
         self.control_input_publisher.publish(self.control_input_message)
-        self.control_gain_publisher.publish(self.control_gains_message)
         self.currents_publisher.publish(self.desired_currents_msg)
 
         if self.publish_desired_com_wrenches:

@@ -109,7 +109,10 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         # self.calibration_file = "octomag_5point.yaml"
         self.control_gains_message.vector = np.concatenate((self.K.flatten(), np.array([self.diff_alpha, self.diff_beta])))
         self.metadata_msg = String()
-        self.metadata_msg.data = f"Calibration File: {self.calibration_file}"
+        self.metadata_msg.data = f"""
+        EXPERIMENT METADATA
+        Calibration File: {self.calibration_file}
+        Experiment type: Sinusoidal refrence tracking along z-axis."""
 
     def simplified_Fz_allocation(self, tf_msg: TransformStamped, Fz_des: float):
         quaternion = np.array([
