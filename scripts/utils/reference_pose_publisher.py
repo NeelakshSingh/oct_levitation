@@ -10,7 +10,7 @@ class ReferencePosePublisher:
     def __init__(self):
         rospy.init_node("reference_pose_publisher")
         self.tf_topic = rigid_bodies.Onyx80x22DiscCenterRingDipole.pose_frame + "_reference"
-        self.T = 2 # cycle period in seconds
+        self.f_pub = 100
 
         ### Sinusoidal yaw
         # self.sine_yaw_amplitude = 2*np.pi/3
@@ -36,11 +36,10 @@ class ReferencePosePublisher:
         ### Sinusoidal Z
         # self.z_amplitude = 1e-2
         # self.z_omega = 2*np.pi/self.T
-        
+
 
         self.start_time = rospy.Time.now().to_sec()
 
-        self.f_pub = 100
 
         self.tf_pub = rospy.Publisher(self.tf_topic, TransformStamped, queue_size=1)
         self.tf_timer = rospy.Timer(rospy.Duration(1/self.f_pub), self.tf_timer)

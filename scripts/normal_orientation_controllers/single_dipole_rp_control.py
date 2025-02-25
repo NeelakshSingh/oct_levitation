@@ -74,6 +74,9 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # self.K_theta = np.array([[0.0299982, 0.0007758]]) # Tuned for overdamped PD response.
         # self.K_phi = np.array([[0.02121, 0.001454]]) # Tuned to include the external disc
 
+        # self.K_theta = np.array([[0.0139982, 0.0015758]]) # Tuned for overdamped PD response.
+        # self.K_phi = np.array([[0.0200, 0.001054]]) # Tuned to include the external disc
+
         rospy.loginfo(f"Control gains for Tx: {self.K_phi}, Ty: {self.K_theta}")
 
         self.control_gains_message = VectorStamped()
@@ -111,7 +114,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.__first_reading = True
         self.metadata_msg.data = f"""
         Experiment metadata.
-        Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
+        Experiment type: Lissajous angles tracking experiment with Actuation matrix at origin and orientation varying M.
         Calibration file: {self.calibration_file}
         Gains: {self.K_phi.flatten(), self.K_theta.flatten()}
         Calibration type: Legacy yaml file
@@ -125,11 +128,13 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         if self.south_pole_up:
             dipole_moment = -dipole_moment
         M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
+        # M_tau = geometry.magnetic_interaction_field_to_torque(s_d*np.array([0.0, 0.0, -1.0]))
         # Rejecting the singular row since we are almost always nearly upright.
         M_tau = M_tau[:2]
         M_f = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
         # A_field = self.mpem_model.getActuationMatrix(np.zeros(3))[:3]
-        A = self.mpem_model.getActuationMatrix(dipole_position)
+        # A = self.mpem_model.getActuationMatrix(dipole_position)
+        A = self.mpem_model.getActuationMatrix(np.zeros(3))
         M = block_diag(M_tau, M_f)
 
         Tau_des = np.array([[Tau_x, Tau_y]]).T
