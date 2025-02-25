@@ -696,6 +696,8 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
 
 def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
                                        ft_df: pd.DataFrame,
+                                       angle_error_cols: List[str],
+                                       velocity_error_cols: List[str],
                                        scale_equal: bool=True,
                                        save_as: str=None,
                                        save_as_emf: bool=False,
@@ -707,8 +709,8 @@ def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
     """
     time = rp_error_states_df['time'].values
     
-    alpha_beta_error = np.rad2deg(rp_error_states_df[['vector_0', 'vector_2']].to_numpy()) # deg
-    alpha_beta_velocity_error = np.rad2deg(rp_error_states_df[['vector_1', 'vector_3']].to_numpy()) # deg/sec
+    alpha_beta_error = np.rad2deg(rp_error_states_df[angle_error_cols].to_numpy()) # deg
+    alpha_beta_velocity_error = np.rad2deg(rp_error_states_df[velocity_error_cols].to_numpy()) # deg/sec
     
     # Extract desired torques Tx and Ty
     torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].to_numpy()*1e3 # Convert to mN-m
@@ -2010,6 +2012,8 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
             combined_pose_currents['transform.rotation.z'].iloc[i],
             combined_pose_currents['transform.rotation.w'].iloc[i]
         ])
+
+        quaternion = quaternion/np.linalg.norm(quaternion)
 
         M = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quaternion=quaternion,
                                                                  dipole_strength=dipole_strength,

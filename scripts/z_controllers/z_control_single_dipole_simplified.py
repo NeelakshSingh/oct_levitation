@@ -118,8 +118,8 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         quaternion = np.array([
             tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
         ])
-        # normal = geometry.get_normal_vector_from_quaternion(quaternion)
-        normal = np.array([0, 0, -1])
+        normal = -geometry.get_normal_vector_from_quaternion(quaternion) # -ve because south pole up
+        # normal = np.array([0, 0, -1])
         # normal = np.array([0, 0, 1]) # FOR OCTOMAG FILE ONLY
         s_d = self.rigid_body_dipole.dipole_list[0].strength
         dipole_vector = s_d * normal

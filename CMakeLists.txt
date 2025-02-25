@@ -160,6 +160,7 @@ catkin_install_python(PROGRAMS
   scripts/z_controllers/z_control_com_gen_alloc.py
   scripts/z_controllers/z_yaw_control_com_gen_alloc.py
   scripts/z_controllers/z_control_single_dipole_simplified.py
+  scripts/z_controllers/z_rp_control_single_dipole.py
 
   # Yaw Control Nodes
   scripts/yaw_controllers/yaw_control_com_wrench.py

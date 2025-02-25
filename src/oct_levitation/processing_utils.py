@@ -253,14 +253,23 @@ def read_data_pandas(dwd, topics, interpolate_topic):
 
     return time, interp_dfs
 
-def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: str, topic_exclude_list: List[str] = []) -> Dict[str, pd.DataFrame]:
+def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: str, topic_exclude_list: List[str] = [],
+                         exclude_known_latched_topics: bool = True) -> Dict[str, pd.DataFrame]:
     print(f"Reading data from directory: {dwd}")
-    csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv") and f[:-4] not in topic_exclude_list]
-    print(f"Found {len(csv_list)} CSV files: {csv_list}")
-    if len(csv_list) == 0:
+    latched_topic_suffixes = ["_control_gains", "_control_session_metadata"]
+    def latched_exclusion(topic: str) -> bool:
+        return np.any(np.array([topic.endswith(suffix) for suffix in latched_topic_suffixes]))
+    csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv")]
+    latched_exclusion_topics = [f for f in csv_list if latched_exclusion(f)]
+
+    final_exclusion_list = latched_exclusion_topics + topic_exclude_list
+
+    csv_list_filtered = [f for f in csv_list if f not in final_exclusion_list]
+    print(f"Found {len(csv_list_filtered)} CSV files: {csv_list_filtered}")
+    if len(csv_list_filtered) == 0:
         warnings.warn("No CSV files were found. If you are accessing the rosbag folder, make\
-                      sure that you run bagpyext first.")
-    return read_data_pandas(dwd, csv_list, interpolate_topic)
+                      sure that you run bagpyext first. Check the exclusion list too.")
+    return read_data_pandas(dwd, csv_list_filtered, interpolate_topic)
 
 ###############################################
 # DATA CONVERSION AND PROCESSING FUNCTIONS

@@ -24,15 +24,6 @@ class ReferencePosePublisher:
         # self.f_pitch = 0.1
         # self.omega_pitch = 2*np.pi*self.f_pitch
 
-        ### Sinusoidal Z
-        # self.z_amplitude = 1e-2
-        # self.z_omega = 2*np.pi/self.T
-
-
-        self.start_time = rospy.Time.now().to_sec()
-
-        self.f_pub = 100
-
         ### Lissajous rp trajectory
         self.lissajous_angle = np.deg2rad(30)
         self.T_lissajous = 15
@@ -41,6 +32,15 @@ class ReferencePosePublisher:
         self.lissajous_traj_N = self.alpha_beta_traj.shape[0]
         self.lissajous_step = 0
         self.lissajous_counter = 0
+
+        ### Sinusoidal Z
+        # self.z_amplitude = 1e-2
+        # self.z_omega = 2*np.pi/self.T
+        
+
+        self.start_time = rospy.Time.now().to_sec()
+
+        self.f_pub = 100
 
         self.tf_pub = rospy.Publisher(self.tf_topic, TransformStamped, queue_size=1)
         self.tf_timer = rospy.Timer(rospy.Duration(1/self.f_pub), self.tf_timer)
@@ -69,9 +69,6 @@ class ReferencePosePublisher:
         # roll = np.deg2rad(15)
         # pitch = np.deg2rad(15)
 
-        ### Sinusoidal Z
-        # pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
-
         ### Lissajous trajectory for rp
         yaw = 0
         self.lissajous_step = self.lissajous_counter % self.lissajous_traj_N
@@ -81,6 +78,9 @@ class ReferencePosePublisher:
 
         quaternion = geometry.quaternion_from_euler_xyz(np.array([roll, pitch, yaw]))
         pose.transform.rotation = Quaternion(*quaternion)
+        
+        ### Sinusoidal Z
+        # pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
 
         self.tf_pub.publish(pose)
     
