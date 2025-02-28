@@ -25,17 +25,18 @@ class ReferencePosePublisher:
         # self.omega_pitch = 2*np.pi*self.f_pitch
 
         ### Lissajous rp trajectory
-        self.lissajous_angle = np.deg2rad(30)
-        self.T_lissajous = 15
-        self.alpha_beta_traj = return_lissajous_traj('circle', self.lissajous_angle, 1/self.f_pub, False, 
-                                                self.T_lissajous)
-        self.lissajous_traj_N = self.alpha_beta_traj.shape[0]
-        self.lissajous_step = 0
-        self.lissajous_counter = 0
+        # self.lissajous_angle = np.deg2rad(30)
+        # self.T_lissajous = 15
+        # self.alpha_beta_traj = return_lissajous_traj('circle', self.lissajous_angle, 1/self.f_pub, False, 
+        #                                         self.T_lissajous)
+        # self.lissajous_traj_N = self.alpha_beta_traj.shape[0]
+        # self.lissajous_step = 0
+        # self.lissajous_counter = 0
 
         ### Sinusoidal Z
-        # self.z_amplitude = 1e-2
-        # self.z_omega = 2*np.pi/self.T
+        self.z_amplitude = 1e-2
+        self.Tz = 2
+        self.z_omega = 2*np.pi/self.Tz
 
 
         self.start_time = rospy.Time.now().to_sec()
@@ -69,17 +70,17 @@ class ReferencePosePublisher:
         # pitch = np.deg2rad(15)
 
         ### Lissajous trajectory for rp
-        yaw = 0
-        self.lissajous_step = self.lissajous_counter % self.lissajous_traj_N
-        self.lissajous_counter += 1
-        roll = self.alpha_beta_traj[self.lissajous_step, 0]
-        pitch = self.alpha_beta_traj[self.lissajous_step, 1]
+        # yaw = 0
+        # self.lissajous_step = self.lissajous_counter % self.lissajous_traj_N
+        # self.lissajous_counter += 1
+        # roll = self.alpha_beta_traj[self.lissajous_step, 0]
+        # pitch = self.alpha_beta_traj[self.lissajous_step, 1]
 
-        quaternion = geometry.quaternion_from_euler_xyz(np.array([roll, pitch, yaw]))
-        pose.transform.rotation = Quaternion(*quaternion)
+        # quaternion = geometry.quaternion_from_euler_xyz(np.array([roll, pitch, yaw]))
+        # pose.transform.rotation = Quaternion(*quaternion)
         
         ### Sinusoidal Z
-        # pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
+        pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
 
         self.tf_pub.publish(pose)
     

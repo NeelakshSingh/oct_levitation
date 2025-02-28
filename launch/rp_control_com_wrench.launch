@@ -1,4 +1,4 @@
 <launch>
     <node pkg="oct_levitation" name="single_dipole_rp_control" type="single_dipole_rp_control.py" output="screen"/>
-    <node pkg="oct_levitation" name="fake_pose_publisher" type="fake_pose_publisher.py" output="screen"/>
+    <!-- <node pkg="oct_levitation" name="fake_pose_publisher" type="fake_pose_publisher.py" output="screen"/> -->
 </launch>

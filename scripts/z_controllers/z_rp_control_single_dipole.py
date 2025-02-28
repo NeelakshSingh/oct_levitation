@@ -149,7 +149,7 @@ class ZRPSingleDipoleController(ControlSessionNodeBase):
             self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents.flatten()
-    
+        
     def callback_control_logic(self, tf_msg: TransformStamped):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.control_input_message = VectorStamped() # Empty message

@@ -5,8 +5,7 @@ import control as ct
 
 import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
-import oct_levitation.common as common
-import oct_levitation.numerical as numerical
+import oct_levitation.filters as filters
 
 from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
@@ -111,11 +110,17 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.last_phi = 0.0
         self.last_theta = 0.0
 
+        self.median_filter_window_size = 3
+
+        self.SpikeFilter = filters.MedianFilter(self.median_filter_window_size)
+
         self.__first_reading = True
         self.metadata_msg.data = f"""
         Experiment metadata.
-        Experiment type: Lissajous angles tracking experiment with Actuation matrix at origin and orientation varying M.
+        Experiment type: Full Var MA Lissajous 30 deg tracking experiment to check vicon occlusion.
         Calibration file: {self.calibration_file}
+        Hardware Connected: {self.HARDWARE_CONNECTED}
+        Median Filter is used with window size {self.median_filter_window_size}
         Gains: {self.K_phi.flatten(), self.K_theta.flatten()}
         Calibration type: Legacy yaml file
         """
@@ -133,8 +138,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         M_tau = M_tau[:2]
         M_f = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
         # A_field = self.mpem_model.getActuationMatrix(np.zeros(3))[:3]
-        # A = self.mpem_model.getActuationMatrix(dipole_position)
-        A = self.mpem_model.getActuationMatrix(np.zeros(3))
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+        # A = self.mpem_model.getActuationMatrix(np.zeros(3))
         M = block_diag(M_tau, M_f)
 
         Tau_des = np.array([[Tau_x, Tau_y]]).T
@@ -172,6 +177,26 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
             self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents.flatten()
+    
+    def local_frame_torque_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float):
+        dipole_quaternion, dipole_position = geometry.numpy_arrays_from_tf_msg(tf_msg)
+        dipole = self.rigid_body_dipole.dipole_list[0]
+        dipole_moment_local = dipole.strength * dipole.axis
+        Mtau_local = geometry.magnetic_interaction_field_to_torque(dipole_moment_local)[:2]
+        Tau_des_local = np.array([[Tau_x, Tau_y]]).T
+        b_des_local = np.linalg.pinv(Mtau_local) @ Tau_des_local
+
+        # Now let's allocate for forces.
+        # Since we don't want any forces we really just want zero gradients.
+        g_des = np.zeros((5, 1))
+        b_des = geometry.rotate_vector_from_quaternion(dipole_quaternion, b_des_local)
+        B_des = np.vstack((b_des.reshape(-1,1), g_des))
+
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+
+        des_currents = (np.linalg.pinv(A) @ B_des).flatten()
+
+        return des_currents
 
     def callback_control_logic(self, tf_msg: TransformStamped):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
@@ -232,6 +257,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Tau_x = u_phi[0, 0]
         Tau_y = u_theta[0, 0]
 
+        ## Filtering out spikes through a median filter
+        # Tau_des = np.array([Tau_x, Tau_y])
+        # Tau_des = self.SpikeFilter(Tau_des)
+        # Tau_x = Tau_des[0]
+        # Tau_y = Tau_des[1]
+
         self.error_state_msg.vector = np.concatenate((phi_error.flatten(), theta_error.flatten()))
         self.error_state_pub.publish(self.error_state_msg)
         self.control_input_message.vector = [Tau_x, Tau_y]
@@ -241,7 +272,10 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
+        # des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
+
+        # Let's try the field local frame allocation which should always yield the correct torque configuration
+        des_currents =  self.local_frame_torque_allocation(tf_msg, Tau_x, Tau_y)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 
