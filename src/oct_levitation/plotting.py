@@ -19,6 +19,9 @@ import scipy.signal as signal
 import scipy.fft as scifft
 
 from typing import Optional, Tuple, List, Callable
+from mayavi import mlab
+from tvtk.util.ctf import ColorTransferFunction
+from warnings import warn
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
 
@@ -2398,7 +2401,7 @@ def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
                               **kwargs):
     
     fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='vector_0')  # Blue
+    ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='vector_0', **kwargs)  # Blue
     ax.set_xlabel('Time')
     ax.set_ylabel('Vector 0')
     ax.set_title('JMA Condition Plot')
@@ -2443,7 +2446,7 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}", color=colors[i])
+        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}", color=colors[i], **kwargs)
         axs[i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Position (mm)")
@@ -2452,7 +2455,7 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
 
     # Euler angle plots
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[i+3].plot(time, actual_euler[:, i], label=f"Actual {angle}", color=colors[i])
+        axs[i+3].plot(time, actual_euler[:, i], label=f"Actual {angle}", color=colors[i], **kwargs)
         axs[i+3].set_title(angle)
         axs[i+3].set_xlabel("Time (s)")
         axs[i+3].set_ylabel("Angle (deg)")
@@ -2460,7 +2463,7 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
 
     # Finally plotting the condition number.
     # Plot condition number in the last subplot
-    axs[6].plot(cond_df['time'], cond_df['condition'], color=colors[6], label="Allocation Condition Number")
+    axs[6].plot(cond_df['time'], cond_df['condition'], color=colors[6], label="Allocation Condition Number", **kwargs)
     axs[6].set_xlabel('Time')
     axs[6].set_ylabel("Condition Number")
     axs[6].legend()
@@ -2489,3 +2492,61 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
     plt.show()
     return fig, axs
+
+def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
+                                                  calibration_model: common.OctomagCalibratedModel,
+                                                  orientation_quaternion: np.ndarray,
+                                                  cond_threshold: float = 20,
+                                                  cond_color_steps: float = 10,
+                                                  cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                  cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                  cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                  num_samples: int = 1000,
+                                                  save_as: str = None):
+    
+    # Sampling points according to the desired plot style.
+    X = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
+    Y = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
+    Z = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
+    X, Y, Z = np.meshgrid(X, Y, Z)
+
+    M = geometry.magnetic_interaction_matrix_from_quaternion(orientation_quaternion,
+                                                             dipole.strength,
+                                                             full_mat=True,
+                                                             torque_first=True,
+                                                             dipole_axis=dipole.axis)
+
+    @np.vectorize
+    def get_ma_condition(x, y, z):
+        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+        return np.linalg.cond(M @ A)
+    
+    cond = get_ma_condition(X, Y, Z)
+
+    # Drawing the mayavi plot
+    src = mlab.pipeline.scalar_field(X, Y, Z, cond)
+    
+    # Create a color transfer function (CTF)
+    ctf = ColorTransferFunction()
+
+    # Add solid green color for values < 20
+    ctf.add_rgb_point(0,   0, 1, 0)  # Green at lowest value
+    ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to 19.9
+
+    # Add colormap for values ≥ 20 (e.g., blue to red gradient)
+    ctf.add_rgb_point(cond_threshold + cond_color_steps,  0, 0, 1)  # Blue 
+    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 0, 0)  # Red
+    ctf.add_rgb_point(cond_threshold + 3*cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+
+    vol = mlab.pipeline.volume(src)
+    vol._volume_property.set_color(ctf)  # Set custom color mapping
+    vol._ctf = ctf
+    vol.update_ctf = True  # Update color transfer function
+
+    if save_as is not None:
+        if not save_as.endswith(".vti"):
+            warn("The volume plot is not being saved as the preferred .vti format. Use .vti format to view it in the interactive viewer.")
+        mlab.pipeline.save(save_as)
+
+    mlab.show()
+    return src
