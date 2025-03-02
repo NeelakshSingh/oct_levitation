@@ -389,7 +389,7 @@ def quaternion_from_euler_zyx(euler: np.ndarray) -> np.ndarray:
     Returns:
         q: Quaternion in the form [x, y, z, w]
     """
-    # Change euler to y,p,r form
+    # Change euler to r, p, y form
     euler = np.array([euler[2], euler[1], euler[0]])
     scipy_rotation = scitf.Rotation.from_euler('ZYX', euler)
     q = scipy_rotation.as_quat()
