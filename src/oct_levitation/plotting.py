@@ -1396,7 +1396,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     return fig, ax
 
 ######################################
-# PLOTTING CURRENTS, CONTROL INPUTS, FIELDS
+# PLOTTING CURRENTS, CONTROL INPUTS, FIELDS, CONDITION NUMBERS
 ######################################
 
 def plot_actual_currents(system_state_df: pd.DataFrame,
@@ -2384,5 +2384,108 @@ def plot_ffts_from_two_dataframes(dataframe1: pd.DataFrame,
             if inkscape_path:
                 os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
 
+    plt.show()
+    return fig, axs
+
+######################################
+# MAGNETIC ACTUATION ANALYSIS PLOTS
+######################################
+
+def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
+                              save_as: str = None,
+                              save_as_emf: bool = False,
+                              inkscape_path: str = INKSCAPE_PATH,
+                              **kwargs):
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='vector_0')  # Blue
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Vector 0')
+    ax.set_title('JMA Condition Plot')
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    plt.show()
+
+    return fig, ax
+
+def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df: pd.DataFrame, scale_equal: bool = True,
+                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
+    """
+    Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
+    - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
+    """
+    time = actual_poses['time'].values
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+
+    colors = ['#0343df', '#e50000', '#15b01a', '#f97306', '#7e1e9c', '#ffff14', 'k']
+
+    # Plot positions
+    fig, axs = plt.subplots(7, 1, figsize=(12, 21), sharex=True)
+
+    # Position plots
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}", color=colors[i])
+        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Position (mm)")
+        axs[i].grid(True, linestyle='--', alpha=0.7)
+        axs[i].legend()
+
+    # Euler angle plots
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[i+3].plot(time, actual_euler[:, i], label=f"Actual {angle}", color=colors[i])
+        axs[i+3].set_title(angle)
+        axs[i+3].set_xlabel("Time (s)")
+        axs[i+3].set_ylabel("Angle (deg)")
+        axs[i+3].legend()
+
+    # Finally plotting the condition number.
+    # Plot condition number in the last subplot
+    axs[6].plot(cond_df['time'], cond_df['condition'], color=colors[6], label="Allocation Condition Number")
+    axs[6].set_xlabel('Time')
+    axs[6].set_ylabel("Condition Number")
+    axs[6].legend()
+
+    for ax in axs:
+        ax.minorticks_on()
+        ax.grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
+        ax.grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
+
+    if scale_equal:
+        axs[2].sharey(axs[0])
+        axs[1].sharey(axs[0])
+        axs[4].sharey(axs[3])
+        axs[5].sharey(axs[3])
+        # Autoscale shared axes
+        for ax in axs: 
+            ax.relim()   
+            ax.autoscale()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
     plt.show()
     return fig, axs
