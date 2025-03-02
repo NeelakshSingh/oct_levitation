@@ -6,22 +6,35 @@ from scipy.linalg import block_diag
 from geometry_msgs.msg import TransformStamped
 
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
+CLOSE_CHECK_TOLERANCE = 1e-3
 IDENTITY_QUATERNION = np.array([0, 0, 0, 1]) # Identity quaternion
 
 def check_if_unit_quaternion(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
-    return np.isclose(np.linalg.norm(q), 1.0)
+    return np.isclose(np.linalg.norm(q), 1.0, rtol=CLOSE_CHECK_TOLERANCE)
 
 def check_if_unit_quaternion_raise_error(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
     if not check_if_unit_quaternion(q):
-        raise ValueError("Quaternion must be a unit quaternion.")
+        raise ValueError(f"Quaternion must be a unit quaternion. Received: {q}")
 
-def arrays_from_tf_msg(tf_msg: TransformStamped):
+def numpy_quaternion_from_tf_msg(tf_msg: TransformStamped):
+    rotation = np.array([
+        tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
+    ])
+    return rotation
+
+def numpy_translation_from_tf_msg(tf_msg: TransformStamped):
+    translation = np.array([
+        tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
+    ])
+    return translation
+
+def numpy_arrays_from_tf_msg(tf_msg: TransformStamped):
     """
     Parameters
     ----------
@@ -31,13 +44,8 @@ def arrays_from_tf_msg(tf_msg: TransformStamped):
     -------
         Tuple(np.ndarray, np.ndarray): The quaternion [x, y, z, w] and the translation [x, y, z] as arrays
     """
-    translation = np.array([
-        tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
-    ])
-
-    rotation = np.array([
-        tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
-    ])
+    translation = numpy_translation_from_tf_msg(tf_msg)
+    rotation = numpy_quaternion_from_tf_msg(tf_msg)
 
     return rotation, translation
 

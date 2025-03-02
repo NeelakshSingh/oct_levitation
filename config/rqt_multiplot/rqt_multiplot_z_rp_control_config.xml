@@ -35,11 +35,11 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin</topic>
-                                    <type>geometry_msgs/TransformStamped</type>
+                                    <topic>/z_rp_control_single_dipole/control_input</topic>
+                                    <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>transform/translation/z</field>
+                                    <field>vector/0</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -48,13 +48,13 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin</topic>
-                                    <type>geometry_msgs/TransformStamped</type>
+                                    <topic>/z_rp_control_single_dipole/control_input</topic>
+                                    <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
                             <color>
                                 <custom_color>#000000</custom_color>
-                                <type>0</type>
+                                <type>1</type>
                             </color>
                             <data>
                                 <circular_buffer_capacity>1000</circular_buffer_capacity>
@@ -64,7 +64,7 @@
                             <style>
                                 <lines_interpolate>false</lines_interpolate>
                                 <pen_style>1</pen_style>
-                                <pen_width>1</pen_width>
+                                <pen_width>2</pen_width>
                                 <render_antialias>false</render_antialias>
                                 <steps_invert>false</steps_invert>
                                 <sticks_baseline>0</sticks_baseline>
@@ -72,8 +72,59 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Z Position</title>
+                            <title>Tx</title>
                         </curve_0>
+                        <curve_1>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/control_input</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/1</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/control_input</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#204a87</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>2</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Ty</title>
+                        </curve_1>
                     </curves>
                     <legend>
                         <visible>true</visible>
@@ -109,7 +160,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/z_rp_control_single_dipole/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -122,7 +173,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/jma_condition</topic>
+                                    <topic>/z_rp_control_single_dipole/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
@@ -183,11 +234,11 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/control_input</topic>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>vector/0</field>
+                                    <field>vector/3</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -196,13 +247,13 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/control_input</topic>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
                             <color>
-                                <custom_color>#000000</custom_color>
-                                <type>0</type>
+                                <custom_color>#729fcf</custom_color>
+                                <type>1</type>
                             </color>
                             <data>
                                 <circular_buffer_capacity>1000</circular_buffer_capacity>
@@ -220,8 +271,161 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Fz</title>
+                            <title>Phi Ref</title>
                         </curve_0>
+                        <curve_1>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/2</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#a40000</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>2</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Phi Actual</title>
+                        </curve_1>
+                        <curve_2>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/5</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#ad7fa8</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Theta Ref</title>
+                        </curve_2>
+                        <curve_3>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/4</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/ref_actual_values</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#4e9a06</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>2</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Theta Actual</title>
+                        </curve_3>
                     </curves>
                     <legend>
                         <visible>true</visible>
@@ -259,11 +463,11 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/estimated_position_and_velocity</topic>
+                                    <topic>/z_rp_control_single_dipole/control_input</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>vector/1</field>
+                                    <field>vector/2</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -272,13 +476,13 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_wrench_z_control/estimated_position_and_velocity</topic>
+                                    <topic>/z_rp_control_single_dipole/control_input</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>
                             <color>
-                                <custom_color>#000000</custom_color>
-                                <type>0</type>
+                                <custom_color>#204a87</custom_color>
+                                <type>1</type>
                             </color>
                             <data>
                                 <circular_buffer_capacity>1000</circular_buffer_capacity>
@@ -288,7 +492,7 @@
                             <style>
                                 <lines_interpolate>false</lines_interpolate>
                                 <pen_style>1</pen_style>
-                                <pen_width>1</pen_width>
+                                <pen_width>2</pen_width>
                                 <render_antialias>false</render_antialias>
                                 <steps_invert>false</steps_invert>
                                 <sticks_baseline>0</sticks_baseline>
@@ -296,7 +500,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Z Dot</title>
+                            <title>Fz</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -734,7 +938,7 @@
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>Untitled Plot</title>
+                    <title>Desired Currents</title>
                 </column_1>
                 <column_2>
                     <axes>
@@ -753,57 +957,6 @@
                     </axes>
                     <curves>
                         <curve_0>
-                            <axes>
-                                <x_axis>
-                                    <field></field>
-                                    <field_type>1</field_type>
-                                    <scale>
-                                        <absolute_maximum>1000</absolute_maximum>
-                                        <absolute_minimum>0</absolute_minimum>
-                                        <relative_maximum>0</relative_maximum>
-                                        <relative_minimum>-30</relative_minimum>
-                                        <type>2</type>
-                                    </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin_reference</topic>
-                                    <type>geometry_msgs/TransformStamped</type>
-                                </x_axis>
-                                <y_axis>
-                                    <field>transform/translation/z</field>
-                                    <field_type>0</field_type>
-                                    <scale>
-                                        <absolute_maximum>1000</absolute_maximum>
-                                        <absolute_minimum>0</absolute_minimum>
-                                        <relative_maximum>0</relative_maximum>
-                                        <relative_minimum>-1000</relative_minimum>
-                                        <type>0</type>
-                                    </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin_reference</topic>
-                                    <type>geometry_msgs/TransformStamped</type>
-                                </y_axis>
-                            </axes>
-                            <color>
-                                <custom_color>#204a87</custom_color>
-                                <type>1</type>
-                            </color>
-                            <data>
-                                <circular_buffer_capacity>1000</circular_buffer_capacity>
-                                <time_frame_length>10</time_frame_length>
-                                <type>0</type>
-                            </data>
-                            <style>
-                                <lines_interpolate>false</lines_interpolate>
-                                <pen_style>1</pen_style>
-                                <pen_width>1</pen_width>
-                                <render_antialias>false</render_antialias>
-                                <steps_invert>false</steps_invert>
-                                <sticks_baseline>0</sticks_baseline>
-                                <sticks_orientation>2</sticks_orientation>
-                                <type>0</type>
-                            </style>
-                            <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Z Position Reference</title>
-                        </curve_0>
-                        <curve_1>
                             <axes>
                                 <x_axis>
                                     <field></field>
@@ -852,7 +1005,58 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Z Position</title>
+                            <title>Z Actual</title>
+                        </curve_0>
+                        <curve_1>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/vicon/onyx_disc_80x22/Origin_reference</topic>
+                                    <type>geometry_msgs/TransformStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>transform/translation/z</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/vicon/onyx_disc_80x22/Origin_reference</topic>
+                                    <type>geometry_msgs/TransformStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Z Ref</title>
                         </curve_1>
                     </curves>
                     <legend>
@@ -862,6 +1066,228 @@
                     <title>Untitled Plot</title>
                 </column_2>
             </row_1>
+            <row_2>
+                <column_0>
+                    <axes>
+                        <axes>
+                            <x_axis>
+                                <custom_title>Untitled Axis</custom_title>
+                                <title_type>0</title_type>
+                                <title_visible>true</title_visible>
+                            </x_axis>
+                            <y_axis>
+                                <custom_title>Untitled Axis</custom_title>
+                                <title_type>0</title_type>
+                                <title_visible>true</title_visible>
+                            </y_axis>
+                        </axes>
+                    </axes>
+                    <legend>
+                        <visible>true</visible>
+                    </legend>
+                    <plot_rate>30</plot_rate>
+                    <title>Untitled Plot</title>
+                </column_0>
+                <column_1>
+                    <axes>
+                        <axes>
+                            <x_axis>
+                                <custom_title>Untitled Axis</custom_title>
+                                <title_type>0</title_type>
+                                <title_visible>true</title_visible>
+                            </x_axis>
+                            <y_axis>
+                                <custom_title>Untitled Axis</custom_title>
+                                <title_type>0</title_type>
+                                <title_visible>true</title_visible>
+                            </y_axis>
+                        </axes>
+                    </axes>
+                    <curves>
+                        <curve_0>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/1</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>0</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>true</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>z_dot_error</title>
+                        </curve_0>
+                    </curves>
+                    <legend>
+                        <visible>true</visible>
+                    </legend>
+                    <plot_rate>30</plot_rate>
+                    <title>Untitled Plot</title>
+                </column_1>
+                <column_2>
+                    <axes>
+                        <axes>
+                            <x_axis>
+                                <custom_title>Untitled Axis</custom_title>
+                                <title_type>0</title_type>
+                                <title_visible>true</title_visible>
+                            </x_axis>
+                            <y_axis>
+                                <custom_title>Untitled Axis</custom_title>
+                                <title_type>0</title_type>
+                                <title_visible>true</title_visible>
+                            </y_axis>
+                        </axes>
+                    </axes>
+                    <curves>
+                        <curve_0>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/3</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>0</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>true</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>phi_dot_error</title>
+                        </curve_0>
+                        <curve_1>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/5</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/z_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>0</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>true</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>theta_dot_error</title>
+                        </curve_1>
+                    </curves>
+                    <legend>
+                        <visible>true</visible>
+                    </legend>
+                    <plot_rate>30</plot_rate>
+                    <title>Untitled Plot</title>
+                </column_2>
+            </row_2>
         </plots>
         <track_points>false</track_points>
     </table>

@@ -160,6 +160,7 @@ catkin_install_python(PROGRAMS
   scripts/z_controllers/z_control_com_gen_alloc.py
   scripts/z_controllers/z_yaw_control_com_gen_alloc.py
   scripts/z_controllers/z_control_single_dipole_simplified.py
+  scripts/z_controllers/z_rp_control_single_dipole.py
 
   # Yaw Control Nodes
   scripts/yaw_controllers/yaw_control_com_wrench.py
@@ -176,6 +177,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/matlab_sim_driver.py
   scripts/utils/clock_publisher.py
   scripts/utils/fake_pose_publisher.py
+  scripts/utils/reference_pose_publisher.py
 
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

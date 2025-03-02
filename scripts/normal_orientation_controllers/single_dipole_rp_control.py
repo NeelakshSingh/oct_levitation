@@ -5,8 +5,7 @@ import control as ct
 
 import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
-import oct_levitation.common as common
-import oct_levitation.numerical as numerical
+import oct_levitation.filters as filters
 
 from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
@@ -31,11 +30,15 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.error_state_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/error_states",
                                                          VectorStamped, queue_size=1)
         
+        self.ref_actual_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/ref_actual_values",
+                                                         VectorStamped, queue_size=1)
+        
         self.control_gain_publisher = rospy.Publisher("/com_single_dipole_normal_orientation_control/control_gains",
                                                       VectorStamped, queue_size=1, latch=True)
         
         self.publish_jma_condition = True
         self.south_pole_up = True
+        self.warn_jma_condition = True
 
         if self.publish_jma_condition:
             self.jma_condition_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/jma_condition",
@@ -63,8 +66,15 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # self.K_phi = np.array([[0.0101054837272838,0.00124597367951398]]) # Jasan's Gains
 
         # self.K_theta = np.array([[0.00859, 0.0007965]]) # Tuned for overdamped PD response.
+
         self.K_theta = np.array([[0.009982, 0.0007758]]) # Tuned for overdamped PD response.
         self.K_phi = np.array([[0.02121, 0.001454]]) # Tuned to include the external disc
+
+        # self.K_theta = np.array([[0.0299982, 0.0007758]]) # Tuned for overdamped PD response.
+        # self.K_phi = np.array([[0.02121, 0.001454]]) # Tuned to include the external disc
+
+        # self.K_theta = np.array([[0.0139982, 0.0015758]]) # Tuned for overdamped PD response.
+        # self.K_phi = np.array([[0.0200, 0.001054]]) # Tuned to include the external disc
 
         rospy.loginfo(f"Control gains for Tx: {self.K_phi}, Ty: {self.K_theta}")
 
@@ -100,55 +110,125 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.last_phi = 0.0
         self.last_theta = 0.0
 
+        self.median_filter_window_size = 3
+
+        self.SpikeFilter = filters.MedianFilter(self.median_filter_window_size)
+
         self.__first_reading = True
+        self.metadata_msg.data = f"""
+        Experiment metadata.
+        Experiment type: Full Var MA Lissajous 30 deg tracking experiment to check vicon occlusion.
+        Calibration file: {self.calibration_file}
+        Hardware Connected: {self.HARDWARE_CONNECTED}
+        Median Filter is used with window size {self.median_filter_window_size}
+        Gains: {self.K_phi.flatten(), self.K_theta.flatten()}
+        Calibration type: Legacy yaml file
+        """
 
     def simplified_Tauxy_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float) -> np.ndarray:
-        dipole_quaternion, dipole_position = geometry.arrays_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
         s_d = self.rigid_body_dipole.dipole_list[0].strength
         dipole_moment = s_d*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
         if self.south_pole_up:
             dipole_moment = -dipole_moment
         M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
+        # M_tau = geometry.magnetic_interaction_field_to_torque(s_d*np.array([0.0, 0.0, -1.0]))
         # Rejecting the singular row since we are almost always nearly upright.
         M_tau = M_tau[:2]
-        A_field = self.mpem_model.getActuationMatrix(np.zeros(3))[:3]
+        M_f = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
+        # A_field = self.mpem_model.getActuationMatrix(np.zeros(3))[:3]
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+        # A = self.mpem_model.getActuationMatrix(np.zeros(3))
+        M = block_diag(M_tau, M_f)
 
         Tau_des = np.array([[Tau_x, Tau_y]]).T
+        F_des = np.zeros((3,1))
 
-        des_currents = np.linalg.pinv(M_tau @ A_field) @ Tau_des
+        W_des = np.vstack((Tau_des, F_des))
+
+        JMA = M @ A
+        des_currents = np.linalg.pinv(JMA) @ W_des
+
+        jma_condition = np.linalg.cond(JMA)
+
+        if self.warn_jma_condition:
+            condition_check_tol = 9e3
+            if jma_condition > condition_check_tol:
+                np.set_printoptions(linewidth=np.inf)
+                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, Current TF: {tf_msg}
+                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
+                                    \n JMA: \n {JMA}""")
+                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
+
+                rospy.loginfo_once(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
+                                    M: {M},
+                                    M condition number: {np.linalg.cond(M)}""")
+                
+                rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
+                                    A: {A},
+                                    A condition number: {np.linalg.cond(A)}""")
 
         if self.publish_jma_condition:
             jma_condition_msg = VectorStamped()
             jma_condition_msg.header.stamp = rospy.Time.now()
-            jma_condition = np.linalg.cond(M_tau @ A_field)
+            # jma_condition = np.linalg.cond(M_tau @ A_field)
             jma_condition_msg.vector = [jma_condition]
             self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents.flatten()
+    
+    def local_frame_torque_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float):
+        dipole_quaternion, dipole_position = geometry.numpy_arrays_from_tf_msg(tf_msg)
+        dipole = self.rigid_body_dipole.dipole_list[0]
+        dipole_moment_local = dipole.strength * dipole.axis
+        Mtau_local = geometry.magnetic_interaction_field_to_torque(dipole_moment_local)[:2]
+        Tau_des_local = np.array([[Tau_x, Tau_y]]).T
+        b_des_local = np.linalg.pinv(Mtau_local) @ Tau_des_local
+
+        # Now let's allocate for forces.
+        # Since we don't want any forces we really just want zero gradients.
+        g_des = np.zeros((5, 1))
+        b_des = geometry.rotate_vector_from_quaternion(dipole_quaternion, b_des_local)
+        B_des = np.vstack((b_des.reshape(-1,1), g_des))
+
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+
+        des_currents = (np.linalg.pinv(A) @ B_des).flatten()
+
+        return des_currents
 
     def callback_control_logic(self, tf_msg: TransformStamped):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.control_input_message = VectorStamped() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
         self.error_state_msg = VectorStamped() # Empty state estimate message
+        self.ref_actual_msg = VectorStamped() # Empty message with reference and actual rp values
 
         self.desired_currents_msg.header.stamp = rospy.Time.now()
         self.com_wrench_msg.header.stamp = rospy.Time.now()
         self.control_input_message.header.stamp = rospy.Time.now()
         self.error_state_msg.header.stamp = rospy.Time.now()
+        self.ref_actual_msg.header.stamp = rospy.Time.now()
 
         # Getting the desired COM wrench.
-        dipole_quaternion = np.array([
-            tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
-        ])
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
 
         e_zyx = geometry.euler_zyx_from_quaternion(dipole_quaternion)
         e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
+
+        ### Reference for tracking
+        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg)
+        ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
 
         # phi = e_zyx[0]
         # theta = e_zyx[1]
         phi = e_xyz[0]
         theta = e_xyz[1]
+        phi_ref = ref_e_xyz[0]
+        theta_ref = ref_e_xyz[1]
+        self.ref_actual_msg.vector = [phi, phi_ref, theta, theta_ref]
+        self.ref_actual_pub.publish(self.ref_actual_msg)
         # theta, phi = geometry.get_normal_alpha_beta_from_quaternion(dipole_quaternion)
 
         if self.__first_reading:
@@ -165,8 +245,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         x_phi = np.array([[phi, self.phi_dot]]).T
         x_theta = np.array([[theta, self.theta_dot]]).T
 
-        r_phi = np.array([[self.home_phi, 0.0]]).T
-        r_theta = np.array([[self.home_theta, 0.0]]).T
+        r_phi = np.array([[phi_ref, 0.0]]).T
+        r_theta = np.array([[theta_ref, 0.0]]).T
 
         phi_error = x_phi - r_phi
         theta_error = x_theta - r_theta
@@ -177,6 +257,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Tau_x = u_phi[0, 0]
         Tau_y = u_theta[0, 0]
 
+        ## Filtering out spikes through a median filter
+        # Tau_des = np.array([Tau_x, Tau_y])
+        # Tau_des = self.SpikeFilter(Tau_des)
+        # Tau_x = Tau_des[0]
+        # Tau_y = Tau_des[1]
+
         self.error_state_msg.vector = np.concatenate((phi_error.flatten(), theta_error.flatten()))
         self.error_state_pub.publish(self.error_state_msg)
         self.control_input_message.vector = [Tau_x, Tau_y]
@@ -186,7 +272,10 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
+        # des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
+
+        # Let's try the field local frame allocation which should always yield the correct torque configuration
+        des_currents =  self.local_frame_torque_allocation(tf_msg, Tau_x, Tau_y)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

@@ -1,10 +1,12 @@
+import os
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
 import scipy.fft as scifft
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Union
 
 ###############################################
 # Legacy utility functions from Jasan's
@@ -205,7 +207,7 @@ def read_data(dwd, topics, interpolate_topic, input_type=None):
 
     return variables
 
-def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
+def read_data_pandas(dwd, topics, interpolate_topic):
     #%% Import:
     print("------------------READ DATA---------------------")
 
@@ -251,6 +253,24 @@ def read_data_pandas(dwd, topics, interpolate_topic, input_type=None):
 
     return time, interp_dfs
 
+def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: str, topic_exclude_list: List[str] = [],
+                         exclude_known_latched_topics: bool = True) -> Dict[str, pd.DataFrame]:
+    print(f"Reading data from directory: {dwd}")
+    latched_topic_suffixes = ["_control_gains", "_control_session_metadata"]
+    def latched_exclusion(topic: str) -> bool:
+        return np.any(np.array([topic.endswith(suffix) for suffix in latched_topic_suffixes]))
+    csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv")]
+    latched_exclusion_topics = [f for f in csv_list if latched_exclusion(f)]
+
+    final_exclusion_list = latched_exclusion_topics + topic_exclude_list
+
+    csv_list_filtered = [f for f in csv_list if f not in final_exclusion_list]
+    print(f"Found {len(csv_list_filtered)} CSV files: {csv_list_filtered}")
+    if len(csv_list_filtered) == 0:
+        warnings.warn("No CSV files were found. If you are accessing the rosbag folder, make\
+                      sure that you run bagpyext first. Check the exclusion list too.")
+    return read_data_pandas(dwd, csv_list_filtered, interpolate_topic)
+
 ###############################################
 # DATA CONVERSION AND PROCESSING FUNCTIONS
 ###############################################
@@ -290,6 +310,10 @@ def filter_dataset_by_time_range(dataset: Dict[str, pd.DataFrame],
                                  t_end: float, 
                                  renormalize_time: bool = False,
                                  time_column: str = "time") -> Tuple[np.ndarray, Dict[str, pd.DataFrame]]:
+    print(f"Filtering dataset with {len(dataset)} keys within time range {t_start} to {t_end}")
+    filtered_dataset = {}
+    time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
+    print(f"Original time vector length: {len(time_vec)}, Filtered time vector length: {len(time_vec_filtered)}")
     filtered_dataset = {}
     time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
     for key, item in dataset.items():

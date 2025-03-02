@@ -7,7 +7,7 @@ from time import perf_counter
 from scipy.linalg import block_diag
 
 import oct_levitation.common as common
-import control_utils.general.filters as filters
+import oct_levitation.filters as filters
 import oct_levitation.geometry as geometry
 import oct_levitation.numerical as numerical
 from oct_levitation.msg import PID1DState, Float64MultiArrayStamped

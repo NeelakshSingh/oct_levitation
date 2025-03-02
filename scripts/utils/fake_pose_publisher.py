@@ -9,7 +9,7 @@ class FakePosePublisher:
     def __init__(self):
         rospy.init_node("fake_pose_publisher")
         self.tf_topic = rigid_bodies.Onyx80x22DiscCenterRingDipole.pose_frame
-        self.T = 10 # cycle period in seconds
+        self.T = 2 # cycle period in seconds
         self.omega = 2*np.pi/self.T
         # self.yaw_amplitude = 2*np.pi/3
         self.yaw_amplitude = 0.0
@@ -19,7 +19,7 @@ class FakePosePublisher:
         self.omega_roll = 2*np.pi*self.f_roll
         self.f_pitch = 0.1
         self.omega_pitch = 2*np.pi*self.f_pitch
-        self.z_amplitude = 3e-2
+        self.z_amplitude = 0.5e-2
         # self.amplitude = 0.0007252745435843604 # This one for z will lead to poor conditioning of JMA matrix.
         self.start_time = rospy.Time.now().to_sec()
 
@@ -35,21 +35,21 @@ class FakePosePublisher:
         pose.child_frame_id = self.tf_topic
         pose.transform.translation.x = 0.0
         pose.transform.translation.y = 0.0
-        # pose.transform.translation.z = 0.0007252745435843604 # ILL CONDIOTIONED POINT
-        pose.transform.translation.z = 0.0129
+        # pose.transform.translation.z = 0.0129
         
         pose.transform.rotation = Quaternion(0, 0, 0, 1)
-        yaw = self.yaw_amplitude*np.sin(self.omega*t)        
+        # yaw = self.yaw_amplitude*np.sin(self.omega*t)        
 
         # roll = self.roll_amplitude*np.sin(self.omega_roll*t)
         # pitch = self.pitch_amplitude*np.sin(self.omega_pitch*t)
         roll = np.deg2rad(15)
         pitch = np.deg2rad(15)
+        yaw = 0
 
         quaternion = geometry.quaternion_from_euler_zyx(np.array([roll, pitch, yaw]))
         pose.transform.rotation = Quaternion(*quaternion)
 
-        # pose.transform.translation.z = self.z_amplitude*np.sin(self.omega*t)
+        pose.transform.translation.z = self.z_amplitude*np.sin(self.omega*t) + 0.01
 
         self.tf_pub.publish(pose)
     

@@ -1,5 +1,3 @@
-from control_utils.general.utilities import quaternion_to_normal_vector, angles_from_normal_vector
-
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -65,6 +63,161 @@ def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str = INKSCAPE_PA
         raise FileNotFoundError("Inkscape executable not found at the specified path.")
     subprocess.run([inkscape_path, svg_file, '-M', emf_file], check=True)
 
+def wrench_stamped_df_to_array_df(ft_df: pd.DataFrame) -> pd.DataFrame:
+    ft_df = ft_df.rename(columns={
+                            "wrench.force.x": "array_0",
+                            "wrench.force.y": "array_1",
+                            "wrench.force.z": "array_2",
+                            "wrench.torque.x": "array_3",
+                            "wrench.torque.y": "array_4",
+                            "wrench.torque.z": "array_5"
+                        }, errors="raise", inplace=False)
+    return ft_df
+
+### Works but doesn't do column spans
+# def arrange_subplots(arrangement, x_share=None, y_share=None):
+#     """
+#     Arrange a nested list of matplotlib Axes objects into a structured subplot layout,
+#     while allowing flexible axis sharing configurations. Replots the data into a new figure.
+    
+#     Parameters:
+#         arrangement (list): A nested list defining the layout of subplots.
+#         x_share (list, optional): A nested list specifying x-axis sharing (same number means shared).
+#         y_share (list, optional): A nested list specifying y-axis sharing (same number means shared).
+
+#     Returns:
+#         fig, ax_grid: The created figure and a grid of subplot axes.
+#     """
+    
+#     def count_grid_size(arr, row=0, col=0, max_size=[0, 0]):
+#         """Recursively determine the required number of rows and columns."""
+#         if isinstance(arr, list):
+#             for i, sub_arr in enumerate(arr):
+#                 count_grid_size(sub_arr, row + (i if col == 0 else 0), col + (0 if i == 0 else 1), max_size)
+#         else:
+#             max_size[0] = max(max_size[0], row + 1)
+#             max_size[1] = max(max_size[1], col + 1)
+
+#     # Compute required grid size
+#     max_size = [0, 0]
+#     count_grid_size(arrangement, max_size=max_size)
+#     max_rows, max_cols = max_size
+
+#     # Create figure and subplots
+#     fig, ax_grid = plt.subplots(max_rows, max_cols, figsize=(5 * max_cols, 3 * max_rows), squeeze=False)
+
+#     # Dicts to track shared axes
+#     shared_x = {}
+#     shared_y = {}
+
+#     def get_shared_axis(share_dict, share_id, default_ax):
+#         """Get or assign a shared axis based on an identifier."""
+#         if share_id not in share_dict:
+#             share_dict[share_id] = default_ax
+#         return share_dict[share_id]
+
+#     # Recursive function to place axes and replot data
+#     def place_axes(arr, row=0, col=0):
+#         if isinstance(arr, list):
+#             for i, sub_arr in enumerate(arr):
+#                 place_axes(sub_arr, row + (i if col == 0 else 0), col + (0 if i == 0 else 1))
+#         else:
+#             target_ax = ax_grid[row, col]
+#             source_ax = arr
+
+#             # Share X-axis if required
+#             if x_share:
+#                 share_id = x_share[row][col] if isinstance(x_share[row], list) else x_share[row]
+#                 if share_id != 0:
+#                     target_ax.sharex(get_shared_axis(shared_x, share_id, target_ax))
+
+#             # Share Y-axis if required
+#             if y_share:
+#                 share_id = y_share[row][col] if isinstance(y_share[row], list) else y_share[row]
+#                 if share_id != 0:
+#                     target_ax.sharey(get_shared_axis(shared_y, share_id, target_ax))
+
+#             # Copy data
+#             for line in source_ax.get_lines():
+#                 target_ax.plot(line.get_xdata(), line.get_ydata(), label=line.get_label(), linestyle=line.get_linestyle(),
+#                                linewidth=line.get_linewidth(), color=line.get_color(), marker=line.get_marker())
+            
+#             # Copy labels, limits, and title
+#             target_ax.set_xlabel(source_ax.get_xlabel())
+#             target_ax.set_ylabel(source_ax.get_ylabel())
+#             target_ax.set_title(source_ax.get_title())
+#             target_ax.set_xlim(source_ax.get_xlim())
+#             target_ax.set_ylim(source_ax.get_ylim())
+#             target_ax.legend()
+
+#     # Place axes and replot everything
+#     place_axes(arrangement)
+
+#     plt.tight_layout()
+#     plt.show()
+#     return fig, ax_grid
+
+def arrange_subplots(arrangement, x_share=None, y_share=None):
+    """
+    Arrange a nested list of matplotlib Axes objects into a structured subplot layout,
+    while allowing flexible axis sharing configurations. Replots the data into a new figure.
+    
+    Parameters:
+        arrangement (list): A nested list defining the layout of subplots.
+        x_share (list, optional): A nested list specifying x-axis sharing (same number means shared).
+        y_share (list, optional): A nested list specifying y-axis sharing (same number means shared).
+
+    Returns:
+        fig, ax_grid: The created figure and a grid of subplot axes.
+    """
+    num_rows = len(arrangement)
+    num_cols = max(len(row) if isinstance(row, list) else 1 for row in arrangement)
+    
+    fig, ax_grid = plt.subplots(num_rows, num_cols, figsize=(5 * num_cols, 3 * num_rows), squeeze=False)
+    
+    shared_x = {}
+    shared_y = {}
+    
+    def get_shared_axis(share_dict, share_id, default_ax):
+        if share_id not in share_dict:
+            share_dict[share_id] = default_ax
+        return share_dict[share_id]
+    
+    for row_idx, row in enumerate(arrangement):
+        if not isinstance(row, list):
+            row = [row]
+        num_subplots = len(row)
+        col_width = num_cols / num_subplots
+        
+        for col_idx, source_ax in enumerate(row):
+            target_ax = fig.add_subplot(num_rows, num_cols, row_idx * num_cols + col_idx + 1)
+            
+            if x_share:
+                share_id = x_share[row_idx][col_idx] if isinstance(x_share[row_idx], list) else x_share[row_idx]
+                if share_id != 0:
+                    target_ax.sharex(get_shared_axis(shared_x, share_id, target_ax))
+            
+            if y_share:
+                share_id = y_share[row_idx][col_idx] if isinstance(y_share[row_idx], list) else y_share[row_idx]
+                if share_id != 0:
+                    target_ax.sharey(get_shared_axis(shared_y, share_id, target_ax))
+            
+            for line in source_ax.get_lines():
+                target_ax.plot(line.get_xdata(), line.get_ydata(), label=line.get_label(),
+                               linestyle=line.get_linestyle(), linewidth=line.get_linewidth(),
+                               color=line.get_color(), marker=line.get_marker())
+            
+            target_ax.set_xlabel(source_ax.get_xlabel())
+            target_ax.set_ylabel(source_ax.get_ylabel())
+            target_ax.set_title(source_ax.get_title())
+            target_ax.set_xlim(source_ax.get_xlim())
+            target_ax.set_ylim(source_ax.get_ylim())
+            target_ax.legend()
+    
+    plt.tight_layout()
+    plt.show()
+    return fig, ax_grid
+
 ######################################
 # PLOTTING POSES
 ######################################
@@ -81,51 +234,51 @@ def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple 
     """
     assert state_history.shape[1] == 12, "State history should have 12 columns"
     fig, axs = plt.subplots(2, 6, figsize=figsize)
-    axs[0, 0].plot(state_history[:, 0], label='x')
+    axs[0, 0].plot(state_history[:, 0]*1e3, label='x')
     axs[0, 0].set_title('x')
     axs[0, 0].set_xlabel('Time')
-    axs[0, 0].set_ylabel('Position (m)')
-    axs[0, 1].plot(state_history[:, 1], label='y')
+    axs[0, 0].set_ylabel('Position (mm)')
+    axs[0, 1].plot(state_history[:, 1]*1e3, label='y')
     axs[0, 1].set_title('y')
     axs[0, 1].set_xlabel('Time')
-    axs[0, 1].set_ylabel('Position (m)')
-    axs[0, 2].plot(state_history[:, 2], label='z')
+    axs[0, 1].set_ylabel('Position (mm)')
+    axs[0, 2].plot(state_history[:, 2]*1e3, label='z')
     axs[0, 2].set_title('z')
     axs[0, 2].set_xlabel('Time')
-    axs[0, 2].set_ylabel('Position (m)')
-    axs[0, 3].plot(state_history[:, 3], label='vx')
+    axs[0, 2].set_ylabel('Position (mm)')
+    axs[0, 3].plot(state_history[:, 3]*1e3, label='vx')
     axs[0, 3].set_title('vx')
     axs[0, 3].set_xlabel('Time')
-    axs[0, 3].set_ylabel('Velocity (m/s)')
-    axs[0, 4].plot(state_history[:, 4], label='vy')
+    axs[0, 3].set_ylabel('Velocity (mm/s)')
+    axs[0, 4].plot(state_history[:, 4]*1e3, label='vy')
     axs[0, 4].set_title('vy')
     axs[0, 4].set_xlabel('Time')
-    axs[0, 4].set_ylabel('Velocity (m/s)')
-    axs[0, 5].plot(state_history[:, 5], label='vz')
+    axs[0, 4].set_ylabel('Velocity (mm/s)')
+    axs[0, 5].plot(state_history[:, 5]*1e3, label='vz')
     axs[0, 5].set_title('vz')
     axs[0, 5].set_xlabel('Time')
-    axs[0, 5].set_ylabel('Velocity (m/s)')
-    axs[1, 0].plot(state_history[:, 6], label='phi')
+    axs[0, 5].set_ylabel('Velocity (mm/s)')
+    axs[1, 0].plot(np.rad2deg(state_history[:, 6]), label='phi')
     axs[1, 0].set_title('phi')
     axs[1, 0].set_xlabel('Time')
     axs[1, 0].set_ylabel('Angle (rad)')
-    axs[1, 1].plot(state_history[:, 7], label='theta')
+    axs[1, 1].plot(np.rad2deg(state_history[:, 7]), label='theta')
     axs[1, 1].set_title('theta')
     axs[1, 1].set_xlabel('Time')
     axs[1, 1].set_ylabel('Angle (rad)')
-    axs[1, 2].plot(state_history[:, 8], label='psi')
+    axs[1, 2].plot(np.rad2deg(state_history[:, 8]), label='psi')
     axs[1, 2].set_title('psi')
     axs[1, 2].set_xlabel('Time')
     axs[1, 2].set_ylabel('Angle (rad)')
-    axs[1, 3].plot(state_history[:, 9], label='wx')
+    axs[1, 3].plot(np.rad2deg(state_history[:, 9]), label='wx')
     axs[1, 3].set_title('wx')
     axs[1, 3].set_xlabel('Time')
     axs[1, 3].set_ylabel('Angular Velocity (rad/s)')
-    axs[1, 4].plot(state_history[:, 10], label='wy')
+    axs[1, 4].plot(np.rad2deg(state_history[:, 10]), label='wy')
     axs[1, 4].set_title('wy')
     axs[1, 4].set_xlabel('Time')
     axs[1, 4].set_ylabel('Angular Velocity (rad/s)')
-    axs[1, 5].plot(state_history[:, 11], label='wz')
+    axs[1, 5].plot(np.rad2deg(state_history[:, 11]), label='wz')
     axs[1, 5].set_title('wz')
     axs[1, 5].set_xlabel('Time')
     axs[1, 5].set_ylabel('Angular Velocity (rad/s)')
@@ -141,10 +294,10 @@ def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (1
     assert state_history.shape[1] == 12, "State history should have 12 columns"
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot(state_history[:, 0], state_history[:, 1], state_history[:, 2])
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
+    ax.plot(state_history[:, 0]*1e3, state_history[:, 1]*1e3, state_history[:, 2]*1e3)
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
     if save_as and save_as.endswith('.svg'):
         plt.savefig(save_as, format='svg')
         if save_as_emf:
@@ -264,8 +417,8 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Extract reference position and orientation
-    reference_position = reference_pose[:3]*1000
-    reference_orientation = np.rad2deg(reference_pose[3:])
+    reference_position = reference_pose[:3]*1000 # in mm
+    reference_orientation = reference_pose[3:] # Reference orientation is taken as quaternion
 
     # Convert quaternions to Euler angles
     actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
@@ -328,6 +481,7 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
     - reference_position (np.ndarray): Array of size 3 [x, y, z] representing the constant reference position.
     """
     time = actual_poses['time'].values
+    # All positions are in mm
     actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
     reference_position = reference_position*1000
 
@@ -444,9 +598,8 @@ def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_ang
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Convert quaternions to Euler angles
-    actual_yx = np.array([angles_from_normal_vector(
-        quaternion_to_normal_vector(quaternion)
-    ) for quaternion in actual_orientations])
+    actual_yx = np.array([geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion)) 
+                          for quaternion in actual_orientations])
 
     actual_xy = np.roll(actual_yx, 1, axis=1)
 
@@ -458,13 +611,145 @@ def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_ang
     fig, axs = plt.subplots(1, 2, figsize=(14, 3.5), sharex=True, sharey=True)
 
     fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
-    for i, angle in enumerate(['Beta', 'Alpha']):
+    for i, angle in enumerate(['Alpha', 'Beta']):
         axs[i].plot(time, actual_xy[:, i], label=f"Actual {angle}")
         axs[i].axhline(y=reference_angles[i], label=f"Reference {angle}", linestyle='dashed', color='r')
         axs[i].set_title(f"{angle} of Body Fixed Frame")
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Angle (deg)")
         axs[i].legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+    return fig, axs
+
+def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
+                                              ft_df: pd.DataFrame,
+                                              scale_equal: bool=True,
+                                              save_as: str=None,
+                                              save_as_emf: bool=False,
+                                              inkscape_path: str=INKSCAPE_PATH, **kwargs):
+    """
+    Plots a 2x2 subplot:
+    - Row 1: Actual vs Desired Alpha and Beta angles
+    - Row 2: Desired Torques Tx and Ty
+    """
+    time = actual_poses['time'].values
+    
+    # Compute actual alpha and beta from quaternions
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    actual_yx = np.array([geometry.get_normal_alpha_beta_from_quaternion(q/np.linalg.norm(q)) for q in actual_orientations])
+
+    # Convert to degrees
+    actual_xy = np.rad2deg(np.roll(actual_yx, 1, axis=1))
+    reference_angles = np.rad2deg(reference_angles)
+    
+    # Extract desired torques Tx and Ty, in mN-m
+    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values*1e3
+    
+    # Create subplots
+    fig, axs = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
+    fig.suptitle("Alpha, Beta, and Torques")
+        
+    fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
+    for i, angle in enumerate(['Alpha', 'Beta']):
+        axs[0, i].plot(time, actual_xy[:, i], label=f"Actual {angle}")
+        axs[0, i].axhline(y=reference_angles[i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[0, i].set_title(f"{angle} of Body Fixed Frame")
+        axs[0, i].set_xlabel("Time (s)")
+        axs[0, i].set_ylabel("Angle (deg)")
+        axs[0, i].legend()
+    
+    for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
+        axs[1, i].plot(time, torques[:, i], label=f"{torque} Desired")
+        axs[1, i].set_title(f"Desired {torque} on COM expressed in world frame")
+        axs[1, i].set_xlabel("Time (s)")
+        axs[1, i].set_ylabel("Torque (mN-m)")
+        axs[1, i].legend()
+
+    if scale_equal:
+        axs[0, 1].sharey(axs[0, 0])
+        axs[1, 1].sharey(axs[1, 0])
+        # Autoscale shared axes
+        for ax_row in axs: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    plt.show()
+    return fig, axs
+
+def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
+                                       ft_df: pd.DataFrame,
+                                       angle_error_cols: List[str],
+                                       velocity_error_cols: List[str],
+                                       scale_equal: bool=True,
+                                       save_as: str=None,
+                                       save_as_emf: bool=False,
+                                       inkscape_path: str=INKSCAPE_PATH, **kwargs):
+    """
+    Plots a 2x2 subplot:
+    - Row 1: Actual vs Desired Alpha and Beta angles
+    - Row 2: Desired Torques Tx and Ty
+    """
+    time = rp_error_states_df['time'].values
+    
+    alpha_beta_error = np.rad2deg(rp_error_states_df[angle_error_cols].to_numpy()) # deg
+    alpha_beta_velocity_error = np.rad2deg(rp_error_states_df[velocity_error_cols].to_numpy()) # deg/sec
+    
+    # Extract desired torques Tx and Ty
+    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].to_numpy()*1e3 # Convert to mN-m
+    
+    # Create subplots
+    fig, axs = plt.subplots(3, 2, figsize=(14, 8), sharex=True)
+        
+    fig.suptitle("Normal Angle, Angular Velocity Tracking Errors, and Desired Torques of Dipole Fixed Frame Z-Axis In World Frame")
+    for i, angle in enumerate(['Alpha', 'Beta']):
+        axs[0, i].plot(time, alpha_beta_error[:, i], label=f"{angle}")
+        axs[0, i].set_title(f"{angle} Error of Body Fixed Frame")
+        axs[0, i].set_xlabel("Time (s)")
+        axs[0, i].set_ylabel("Angle (deg)")
+        axs[0, i].legend()
+    
+    for i, angle in enumerate(['Alpha Dot', 'Beta Dot']):
+        axs[1, i].plot(time, alpha_beta_velocity_error[:, i], label=f"{angle}")
+        axs[1, i].set_title(f"{angle} Error of Body Fixed Frame")
+        axs[1, i].set_xlabel("Time (s)")
+        axs[1, i].set_ylabel("Angle (deg/sec)")
+        axs[1, i].legend()
+    
+    for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
+        axs[2, i].plot(time, torques[:, i], label=f"{torque} Desired")
+        axs[2, i].set_title(f"Desired {torque} on COM expressed in world frame")
+        axs[2, i].set_xlabel("Time (s)")
+        axs[2, i].set_ylabel("Torque (mN-m)")
+        axs[2, i].legend()
+
+    if scale_equal:
+        axs[0, 1].sharey(axs[0, 0])
+        axs[1, 1].sharey(axs[1, 0])
+        axs[2, 1].sharey(axs[2, 0])
+
+        # Autoscale shared axes
+        for ax_row in axs: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
 
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -623,11 +908,11 @@ def plot_alpha_beta_variable_reference(actual_poses: pd.DataFrame, reference_pos
                                               'transform.rotation.z', 'transform.rotation.w']].values
 
     actual_angles = np.array([
-        angles_from_normal_vector(quaternion_to_normal_vector(quaternion))
+        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
         for quaternion in actual_orientations
     ])
     reference_angles = np.array([
-        angles_from_normal_vector(quaternion_to_normal_vector(quaternion))
+        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
         for quaternion in reference_orientations
     ])
 
@@ -639,7 +924,7 @@ def plot_alpha_beta_variable_reference(actual_poses: pd.DataFrame, reference_pos
     fig, axs = plt.subplots(1, 2, figsize=(14, 3.5), sharex=True, sharey=True)
     fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
 
-    angle_labels = ['Beta', 'Alpha']
+    angle_labels = ['Alpha', 'Beta']
     for i, angle in enumerate(angle_labels):
         axs[i].plot(time, actual_angles_deg[:, i], label=f"Actual {angle}", **kwargs)
         axs[i].plot(time, reference_angles_deg[:, i], label=f"Reference {angle}",
@@ -659,6 +944,83 @@ def plot_alpha_beta_variable_reference(actual_poses: pd.DataFrame, reference_pos
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
+    plt.show()
+    return fig, axs
+
+def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
+                                              ft_df: pd.DataFrame,
+                                              scale_equal: bool=True,
+                                              save_as: str=None,
+                                              save_as_emf: bool=False,
+                                              inkscape_path: str=INKSCAPE_PATH, **kwargs):
+    """
+    Plots a 2x2 subplot:
+    - Row 1: Actual vs Desired Alpha and Beta angles
+    - Row 2: Desired Torques Tx and Ty
+    """
+    time = actual_poses['time'].values
+    
+    # Compute actual alpha and beta from quaternions
+    # Extract quaternions and compute Euler angles
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y',
+                                        'transform.rotation.z', 'transform.rotation.w']].values
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y',
+                                              'transform.rotation.z', 'transform.rotation.w']].values
+
+    actual_angles = np.array([
+        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
+        for quaternion in actual_orientations
+    ])
+    reference_angles = np.array([
+        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
+        for quaternion in reference_orientations
+    ])
+
+    # Convert to degrees
+    actual_angles_deg = np.rad2deg(np.roll(actual_angles, 1, axis=1))
+    reference_angles_deg = np.rad2deg(np.roll(reference_angles, 1, axis=1))
+    
+    # Extract desired torques Tx and Ty
+    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values*1e3
+    
+    # Create subplots
+    fig, axs = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
+    fig.suptitle("Alpha, Beta, and Torques")
+        
+    fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
+    for i, angle in enumerate(['Alpha', 'Beta']):
+        axs[0, i].plot(time, actual_angles_deg[:, i], label=f"Actual {angle}", **kwargs)
+        axs[0, i].plot(time, reference_angles_deg[:, i], label=f"Reference {angle}",
+                      linestyle='dashed', color='r', **kwargs)
+        axs[0, i].set_title(f"{angle} of Body Fixed Frame")
+        axs[0, i].set_xlabel("Time (s)")
+        axs[0, i].set_ylabel("Angle (deg)")
+        axs[0, i].legend()
+    
+    for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
+        axs[1, i].plot(time, torques[:, i], label=f"{torque} Desired")
+        axs[1, i].set_title(f"Desired {torque} on COM expressed in world frame")
+        axs[1, i].set_xlabel("Time (s)")
+        axs[1, i].set_ylabel("Torque (mN-m)")
+        axs[1, i].legend()
+
+    if scale_equal:
+        axs[0, 1].sharey(axs[0, 0])
+        axs[1, 1].sharey(axs[1, 0])
+        # Autoscale shared axes
+        for ax_row in axs: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
     plt.show()
     return fig, axs
 
@@ -745,7 +1107,7 @@ def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, referenc
     plt.show()
     return fig, axs
 
-def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
+def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, scale_equal: bool = True,
                                   save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
@@ -769,7 +1131,7 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
     reference_euler = np.rad2deg(reference_euler)
 
     # Plot positions
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10), sharex=True, sharey=True)
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
@@ -788,6 +1150,17 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
         axs[1, i].set_xlabel("Time (s)")
         axs[1, i].set_ylabel("Angle (deg)")
         axs[1, i].legend()
+
+    if scale_equal:
+        axs[0, 2].sharey(axs[0, 0])
+        axs[0, 1].sharey(axs[0, 0])
+        axs[1, 1].sharey(axs[1, 0])
+        axs[1, 2].sharey(axs[1, 0])
+        # Autoscale shared axes
+        for ax_row in axs: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
 
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -876,7 +1249,7 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
     plt.show()
     return fig, axs
 
-def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
+def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
                                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
@@ -900,7 +1273,7 @@ def plot_3d_poses_with_arrows_non_constant_reference(actual_poses: pd.DataFrame,
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # Plot actual positions
+    # Plot actual positions, CONVERTED TO mm
     ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot reference positions (non-constant)
@@ -977,7 +1350,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # Plot actual positions
+    # Plot actual positions, CONVERTED TO mm
     ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot constant reference position (horizontal line)
@@ -1088,6 +1461,8 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
 
 def plot_forces_and_torques(ft_df: pd.DataFrame,
                             title: str="Desired Forces and Torques",
+                            torque_in_mNm: bool = True,
+                            force_in_N: bool = False,
                             save_as: str=None,
                             save_as_emf: bool=False,
                             inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
@@ -1100,14 +1475,25 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
                            'array_0' = Fx, 'array_1' = Fy, 'array_2' = Fz
                            'array_3' = Tx, 'array_4' = Ty, 'array_5' = Tz
     """
+    force_units = "mN"
+    force_multiplier = 1e3
+    torque_units = "Nm"
+    torque_multipler = 1
+    if force_in_N:
+        force_units = "N"
+        force_multiplier = 1
+    if torque_in_mNm:
+        torque_units = "mN-m"
+        torque_multiplier = 1e3
+
     # Extract relevant columns
     time = ft_df['time']
-    Fx = ft_df['array_0'] * 1e3  # Convert to mN
-    Fy = ft_df['array_1'] * 1e3
-    Fz = ft_df['array_2'] * 1e3
-    Tx = ft_df['array_3'] * 1e6  # Convert to mN-mm
-    Ty = ft_df['array_4'] * 1e6
-    Tz = ft_df['array_5'] * 1e6
+    Fx = ft_df['array_0'] * force_multiplier  # Convert to mN
+    Fy = ft_df['array_1'] * force_multiplier
+    Fz = ft_df['array_2'] * force_multiplier
+    Tx = ft_df['array_3'] * torque_multipler  # Convert to mN-mm
+    Ty = ft_df['array_4'] * torque_multipler
+    Tz = ft_df['array_5'] * torque_multipler
 
     # Create subplots: 2 rows, 3 columns
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
@@ -1115,7 +1501,7 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
 
     # Plot forces (mN)
     axes[0, 0].plot(time, Fx, color='b')
-    axes[0, 0].set_ylabel('Force (mN)')
+    axes[0, 0].set_ylabel(f'Force ({force_units})')
     axes[0, 0].set_title('Fx')
 
     axes[0, 1].plot(time, Fy, color='g')
@@ -1130,7 +1516,7 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
 
     # Plot torques (mN-mm)
     axes[1, 0].plot(time, Tx, color='b')
-    axes[1, 0].set_ylabel('Torque (mN-mm)')
+    axes[1, 0].set_ylabel(f'Torque ({torque_units})')
     axes[1, 0].set_title('Tx')
 
     axes[1, 1].plot(time, Ty, color='g')
@@ -1163,6 +1549,25 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
     plt.show()
     return fig, axes
 
+def plot_forces_and_torques_from_wrench_stamped(ft_df: pd.DataFrame,
+                                                title: str,
+                                                torque_in_mNm: bool = True,
+                                                force_in_N: bool = False,
+                                                save_as: str=None,
+                                                save_as_emf: bool=False,
+                                                inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+
+    # Just convert the dataframe to a format accepted by the array msg based plotter.
+    ft_df = ft_df.rename(columns={
+                            "wrench.force.x": "array_0",
+                            "wrench.force.y": "array_1",
+                            "wrench.force.z": "array_2",
+                            "wrench.torque.x": "array_3",
+                            "wrench.torque.y": "array_4",
+                            "wrench.torque.z": "array_5"
+                        }, errors="raise", inplace=False)
+    return plot_forces_and_torques(ft_df, title, torque_in_mNm, force_in_N, save_as, save_as_emf, inkscape_path, **kwargs)
+
 def plot_3d_quiver(dataframe: pd.DataFrame, 
                    scale_factor: float=1.0, 
                    save_as: str=None, 
@@ -1186,6 +1591,7 @@ def plot_3d_quiver(dataframe: pd.DataFrame,
     if not required_columns.issubset(dataframe.columns):
         raise ValueError(f"Dataframe must contain the columns: {required_columns}")
     
+    # Converting distances to mm and fields to mT
     Px, Py, Pz = dataframe['Px'] * 1000, dataframe['Py'] * 1000, dataframe['Pz'] * 1000
     Bx, By, Bz = dataframe['Bx'] * 1000, dataframe['By'] * 1000, dataframe['Bz'] * 1000
     Bx_scaled, By_scaled, Bz_scaled = Bx * scale_factor, By * scale_factor, Bz * scale_factor
@@ -1497,9 +1903,9 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: 
         actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
 
         gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
-        for idx, key in enumerate(gradient_keys, start=3):
-            desired_gradients[key].append(desired_field[idx] * 1000)
-            actual_gradients[key].append(actual_field[idx] * 1000)
+        for idx, key in enumerate(gradient_keys, start=3): 
+            desired_gradients[key].append(desired_field[idx] * 1000) # Converting all readings to mT/m
+            actual_gradients[key].append(actual_field[idx] * 1000) # Converting all readings to mT/m
 
     # Plot the gradient components with shared axes
     fig, axs = plt.subplots(5, 1, figsize=(12, 10), sharex=True, sharey=True)
@@ -1586,7 +1992,8 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     # Combine pose and current data
     combined_pose_currents = pd.merge_asof(dipole_center_pose_df, actual_currents_df, on='time')
     time = dipole_center_pose_df['time']
-    actual_wrench_dict = {'array_0': [], 'array_1': [], 'array_2': [], 'array_3': [], 'array_4': [], 'array_5': []}
+    actual_wrench_dict = {'wrench.torque.x': [], 'wrench.torque.y': [], 'wrench.torque.z': [],
+                          'wrench.force.x': [], 'wrench.force.y': [], 'wrench.force.z': []}
 
     # Calculate actual wrench
     for i in range(len(combined_pose_currents)):
@@ -1606,10 +2013,12 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
             combined_pose_currents['transform.rotation.w'].iloc[i]
         ])
 
+        quaternion = quaternion/np.linalg.norm(quaternion)
+
         M = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quaternion=quaternion,
                                                                  dipole_strength=dipole_strength,
                                                                  full_mat=True,
-                                                                 torque_first=False,
+                                                                 torque_first=True,
                                                                  dipole_axis=dipole_axis)
         actual_wrench = M @ actual_fields
         for j, key in enumerate(list(actual_wrench_dict.keys())):
@@ -1622,12 +2031,12 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
     colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Force (actual, reference), Torque (actual, reference)
 
-    key_map = {'Fx': 'array_0', 'Fy': 'array_1', 'Fz': 'array_2',
-               'Taux': 'array_3', 'Tauy': 'array_4', 'Tauz': 'array_5'}
+    key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
+               'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
     
     fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
     
-    # Force subplots (columns 0, 1, 2)
+    # Force subplots (columns 0, 1, 2), Forces converted to mN
     for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
         axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], **kwargs)
         axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
@@ -1638,14 +2047,14 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
         if i == 2:
             axes[0, i].legend(loc='upper right')
 
-    # Torque subplots (columns 0, 1, 2)
+    # Torque subplots (columns 0, 1, 2), Torques converted to mN-m
     for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
-        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e6, label='Actual Torque', color=colors[2], **kwargs)
-        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e6, label='Reference Torque', color=colors[3], **kwargs)
+        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], **kwargs)
+        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
         axes[1, i].set_title(f'{torque_component} - Torque')
         axes[1, i].grid(True)
         if i == 0:
-            axes[1, i].set_ylabel('Torque (mN-mm)')
+            axes[1, i].set_ylabel('Torque (mN-m)')
         if i == 2:
             axes[1, i].legend(loc='upper right')
 
@@ -1689,7 +2098,7 @@ def plot_fft_from_dataframe(dataframe: pd.DataFrame,
                             suptitle: Optional[str] = None,
                             save_as: str = None, 
                             save_as_emf: bool = False, 
-                            inkscape_path: str = None):
+                            inkscape_path: str = INKSCAPE_PATH):
     """
     Computes and plots the Fast Fourier Transform (FFT) for signals from a dataframe.
     The sampling frequency is derived from the 'time' column in the dataframe. 
@@ -1751,13 +2160,11 @@ def plot_fft_from_dataframe(dataframe: pd.DataFrame,
     plt.tight_layout()
 
     # Save the plot if required
-    if save_as:
-        plt.savefig(save_as, format='svg', dpi=300)
+    if save_as and save_as.endswith('.svg'):
+        plt.savefig(save_as, format='svg')
         if save_as_emf:
-            emf_path = save_as.replace('.svg', '.emf')
-            plt.savefig(emf_path, format='emf', dpi=300)
-            if inkscape_path:
-                os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
     plt.show()
     return fig, axs
@@ -1768,7 +2175,7 @@ def plot_time_series_and_fft(dataframe: pd.DataFrame,
                              remove_dc: bool = False, 
                              save_as: str = None, 
                              save_as_emf: bool = False, 
-                             inkscape_path: str = None, 
+                             inkscape_path: str = INKSCAPE_PATH, 
                              **kwargs):
     """
     Plots both the time series data and its corresponding FFT for given columns in the dataframe.
@@ -1864,7 +2271,7 @@ def plot_ffts_from_two_dataframes(dataframe1: pd.DataFrame,
                                   suptitle: Optional[str] = None,
                                   save_as: str = None,
                                   save_as_emf: bool = False,
-                                  inkscape_path: str = None
+                                  inkscape_path: str = INKSCAPE_PATH
                                 ):
     """
     Computes and plots the FFT for signals from two dataframes side by side.
