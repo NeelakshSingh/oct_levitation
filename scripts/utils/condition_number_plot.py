@@ -38,18 +38,23 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
 
     save_path = os.path.join(pkg_path, "data/cond_plots", args.save_folder)
 
-    save_as = os.path.join(save_path, f"{rpy[0]}_{rpy[1]}_{rpy[2]}.vti")
+    os.makedirs(save_path, exist_ok=True)
+
 
     calibration_model = common.OctomagCalibratedModel(calibration_file=args.calib_file)
 
-    # plotting.plot_volumetric_ma_condition_number_variation(dipole,
-    #                                                        calibration_model,
-    #                                                        quat,
-    #                                                        save_as=save_as,
-    #                                                        num_samples=args.num_samples)
+    rpy = np.rad2deg(rpy)
+    volume_save_as = os.path.join(save_path, f"vol_{rpy[0]}_{rpy[1]}_{rpy[2]}.png")
+    slices_save_as = os.path.join(save_path, f"slices_{rpy[0]}_{rpy[1]}_{rpy[2]}.png")
+
+    plotting.plot_volumetric_ma_condition_number_variation(dipole,
+                                                           calibration_model,
+                                                           quat,
+                                                           save_as=volume_save_as,
+                                                           num_samples=args.num_samples)
     
     plotting.plot_slices_ma_condition_number_variation(dipole,
                                                        calibration_model,
                                                        quat,
-                                                       save_as=save_as,
+                                                       save_as=slices_save_as,
                                                        num_samples=args.num_samples)

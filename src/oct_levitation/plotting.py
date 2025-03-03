@@ -18,7 +18,7 @@ import subprocess
 import scipy.signal as signal
 import scipy.fft as scifft
 
-from typing import Optional, Tuple, List, Callable
+from typing import Optional, Tuple, List, Callable, Dict
 from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
 from tvtk.api import tvtk
@@ -2502,7 +2502,7 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
                                                   calibration_model: common.OctomagCalibratedModel,
                                                   orientation_quaternion: np.ndarray,
                                                   cond_threshold: float = 20,
-                                                  cond_color_steps: float = 10,
+                                                  cond_color_steps: float = 15,
                                                   clip_cond: float = 100,
                                                   cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
                                                   cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
@@ -2510,7 +2510,10 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
                                                   reject_M_component: str = "Tz",
                                                   num_samples: int = 20,
                                                   display_interactive_pane : bool = True,
-                                                  save_as: str = None):
+                                                  save_as: str = None,
+                                                  save_dataset: bool = False,
+                                                  vtk_dataset_save_kwargs: Dict = dict(),
+                                                  **save_kwargs):
     """
     For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
     https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
@@ -2552,21 +2555,21 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
     # ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
 
     # Add colormap for values ≥ 20 (e.g., blue to red gradient)
-    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue after threshold
-    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
-    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue at threshold
+    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
 
 
     # Create opacity transfer function (OTF) by manipulating the _volume_property
     opacity_function = tvtk.PiecewiseFunction()
     # Set opacity for values below the threshold to be opaque (1.0)
     opacity_function.add_point(1.0, 0.0)  # Fully opaque at lowest value
-    opacity_function.add_point(cond_threshold, 0.05)  # Less opaque at threshold
+    opacity_function.add_point(cond_threshold, 0.2)  # Less opaque at threshold
     # Set opacity to 0.0 for higher values, making them fully transparent
-    opacity_function.add_point(cond_threshold + cond_color_steps, 0.2)
-    opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.4)
+    opacity_function.add_point(cond_threshold + cond_color_steps, 0.1)
+    opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.01)
 
-    cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=cond_threshold + 2*cond_color_steps)
+    cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=clip_cond)
 
     cond_vol._volume_property.set_color(ctf)  # Set custom color mapping
     cond_vol._volume_property.set_scalar_opacity(opacity_function)
@@ -2579,7 +2582,14 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
                                                                 cube_z_lim[0],
                                                                 cube_z_lim[1]])*1e3)
     mlab.outline()
-    colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
+    rpy = np.rad2deg(geometry.euler_xyz_from_quaternion(orientation_quaternion))
+
+    if save_as is not None:
+        mlab.savefig(save_as, **save_kwargs)
+        if save_dataset:
+            base_name, _ = os.path.splitext(save_as)
+            vt_name = base_name + ".vti"
+            cond_field.save_output(vt_name, **vtk_dataset_save_kwargs)
 
     if display_interactive_pane:
         mlab.show()
@@ -2598,7 +2608,8 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
                                                 x_plane_idx : Optional[int] = None,
                                                 y_plane_idx : Optional[int] = None,
                                                 display_interactive_pane : bool = True,
-                                                save_as: str = None):
+                                                save_as: str = None,
+                                                **save_kwargs):
     """
     For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
     https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
@@ -2648,6 +2659,9 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
     colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
     mlab.outline()
 
+    if save_as is not None:
+        mlab.savefig(save_as, **save_kwargs)
+
     if display_interactive_pane:
         mlab.show()
 
@@ -2661,7 +2675,10 @@ def plot_volumetric_current_allocation_condition_number_variation(calibration_mo
                                                                     cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
                                                                     num_samples: int = 20,
                                                                     display_interactive_pane : bool = True,
-                                                                    save_as: str = None):
+                                                                    save_as: str = None,
+                                                                    save_dataset: bool = False,
+                                                                    vtk_dataset_save_kwargs: Dict = dict(),
+                                                                    **save_kwargs):
     """
     For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
     https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
@@ -2687,23 +2704,23 @@ def plot_volumetric_current_allocation_condition_number_variation(calibration_mo
 
     ctf = ColorTransferFunction()
 
-    # Add solid green color for very low values
+    # # Add solid green color for very low values
     ctf.add_rgb_point(0,   0, 1, 0)  # Green at lowest value
-    ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
+    # ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
 
     # Add colormap for values ≥ 20 (e.g., blue to red gradient)
-    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue after threshold
-    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
-    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue at threshold
+    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
 
 
     # Create opacity transfer function (OTF) by manipulating the _volume_property
     opacity_function = tvtk.PiecewiseFunction()
     # Set opacity for values below the threshold to be opaque (1.0)
-    opacity_function.add_point(1.0, 1.0)  # Fully opaque at lowest value
-    opacity_function.add_point(cond_threshold, 0.4)  # Less opaque at threshold
+    opacity_function.add_point(1.0, 0.0)  # Fully opaque at lowest value
+    opacity_function.add_point(cond_threshold, 0.2)  # Less opaque at threshold
     # Set opacity to 0.0 for higher values, making them fully transparent
-    opacity_function.add_point(cond_threshold + cond_color_steps, 0.2)
+    opacity_function.add_point(cond_threshold + cond_color_steps, 0.1)
     opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.01)
 
     cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=0.8)
@@ -2720,6 +2737,13 @@ def plot_volumetric_current_allocation_condition_number_variation(calibration_mo
                                                                 cube_z_lim[1]])*1e3)
     mlab.outline()
 
+    if save_as is not None:
+        mlab.savefig(save_as, **save_kwargs)
+        if save_dataset:
+            base_name, _ = os.path.splitext(save_as)
+            vt_name = base_name + ".vti"
+            cond_field.save_output(vt_name, **vtk_dataset_save_kwargs)
+
     if display_interactive_pane:
         mlab.show()
 
@@ -2734,7 +2758,8 @@ def plot_slices_currnet_allocation_condition_number_variation(calibration_model:
                                                                 x_plane_idx : Optional[int] = None,
                                                                 y_plane_idx : Optional[int] = None,
                                                                 display_interactive_pane : bool = True,
-                                                                save_as: str = None):
+                                                                save_as: str = None,
+                                                                **save_kwargs):
     """
     For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
     https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
@@ -2773,6 +2798,9 @@ def plot_slices_currnet_allocation_condition_number_variation(calibration_model:
                                                                 cube_z_lim[1]])*1e3)
     colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
     mlab.outline()
+
+    if save_as is not None:
+        mlab.savefig(save_as, **save_kwargs)
 
     if display_interactive_pane:
         mlab.show()
