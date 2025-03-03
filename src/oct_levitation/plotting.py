@@ -21,9 +21,14 @@ import scipy.fft as scifft
 from typing import Optional, Tuple, List, Callable
 from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
+from tvtk.api import tvtk
 from warnings import warn
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
+
+### NOTE: An older version of mayavi i.e. 4.7.2 is used for this library, the docs for which
+### are no longer available on the original website. Consider using the wayback machine:
+### https://web.archive.org/web/20210220173347/https://docs.enthought.com/mayavi/mayavi/index.html
 
 ######################################
 # PLOTTING UTILITIES
@@ -2498,23 +2503,124 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
                                                   orientation_quaternion: np.ndarray,
                                                   cond_threshold: float = 20,
                                                   cond_color_steps: float = 10,
+                                                  clip_cond: float = 100,
                                                   cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
                                                   cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
                                                   cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                  num_samples: int = 1000,
+                                                  reject_M_component: str = "Tz",
+                                                  num_samples: int = 20,
+                                                  display_interactive_pane : bool = True,
                                                   save_as: str = None):
+    """
+    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
+    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
+
+    Apart from this, I use tvtk to save .vti data.
+    """
     
     # Sampling points according to the desired plot style.
-    X = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
-    Y = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
-    Z = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
-    X, Y, Z = np.meshgrid(X, Y, Z)
+    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
+    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
+    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
+    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
 
     M = geometry.magnetic_interaction_matrix_from_quaternion(orientation_quaternion,
                                                              dipole.strength,
                                                              full_mat=True,
                                                              torque_first=True,
                                                              dipole_axis=dipole.axis)
+    
+    reject_row_map = {"Tx": 0, "Ty": 1, "Tz": 2}
+    idx_r = reject_row_map[reject_M_component]
+    M = np.vstack((M[:idx_r], M[idx_r+1,:]))
+
+    @np.vectorize
+    def get_ma_condition(x, y, z):
+        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+        return np.linalg.cond(M @ A)
+    
+    cond = get_ma_condition(X, Y, Z)
+    cond = np.clip(cond, 0.0, clip_cond)
+
+    # Volumetric rendering
+    cond_field = mlab.pipeline.scalar_field(cond)
+
+    ctf = ColorTransferFunction()
+
+    # # Add solid green color for very low values
+    ctf.add_rgb_point(0,   0, 1, 0)  # Green at lowest value
+    # ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
+
+    # Add colormap for values ≥ 20 (e.g., blue to red gradient)
+    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue after threshold
+    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
+    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+
+
+    # Create opacity transfer function (OTF) by manipulating the _volume_property
+    opacity_function = tvtk.PiecewiseFunction()
+    # Set opacity for values below the threshold to be opaque (1.0)
+    opacity_function.add_point(1.0, 0.0)  # Fully opaque at lowest value
+    opacity_function.add_point(cond_threshold, 0.05)  # Less opaque at threshold
+    # Set opacity to 0.0 for higher values, making them fully transparent
+    opacity_function.add_point(cond_threshold + cond_color_steps, 0.2)
+    opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.4)
+
+    cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=cond_threshold + 2*cond_color_steps)
+
+    cond_vol._volume_property.set_color(ctf)  # Set custom color mapping
+    cond_vol._volume_property.set_scalar_opacity(opacity_function)
+    cond_vol.update_ctf = True  # Update color transfer function
+    # Add axes to the plot
+    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
+                                                                cube_x_lim[1], 
+                                                                cube_y_lim[0], 
+                                                                cube_y_lim[1],
+                                                                cube_z_lim[0],
+                                                                cube_z_lim[1]])*1e3)
+    mlab.outline()
+    colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
+
+    if display_interactive_pane:
+        mlab.show()
+
+    return cond_field
+
+def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
+                                                calibration_model: common.OctomagCalibratedModel,
+                                                orientation_quaternion: np.ndarray,
+                                                cond_range: np.ndarray = np.array([0.0, 50.0]),
+                                                cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                reject_M_component: str = "Tz",
+                                                num_samples: int = 20,
+                                                x_plane_idx : Optional[int] = None,
+                                                y_plane_idx : Optional[int] = None,
+                                                display_interactive_pane : bool = True,
+                                                save_as: str = None):
+    """
+    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
+    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
+
+    Apart from this, I use tvtk to save .vti data.
+    """
+    
+    # Sampling points according to the desired plot style.
+    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
+    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
+    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
+    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
+
+    M = geometry.magnetic_interaction_matrix_from_quaternion(orientation_quaternion,
+                                                             dipole.strength,
+                                                             full_mat=True,
+                                                             torque_first=True,
+                                                             dipole_axis=dipole.axis)
+    
+    reject_row_map = {"Tx": 0, "Ty": 1, "Tz": 2}
+    idx_r = reject_row_map[reject_M_component]
+    M = np.vstack((M[:idx_r], M[idx_r+1,:]))
 
     @np.vectorize
     def get_ma_condition(x, y, z):
@@ -2523,30 +2629,152 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
     
     cond = get_ma_condition(X, Y, Z)
 
-    # Drawing the mayavi plot
-    src = mlab.pipeline.scalar_field(X, Y, Z, cond)
+    # Render x and y aligned planes with a well defined colormap
+    if x_plane_idx is None:
+        x_plane_idx = num_samples // 2
+    if y_plane_idx is None:
+        y_plane_idx = num_samples // 2
+    slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
+                                    vmin=cond_range[0], vmax=cond_range[1])
+    slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
+                                    vmin=cond_range[0], vmax=cond_range[1])
+
+    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
+                                                                cube_x_lim[1], 
+                                                                cube_y_lim[0], 
+                                                                cube_y_lim[1],
+                                                                cube_z_lim[0],
+                                                                cube_z_lim[1]])*1e3)
+    colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
+    mlab.outline()
+
+    if display_interactive_pane:
+        mlab.show()
+
+    return (slice_x, slice_y, axes, colorbar)
+
+def plot_volumetric_current_allocation_condition_number_variation(calibration_model: common.OctomagCalibratedModel,
+                                                                    cond_threshold: float = 20,
+                                                                    cond_color_steps: float = 10,
+                                                                    cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                                    cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                                    cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                                    num_samples: int = 20,
+                                                                    display_interactive_pane : bool = True,
+                                                                    save_as: str = None):
+    """
+    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
+    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
+
+    Apart from this, I use tvtk to save .vti data.
+    """
     
-    # Create a color transfer function (CTF)
+    # Sampling points according to the desired plot style.
+    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
+    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
+    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
+    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
+
+    @np.vectorize
+    def get_ma_condition(x, y, z):
+        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+        return np.linalg.cond(A)
+    
+    cond = get_ma_condition(X, Y, Z)
+
+    # Volumetric rendering
+    cond_field = mlab.pipeline.scalar_field(cond)
+
     ctf = ColorTransferFunction()
 
-    # Add solid green color for values < 20
+    # Add solid green color for very low values
     ctf.add_rgb_point(0,   0, 1, 0)  # Green at lowest value
-    ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to 19.9
+    ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
 
     # Add colormap for values ≥ 20 (e.g., blue to red gradient)
-    ctf.add_rgb_point(cond_threshold + cond_color_steps,  0, 0, 1)  # Blue 
-    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 0, 0)  # Red
-    ctf.add_rgb_point(cond_threshold + 3*cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
+    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue after threshold
+    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
+    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
 
-    vol = mlab.pipeline.volume(src)
-    vol._volume_property.set_color(ctf)  # Set custom color mapping
-    vol._ctf = ctf
-    vol.update_ctf = True  # Update color transfer function
 
-    if save_as is not None:
-        if not save_as.endswith(".vti"):
-            warn("The volume plot is not being saved as the preferred .vti format. Use .vti format to view it in the interactive viewer.")
-        mlab.pipeline.save(save_as)
+    # Create opacity transfer function (OTF) by manipulating the _volume_property
+    opacity_function = tvtk.PiecewiseFunction()
+    # Set opacity for values below the threshold to be opaque (1.0)
+    opacity_function.add_point(1.0, 1.0)  # Fully opaque at lowest value
+    opacity_function.add_point(cond_threshold, 0.4)  # Less opaque at threshold
+    # Set opacity to 0.0 for higher values, making them fully transparent
+    opacity_function.add_point(cond_threshold + cond_color_steps, 0.2)
+    opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.01)
 
-    mlab.show()
-    return src
+    cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=0.8)
+
+    cond_vol._volume_property.set_color(ctf)  # Set custom color mapping
+    cond_vol._volume_property.set_scalar_opacity(opacity_function)
+    cond_vol.update_ctf = True  # Update color transfer function
+    # Add axes to the plot
+    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
+                                                                cube_x_lim[1], 
+                                                                cube_y_lim[0], 
+                                                                cube_y_lim[1],
+                                                                cube_z_lim[0],
+                                                                cube_z_lim[1]])*1e3)
+    mlab.outline()
+
+    if display_interactive_pane:
+        mlab.show()
+
+    return cond_field
+
+def plot_slices_currnet_allocation_condition_number_variation(calibration_model: common.OctomagCalibratedModel,
+                                                                cond_range: np.ndarray = np.array([0.0, 50.0]),
+                                                                cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                                cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                                cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
+                                                                num_samples: int = 20,
+                                                                x_plane_idx : Optional[int] = None,
+                                                                y_plane_idx : Optional[int] = None,
+                                                                display_interactive_pane : bool = True,
+                                                                save_as: str = None):
+    """
+    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
+    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
+
+    Apart from this, I use tvtk to save .vti data.
+    """
+    
+    # Sampling points according to the desired plot style.
+    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
+    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
+    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
+    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
+
+    @np.vectorize
+    def get_ma_condition(x, y, z):
+        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+        return np.linalg.cond(A)
+    
+    cond = get_ma_condition(X, Y, Z)
+
+    # Render x and y aligned planes with a well defined colormap
+    if x_plane_idx is None:
+        x_plane_idx = num_samples // 2
+    if y_plane_idx is None:
+        y_plane_idx = num_samples // 2
+    slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
+                                    vmin=cond_range[0], vmax=cond_range[1])
+    slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
+                                    vmin=cond_range[0], vmax=cond_range[1])
+
+    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
+                                                                cube_x_lim[1], 
+                                                                cube_y_lim[0], 
+                                                                cube_y_lim[1],
+                                                                cube_z_lim[0],
+                                                                cube_z_lim[1]])*1e3)
+    colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
+    mlab.outline()
+
+    if display_interactive_pane:
+        mlab.show()
+
+    return (slice_x, slice_y, axes, colorbar)
