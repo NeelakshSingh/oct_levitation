@@ -23,7 +23,7 @@ class FakePosePublisher:
         # self.amplitude = 0.0007252745435843604 # This one for z will lead to poor conditioning of JMA matrix.
         self.start_time = rospy.Time.now().to_sec()
 
-        self.f_pub = 100
+        self.f_pub = 1000
         self.tf_pub = rospy.Publisher(self.tf_topic, TransformStamped, queue_size=1)
         self.tf_timer = rospy.Timer(rospy.Duration(1/self.f_pub), self.tf_timer)
     

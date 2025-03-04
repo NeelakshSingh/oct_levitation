@@ -20,7 +20,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
     def post_init(self):
         self.HARDWARE_CONNECTED = True
         self.tfsub_callback_style_control_loop = True
-        self.control_rate = 100 # Set it to the vicon frequency
+        self.control_rate = 800 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.publish_desired_com_wrenches = True
         self.control_input_publisher = rospy.Publisher("/com_wrench_z_control/control_input",
@@ -75,10 +75,11 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
         # Denormalize the control gains.
-        # self.K = Tu @ K_norm @ np.linalg.inv(Tx)
+        # self.K = np.asarray(Tu @ K_norm @ np.linalg.inv(Tx))
         # self.K = np.array([[12.1024, 2.5101]]) # For POM Disc's Overdamped tuning without friction damping
         # self.K = np.array([[9.0896, 1.3842]]) # For Onyx disc's Overdamped tuning without friction damping.
-        self.K = np.array([[9.0896, 1.3842]])
+        # self.K = np.array([[9.0896, 1.3842]])
+        self.K = np.array([[21.04865335, 1.52203639]])
         
 
         self.control_gains_message = VectorStamped()
@@ -96,30 +97,38 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
         ## Using tustin's method to calculate a filtered derivative in discrete time.
         # The filter is a first order low pass filter.
-        f_filter = 20
-        Tf = 1/(2*np.pi*f_filter)
+        f_filter = 100
+        # Tf = 1/(2*np.pi*f_filter)
         # self.diff_alpha = 2*self.control_rate/(2*self.control_rate*Tf + 1)
         # self.diff_beta = (2*self.control_rate*Tf - 1)/(2*self.control_rate*Tf + 1)
         self.z_dot = 0.0
+
+        self.__first_iteration = True
 
         # For finite differences. Just use
         self.diff_alpha = 1/self.dt
         self.diff_beta = 0
 
+        self.SoftStarter = numerical.SigmoidSoftStarter(1)
+
         # self.calibration_file = "octomag_5point.yaml"
         self.control_gains_message.vector = np.concatenate((self.K.flatten(), np.array([self.diff_alpha, self.diff_beta])))
         self.metadata_msg = String()
         self.metadata_msg.data = f"""
-        EXPERIMENT METADATA
-        Calibration File: {self.calibration_file}
-        Experiment type: Sinusoidal refrence tracking along z-axis."""
+        Experiment metadata.
+        Experiment type: Vicon at 800Hz, 2Hz Sinusoidal Reference with DLQR Gains. Using Tustin's filtered differentiator with 100Hz cutoff.
+        Calibration file: {self.calibration_file}
+        Hardware Connected: {self.HARDWARE_CONNECTED}
+        Gains: {self.K.flatten()}
+        Calibration type: Legacy yaml file
+        """
 
     def simplified_Fz_allocation(self, tf_msg: TransformStamped, Fz_des: float):
         quaternion = np.array([
             tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
         ])
-        normal = -geometry.get_normal_vector_from_quaternion(quaternion) # -ve because south pole up
-        # normal = np.array([0, 0, -1])
+        # normal = -geometry.get_normal_vector_from_quaternion(quaternion) # -ve because south pole up
+        normal = self.rigid_body_dipole.dipole_list[0].axis
         # normal = np.array([0, 0, 1]) # FOR OCTOMAG FILE ONLY
         s_d = self.rigid_body_dipole.dipole_list[0].strength
         dipole_vector = s_d * normal
@@ -153,6 +162,9 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
         # Getting the desired COM wrench.
         z_com = tf_msg.transform.translation.z
+        if self.__first_iteration: # In order to ensure a soft start for the z_dot term.
+            self.last_z = z_com
+            self.__first_iteration = False
         self.z_dot = self.diff_alpha*(z_com - self.last_z) + self.diff_beta*self.z_dot
         self.last_z = z_com
         # rospy.loginfo(f"Z: {z_com}, Z dot: {z_dot}")
@@ -173,6 +185,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         
         # Performing simplified allocation to get the currents
         des_currents = self.simplified_Fz_allocation(tf_msg, F_z)
+        # self.desired_currents_msg.des_currents_reg = des_currents.flatten() * self.SoftStarter(self.dt)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":

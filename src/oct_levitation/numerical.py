@@ -16,6 +16,31 @@ def solve_tikhonov_regularization(A: np_t.ArrayLike, b: np_t.ArrayLike, alpha: f
     """
     return np.linalg.solve(A.T @ A + alpha*np.eye(A.shape[1]), A.T @ b)
 
+class SigmoidSoftStarter:
+
+    def __init__(self, T: float = 1):
+        """
+        A simple sigmoid function implementation which keeps track of the time elapsed and yields
+        a value which can be used as a multiplicative factor in order to soft start the system.
+        The function is shifted by 0.5 and along the y axis and multiplied by 2 to yield a function 
+        that goes from zero to 1.
+
+        Parameters
+        ----------
+            T (float): 95% settling time of the sigmoid function.
+        """
+        self.k = 3.66356/T
+        self.t = 0
+        self.__sigmoid = lambda x: 2/(1 + np.exp(-self.k*x)) - 1
+    
+    def update(self, dt: float):
+        self.t += dt
+        return self.__sigmoid(self.t)
+    
+    def __call__(self, dt: float):
+        return self.update(dt)
+
+
 class FirstOrderDifferentiator:
     def __init__(self, alpha: float):
         """
