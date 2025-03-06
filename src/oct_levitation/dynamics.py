@@ -187,15 +187,16 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         self.__Fz = cs.SX.sym("Fz")
         self.__Tau_m_x = cs.SX.sym("Tau_m_x")
         self.__Tau_m_y = cs.SX.sym("Tau_m_y")
+        self.__Tau_m_z = cs.SX.sym("Tau_m_z")
 
         # Input vector
         self.__u = cs.vertcat(
             self.__Fx, self.__Fy, self.__Fz,
-            self.__Tau_m_x, self.__Tau_m_y
+            self.__Tau_m_x, self.__Tau_m_y, self.__Tau_m_z
         )  # [Fx, Fy, Fz, Tau_m_x, Tau_m_y].T
 
         self.__F = cs.vertcat(self.__Fx, self.__Fy, self.__Fz)
-        self.__Tau_m_tilde = cs.vertcat(self.__Tau_m_x, self.__Tau_m_y)
+        self.__Tau_m_tilde = cs.vertcat(self.__Tau_m_x, self.__Tau_m_y, self.__Tau_m_z)
 
         # Define f1
         self.__f1 = cs.vertcat(self.__vx, self.__vy, self.__vz)
@@ -214,7 +215,7 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         self.__f2 = self.__F/ m
         self.__f3 = cs.mtimes(self.__E_exyz_inv, cs.vertcat(self.__wx, self.__wy, self.__wz))
         self.__I_m_inv = cs.inv(self.I_m)
-        self.__f4 = cs.mtimes(self.__I_m_inv, cs.vertcat(self.__Tau_m_tilde, 0)) \
+        self.__f4 = cs.mtimes(self.__I_m_inv, self.__Tau_m_tilde) \
                     - cs.mtimes(self.__I_m_inv, cs.cross(self.__w_m, cs.mtimes(self.I_m, self.__w_m)))
 
         self.__f_s_u = cs.vertcat(self.__f1, self.__f2, self.__f3, self.__f4)

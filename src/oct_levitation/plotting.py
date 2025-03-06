@@ -2030,7 +2030,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                                                  dipole_axis=dipole_axis)
         actual_wrench = M @ actual_fields
         for j, key in enumerate(list(actual_wrench_dict.keys())):
-            actual_wrench_dict[key].append(actual_wrench[j])
+            actual_wrench_dict[key].append(actual_wrench[j, 0])
 
     # Convert wrench dict to DataFrame
     actual_wrench_df = pd.DataFrame(actual_wrench_dict)
@@ -2575,7 +2575,7 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
     cond_vol._volume_property.set_scalar_opacity(opacity_function)
     cond_vol.update_ctf = True  # Update color transfer function
     # Add axes to the plot
-    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
+    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([cube_x_lim[0], 
                                                                 cube_x_lim[1], 
                                                                 cube_y_lim[0], 
                                                                 cube_y_lim[1],
@@ -2605,8 +2605,12 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
                                                 cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
                                                 reject_M_component: str = "Tz",
                                                 num_samples: int = 20,
-                                                x_plane_idx : Optional[int] = None,
-                                                y_plane_idx : Optional[int] = None,
+                                                x_plane_idx: Optional[int] = None,
+                                                y_plane_idx: Optional[int] = None,
+                                                z_plane_idx: Optional[int] = None,
+                                                disable_x_slice: bool = False,
+                                                disable_y_slice: bool = False,
+                                                disable_z_slice: bool = False,
                                                 display_interactive_pane : bool = True,
                                                 save_as: str = None,
                                                 **save_kwargs):
@@ -2645,12 +2649,24 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
         x_plane_idx = num_samples // 2
     if y_plane_idx is None:
         y_plane_idx = num_samples // 2
-    slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
-                                    vmin=cond_range[0], vmax=cond_range[1])
-    slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
-                                    vmin=cond_range[0], vmax=cond_range[1])
+    if z_plane_idx is None:
+        z_plane_idx = num_samples // 2
+    
+    slice_x = None
+    slice_y = None
+    slice_z = None
 
-    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
+    if not disable_x_slice:
+        slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
+                                        vmin=cond_range[0], vmax=cond_range[1])
+    if not disable_y_slice:
+        slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
+                                        vmin=cond_range[0], vmax=cond_range[1])
+    if not disable_z_slice:
+        slice_z = mlab.volume_slice(cond, plane_orientation='z_axes', slice_index=z_plane_idx, colormap="jet",
+                                        vmin=cond_range[0], vmax=cond_range[1])
+
+    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([cube_x_lim[0], 
                                                                 cube_x_lim[1], 
                                                                 cube_y_lim[0], 
                                                                 cube_y_lim[1],
@@ -2665,7 +2681,7 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
     if display_interactive_pane:
         mlab.show()
 
-    return (slice_x, slice_y, axes, colorbar)
+    return (slice_x, slice_y, slice_z, axes, colorbar)
 
 def plot_volumetric_current_allocation_condition_number_variation(calibration_model: common.OctomagCalibratedModel,
                                                                     cond_threshold: float = 20,

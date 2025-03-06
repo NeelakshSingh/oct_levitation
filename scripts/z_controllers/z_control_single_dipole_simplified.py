@@ -18,9 +18,13 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
+        ## EXPERIMENT FLAGS
         self.HARDWARE_CONNECTED = True
+        self.ORIENTATION_VARYING_Mf = False
+        self.POSITION_VARYING_Af = True
+
         self.tfsub_callback_style_control_loop = True
-        self.control_rate = 800 # Set it to the vicon frequency
+        self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.publish_desired_com_wrenches = True
         self.control_input_publisher = rospy.Publisher("/com_wrench_z_control/control_input",
@@ -75,11 +79,11 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
         # Denormalize the control gains.
-        # self.K = np.asarray(Tu @ K_norm @ np.linalg.inv(Tx))
+        self.K = np.asarray(Tu @ K_norm @ np.linalg.inv(Tx))
+        # self.K = np.asarray(K_norm)
         # self.K = np.array([[12.1024, 2.5101]]) # For POM Disc's Overdamped tuning without friction damping
         # self.K = np.array([[9.0896, 1.3842]]) # For Onyx disc's Overdamped tuning without friction damping.
         # self.K = np.array([[9.0896, 1.3842]])
-        self.K = np.array([[21.04865335, 1.52203639]])
         
 
         self.control_gains_message = VectorStamped()

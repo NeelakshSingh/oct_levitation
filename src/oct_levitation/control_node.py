@@ -2,6 +2,7 @@ import os
 import rospy
 import oct_levitation.mechanical as mechanical
 import tf2_ros
+import numpy as np
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
@@ -23,6 +24,7 @@ class ControlSessionNodeBase:
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
+        self.MAX_CURRENT = 10 # A
 
         self.control_rate = rospy.get_param("~control_rate", 100)
 
@@ -164,6 +166,11 @@ class ControlSessionNodeBase:
         # set by the control_logic if it is implemented acc to
         # the specifications.
         self.control_input_publisher.publish(self.control_input_message)
+        des_currents = np.asarray(self.desired_currents_msg.vector)
+        des_currents = np.clip(des_currents, -self.MAX_CURRENT, self.MAX_CURRENT)
+        if np.any(np.abs(des_currents) == self.MAX_CURRENT):
+            rospy.logwarn(f"CURRENT LIMIT {self.MAX_CURRENT}A HIT!")
+        self.desired_currents_msg.vector = des_currents
         self.currents_publisher.publish(self.desired_currents_msg)
 
         if self.publish_desired_com_wrenches:
