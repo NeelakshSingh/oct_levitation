@@ -92,12 +92,23 @@ def rotation_matrix_from_quaternion(q: np.ndarray) -> np.ndarray:
     Parameters
     ----------
         q: Quaternion in the form [x, y, z, w]
+    
+    Returns
+    -------
+        R: 3x3 rotation matrix correspoding to q.
     """
     check_if_unit_quaternion_raise_error(q)
     q = q/(np.linalg.norm(q) + EPSILON_TOLERANCE)
     qx = get_skew_symmetric_matrix(q[:3])
     R = (2*q[3]**2 - 1)*np.eye(3) + 2*q[3]*qx + 2*np.outer(q[:3], q[:3])
     return R
+
+def invert_quaternion(q: np.ndarray) -> np.ndarray:
+    """
+    Computes and returns the complex conjugate and therefore the inverse quaterion
+    representing the inverse rotation.
+    """
+    return np.concatenate([-q[:3], [q[3]]])
 
 def get_normal_vector_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
@@ -233,8 +244,7 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
         v_rot: 3x1 rotated array
     """
     # Using quaternion algebra to avoid ambiguities.
-    if not np.isclose(np.linalg.norm(q), 1.0):
-        raise ValueError("Quaternion must be normalized.")
+    check_if_unit_quaternion(q)
     v_mag = np.linalg.norm(v)
     v = v/(v_mag + EPSILON_TOLERANCE) # normalizing
     v_aug = np.vstack((0, v.reshape(3, 1)))
@@ -316,6 +326,9 @@ def euler_xyz_rate_to_local_angular_velocity_map_matrix(euler: np.ndarray) -> np
             [ -np.sin(z)*np.cos(y),  np.cos(z),  0  ],
             [  np.sin(y),            0,          1  ]
         ])
+
+def local_angular_velocities_from_euler_xyz_rate(euler: np.ndarray, euler_rate: np.ndarray) -> np.ndarray:
+    return euler_xyz_rate_to_local_angular_velocity_map_matrix(euler) @ euler_rate
 
 def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """

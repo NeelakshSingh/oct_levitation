@@ -21,6 +21,9 @@ import subprocess
 import scipy.signal as signal
 import scipy.fft as scifft
 
+import pynumdiff.optimize
+import pynumdiff.smooth_finite_difference
+
 from typing import Optional, Tuple, List, Dict, Union, Any
 from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
@@ -2223,6 +2226,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                         calibrated_model: common.OctomagCalibratedModel,
                                         dipole_strength: float,
                                         dipole_axis: np.ndarray,
+                                        use_local_frame_for_torques: bool = False,
                                         save_as: str = None,
                                         save_as_emf: bool = False,
                                         inkscape_path: str = INKSCAPE_PATH,
@@ -2282,6 +2286,9 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     time = dipole_center_pose_df['time']
     actual_wrench_dict = {'wrench.torque.x': [], 'wrench.torque.y': [], 'wrench.torque.z': [],
                           'wrench.force.x': [], 'wrench.force.y': [], 'wrench.force.z': []}
+    
+    key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
+               'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
 
     # Calculate actual wrench
     for i in range(len(combined_pose_currents)):
@@ -2308,9 +2315,28 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                                                  full_mat=True,
                                                                  torque_first=True,
                                                                  dipole_axis=dipole_axis)
-        actual_wrench = M @ actual_fields
+        actual_wrench = (M @ actual_fields).flatten()
+        forces_wf = actual_wrench[:3]
+        torques = actual_wrench[3:]
+
+        if use_local_frame_for_torques:
+            torques = geometry.rotate_vector_from_quaternion(
+                geometry.invert_quaternion(quaternion),
+                torques
+            )
+
+            # Also transform the desired torques from the world frame to the local frame.
+            des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
+            des_torques = geometry.rotate_vector_from_quaternion(
+                geometry.invert_quaternion(quaternion),
+                des_torques
+            )
+            desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
+        
+        actual_wrench = np.concatenate((forces_wf, torques))
+
         for j, key in enumerate(list(actual_wrench_dict.keys())):
-            actual_wrench_dict[key].append(actual_wrench[j, 0])
+            actual_wrench_dict[key].append(actual_wrench[j])
 
     # Convert wrench dict to DataFrame
     actual_wrench_df = pd.DataFrame(actual_wrench_dict)
@@ -2318,9 +2344,6 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     # Plot settings
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
     colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Force (actual, reference), Torque (actual, reference)
-
-    key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
-               'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
     
     fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
     
@@ -2372,6 +2395,149 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
     
     if not DISABLE_PLT_SHOW:
         fig.show()    
+    return fig, axes
+
+def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
+                              save_as: str = None,
+                              save_as_emf: bool = False,
+                              inkscape_path: str = INKSCAPE_PATH,
+                              also_plot_pynumdiff: bool = True,
+                              cutoff_frequency: float = 50,
+                              local_frame_for_ang_vel: bool = True,
+                              **kwargs) -> Tuple[Figure, np.ndarray]:
+
+    # Time and pose data (Assuming pose is given in quaternion, position in xyz)
+    time = dipole_center_pose_df['time'].to_numpy()
+    position_columns = ['transform.translation.x', 'transform.translation.y', 'transform.translation.z']
+    orientation_columns = ['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']  # Quaternion components
+
+    # Compute linear velocities using finite differences
+    positions = dipole_center_pose_df[position_columns].to_numpy()
+
+    linear_velocities = np.diff(positions, axis=0) / np.diff(time)[:, None]
+    linear_velocities = np.vstack([np.zeros(3), linear_velocities])  # Insert a zero at the start for the first time step
+    linear_velocities_pynumdiff = None
+
+    quaternions = dipole_center_pose_df[orientation_columns].to_numpy()
+
+    # Compute angular velocities using finite differences on Euler angles
+    euler_angles = np.array([geometry.euler_xyz_from_quaternion(dipole_center_pose_df[orientation_columns].iloc[i].to_numpy())
+                             for i in range(len(dipole_center_pose_df))])
+    
+    # Compute angular velocities using finite differences of Euler angles
+    euler_rates_fd = np.diff(euler_angles, axis=0) / np.diff(time)[:, None]
+    euler_rates_fd = np.vstack([np.zeros(3), euler_rates_fd])  # Insert a zero at the start for the first time step
+
+    # Prepare figure and axes for subplots (2 rows, 3 columns)
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Velocity (actual, reference), Angular Velocity (actual, reference)
+
+    # Plot angular velocities (wx, wy, wz) on second row
+    angular_velocities_fd = np.array([geometry.local_angular_velocities_from_euler_xyz_rate(euler_angles[i], euler_rates_fd[i])
+                                      for i in range(len(dipole_center_pose_df))]) # Get local angular velocities from Euler angle derivatives
+
+    angular_velocities_pynumdiff = None
+
+    # Use pynumdiff if enabled
+    if also_plot_pynumdiff:
+        # Compute all linear velocities and angular rates using pynumdiff
+        # Strategy is to use the optimizer on the first component and then use the optimal
+        # parameters for the rest of the components too.
+        dt = np.average(np.diff(time.flatten()))
+        log_gamma = -1.6*np.log(cutoff_frequency) -0.71*np.log(dt) - 5.1
+        tvgamma = np.exp(log_gamma)
+        def optimal_diff_signal(signal: np.ndarray):
+            signal_params, signal_val = pynumdiff.optimize.smooth_finite_difference.butterdiff(
+                signal, dt, params=None, tvgamma=tvgamma, options={'iterate': True}
+            )
+            return pynumdiff.smooth_finite_difference.butterdiff(
+                signal, dt, params=signal_params, options={'iterate': True}
+            )
+        
+        linear_velocities_pynumdiff = np.zeros_like(linear_velocities)
+        euler_rates_pynumdiff = np.zeros_like(euler_rates_fd)
+        euler_angles_filtered = np.zeros_like(euler_angles)
+        for i in range(3):
+            signal = positions[:, i]
+            signal_filtered, signal_dot = optimal_diff_signal(signal)
+            linear_velocities_pynumdiff[:, i] = signal_dot
+
+            ang_signal = euler_angles[:, i]
+            ang_signal_filtered, ang_signal_dot = optimal_diff_signal(ang_signal)
+            euler_rates_pynumdiff[:, i] = ang_signal_dot
+            euler_angles_filtered[:, i] = ang_signal_filtered
+        
+        # Finally convert the euler rates to angular velocities
+        angular_velocities_pynumdiff = np.array([geometry.local_angular_velocities_from_euler_xyz_rate(euler_angles_filtered[i], euler_rates_pynumdiff[i])
+                                                 for i in range(len(dipole_center_pose_df))]) # Get local angular velocities from Euler angle derivatives
+
+
+    if not local_frame_for_ang_vel:
+        # Convert angular velocities to the global frame.
+        # The estimated angular velocities are directly in the local frame always.
+        def rotate_array_from_quat_array(qarr: np.ndarray, varr: np.ndarray):
+            return np.array([geometry.rotate_vector_from_quaternion(qarr[i], varr[i])
+                                          for i in range(len(qarr))])
+        angular_velocities_fd = rotate_array_from_quat_array(quaternions, angular_velocities_fd) # Get local angular velocities from Euler angle derivatives
+        if angular_velocities_pynumdiff is not None:
+            angular_velocities_pynumdiff = rotate_array_from_quat_array(quaternions, angular_velocities_pynumdiff)
+
+    # Plot linear velocities (vx, vy, vz) on first row
+    for i, component in enumerate(position_columns):
+        axes[0, i].plot(time, linear_velocities[:, i] * 1e3, label=f'{component} (mm/s)', color=colors[0], zorder=1, **kwargs)
+        if also_plot_pynumdiff:
+            axes[0, i].plot(time, linear_velocities_pynumdiff[:, i] * 1e3, label=f'Pynumdiff {component} (mm/s)', color=colors[1], zorder=2, **kwargs)
+        axes[0, i].set_title(f'{component} - Linear Velocity')
+        axes[0, i].minorticks_on()
+        axes[0, i].grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
+        axes[0, i].grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
+        if i == 0:
+            axes[0, i].set_ylabel('Velocity (mm/s)')
+        if i == 2:
+            axes[0, i].legend(loc='upper right')
+    
+    for i, component in enumerate(['wx', 'wy', 'wz']):
+        axes[1, i].plot(time, np.rad2deg(angular_velocities_fd[:, i]), label=f'{component} (deg/s)', color=colors[2], zorder=1, **kwargs)
+        if also_plot_pynumdiff:
+            axes[1, i].plot(time, np.rad2deg(angular_velocities_pynumdiff[:, i]), label=f'Pynumdiff {component} (deg/s)', color=colors[3], zorder=2, **kwargs)
+        axes[1, i].set_title(f'{component} - Angular Velocity')
+        axes[1, i].minorticks_on()
+        axes[1, i].grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
+        axes[1, i].grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
+        if i == 0:
+            axes[1, i].set_ylabel('Angular Velocity (deg/s)')
+        if i == 2:
+            axes[1, i].legend(loc='upper right')
+
+    fig.suptitle(f"Estimated velocities using numerical differentiation. Local frame for angular velocities: {local_frame_for_ang_vel}")
+
+    # Shared X-axis for all subplots
+    for ax in axes[1, :]:
+        ax.set_xlabel('Time (s)')
+    
+    axes[0, 1].sharey(axes[0, 0])
+    axes[0, 2].sharey(axes[0, 0])
+    axes[1, 1].sharey(axes[1, 0])
+    axes[1, 2].sharey(axes[1, 0])
+
+    # Autoscale axes
+    for ax_row in axes: 
+        for ax in ax_row:
+            ax.relim()   
+            ax.autoscale()
+
+    fig.tight_layout()
+
+    # Saving plot if requested
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+
     return fig, axes
 
 ######################################
