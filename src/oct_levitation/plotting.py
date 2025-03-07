@@ -1,4 +1,7 @@
+import matplotlib.figure
+import matplotlib.axes
 import numpy as np
+import numpy.typing as np_t
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -18,7 +21,7 @@ import subprocess
 import scipy.signal as signal
 import scipy.fft as scifft
 
-from typing import Optional, Tuple, List, Callable, Dict
+from typing import Optional, Tuple, List, Dict, Union, Any
 from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
 from tvtk.api import tvtk
@@ -26,13 +29,23 @@ from warnings import warn
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
 
+DISABLE_PLT_SHOW = False
+
 ### NOTE: An older version of mayavi i.e. 4.7.2 is used for this library, the docs for which
 ### are no longer available on the original website. Consider using the wayback machine:
 ### https://web.archive.org/web/20210220173347/https://docs.enthought.com/mayavi/mayavi/index.html
 
+"""
+NOTE: I would like to thank ChatGPT for coming up with some really good ideas for extending this
+library and help with writing some cool plotting code I couldn't have written due to my limited 
+knowledge when I first started to write this library.
+"""
+
 ######################################
 # PLOTTING UTILITIES
 ######################################
+
+AxesArray = np_t.NDArray[plt.Axes]
 
 xkcd_contrast_colors = {
     "Blue": "#0343df",
@@ -161,8 +174,10 @@ def wrench_stamped_df_to_array_df(ft_df: pd.DataFrame) -> pd.DataFrame:
 #     # Place axes and replot everything
 #     place_axes(arrangement)
 
-#     plt.tight_layout()
-#     plt.show()
+#     fig.tight_layout()
+#     
+    # if not DISABLE_PLT_SHOW:
+    #     fig.show()
 #     return fig, ax_grid
 
 def arrange_subplots(arrangement, x_share=None, y_share=None):
@@ -222,16 +237,163 @@ def arrange_subplots(arrangement, x_share=None, y_share=None):
             target_ax.set_ylim(source_ax.get_ylim())
             target_ax.legend()
     
-    plt.tight_layout()
-    plt.show()
+    fig.tight_layout()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, ax_grid
+
+def apply_axes_properties(fig: Figure,
+                          ax_array: Union[plt.Axes, AxesArray],
+                          save_as: str = None,
+                          save_as_emf: bool = False,
+                          inkscape_path: str = INKSCAPE_PATH, 
+                          **kwargs) -> Tuple[Figure, Union[plt.Axes, List[plt.Axes]]]:
+    """
+    Applies various optional properties to the provided Matplotlib Axes, enabling customization 
+    of grids, labels, ticks, limits, legends, aspect ratio, spines, background, and more.
+
+    Parameters:
+    -----------
+        fig : Figure
+            The Matplotlib Figure object associated with the Axes.
+        
+        ax_array : Union[plt.Axes, List[plt.Axes]]
+            A single Axes instance or a list of Axes instances to modify.
+        
+        save_as : str, optional
+            If provided, saves the figure to the specified filename (supports formats like PNG, PDF, SVG).
+        
+        save_as_emf : bool, default=False
+            If True, converts the saved figure to EMF format using Inkscape.
+
+        inkscape_path : str, default=INKSCAPE_PATH
+            Path to Inkscape executable for EMF conversion.
+        
+        **kwargs : dict
+            Optional customization options:
+            - `"title"` (str): Sets the title of the plot.
+            - `"xlabel"` (str): Sets the x-axis label.
+            - `"ylabel"` (str): Sets the y-axis label.
+            - `"xlim"` (tuple): Sets x-axis limits as (min, max).
+            - `"ylim"` (tuple): Sets y-axis limits as (min, max).
+            - `"xticks"` (list): Sets specific tick positions for x-axis.
+            - `"yticks"` (list): Sets specific tick positions for y-axis.
+            - `"major_grid"` (bool, default=False): Enables/disables major grid.
+            - `"minor_grid"` (bool, default=False): Enables/disables minor grid.
+            - `"major_grid_style"` (dict): Customizes major grid appearance (e.g., `{'linestyle': '--', 'alpha': 0.5}`).
+            - `"minor_grid_style"` (dict): Customizes minor grid appearance (e.g., `{'linestyle': '--', 'alpha': 0.5}`).
+            - `"minor_ticks"` (bool, default=False): Enables/disables minor ticks.
+            - `"major_ticks"` (bool, default=True): Enables/disables major ticks.
+            - `"tick_direction"` (str, default="in"): Direction of ticks ('in', 'out', 'inout').
+            - `"tick_size"` (dict): Customizes tick size (e.g., `{"major": 6, "minor": 3}`).
+            - `"legend"` (bool, default=False): Enables/disables legend if available.
+            - `"legend_loc"` (str, default="best"): Legend location (e.g., `"upper right"`).
+            - `"aspect"` (str or float): Aspect ratio of the plot.
+            - `"spines"` (dict): Modifies spines visibility (e.g., `{"top": False, "right": False}`).
+            - `"facecolor"` (str): Sets figure background color.
+            - `"tight_layout"` (bool, default=True): Adjusts layout to prevent overlap.
+
+    Returns:
+    --------
+        Tuple[Figure, Union[plt.Axes, List[plt.Axes]]]
+            The modified figure and Axes instances.
+
+    """
+    # Ensure ax_array is a list for uniform processing
+    if not isinstance(ax_array, np.ndarray):
+        ax_array = np.array([ax_array])
+
+    for ax in np.ravel(ax_array):
+        # Titles & Labels
+        if "title" in kwargs:
+            ax.set_title(kwargs["title"])
+        if "xlabel" in kwargs:
+            ax.set_xlabel(kwargs["xlabel"])
+        if "ylabel" in kwargs:
+            ax.set_ylabel(kwargs["ylabel"])
+
+        # Axis Limits
+        if "xlim" in kwargs:
+            ax.set_xlim(kwargs["xlim"])
+        if "ylim" in kwargs:
+            ax.set_ylim(kwargs["ylim"])
+
+        # Custom Tick Positions
+        if "xticks" in kwargs:
+            ax.set_xticks(kwargs["xticks"])
+        if "yticks" in kwargs:
+            ax.set_yticks(kwargs["yticks"])
+
+        # Grid & Minor/Major Ticks
+
+        if kwargs.get("major_ticks", True):
+            ax.tick_params(axis="both", which="major", direction=kwargs.get("tick_direction", "in"),
+                           length=kwargs.get("tick_size", {}).get("major", 6))
+            ax.tick_params(axis="both", which="minor", direction=kwargs.get("tick_direction", "in"),
+                           length=kwargs.get("tick_size", {}).get("minor", 3))
+
+
+        if kwargs.get("major_grid", False):
+            grid_style = kwargs.get("major_grid_style", {"linestyle": "-", 
+                                                         "alpha": 0.5,
+                                                         "color": mcolors.CSS4_COLORS["lightslategray"],
+                                                         "linewidth": 0.8})
+            ax.grid(which="major", **grid_style)
+
+        if kwargs.get("minor_ticks", False):
+            ax.minorticks_on()
+
+        if kwargs.get("minor_grid", False):
+            ax.minorticks_on()
+            grid_style = kwargs.get("major_grid_style", {"linestyle": ":", 
+                                                         "alpha": 0.5,
+                                                         "color": mcolors.CSS4_COLORS["lightslategray"],
+                                                         "linewidth": 0.8})
+            ax.grid(which="minor", **grid_style)
+
+        # Legend
+        if kwargs.get("legend", False):
+            ax.legend(loc=kwargs.get("legend_loc", "best"))
+
+        # Aspect Ratio
+        if "aspect" in kwargs:
+            ax.set_aspect(kwargs["aspect"])
+
+        # Spine Visibility
+        if "spines" in kwargs:
+            for spine, visibility in kwargs["spines"].items():
+                ax.spines[spine].set_visible(visibility)
+
+    # Figure-Level Modifications
+    if "facecolor" in kwargs:
+        fig.patch.set_facecolor(kwargs["facecolor"])
+
+    if kwargs.get("tight_layout", True):
+        fig.tight_layout()
+
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+
+    return fig, ax_array
+    
 
 ######################################
 # PLOTTING POSES
 ######################################
 
-def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple = (30, 10),
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> None:
+def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, 
+                                      figsize: tuple = (30, 10),
+                                      save_as: str=None, 
+                                      save_as_emf: bool=False, 
+                                      inkscape_path: str=INKSCAPE_PATH, 
+                                      **kwargs) -> Tuple[Figure, AxesArray]:
     """
     Plots the 12 states from the state history of the 6DOF rigid body using the XYZ euler angles for orientation.
     Args:
@@ -291,11 +453,15 @@ def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, figsize: tuple 
     axs[1, 5].set_xlabel('Time')
     axs[1, 5].set_ylabel('Angular Velocity (rad/s)')
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    
+    return fig, axs
 
 def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (10,10),
                                   save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> None:
@@ -307,12 +473,14 @@ def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (1
     ax.set_ylabel('Y (mm)')
     ax.set_zlabel('Z (mm)')
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
-
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    return fig, ax
 
 def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
                           xscale=1, yscale=1, zscale=1,
@@ -353,6 +521,8 @@ def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
 
     if name is not None:
         axis.text(X[0,0],X[0,1],X[0,2], name, zdir='x')
+    
+    return axis
 
 def plot_6DOF_pose_euler_xyz(state_history: np.ndarray, 
                              orientation_plot_frequency: int = 1,
@@ -405,10 +575,14 @@ def plot_6DOF_pose_euler_xyz(state_history: np.ndarray,
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    
+    return fig, ax
 
 def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, scale_equal: bool = True,
-                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, AxesArray]:
     """
     Plots target Euler angles and positions from actual poses DataFrame and a constant reference pose.
     
@@ -469,18 +643,20 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
                 ax.autoscale()
 
     # Adjust layout
-    plt.tight_layout()
+    fig.tight_layout()
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 
 def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_position: np.ndarray,
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
+                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, AxesArray]:
     """
     Plots target positions from actual poses DataFrame and a constant reference position.
     
@@ -505,20 +681,22 @@ def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_posi
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout()
+    fig.tight_layout()
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
 
     return fig, axs
 
 def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: float,
                                        save_as: str=None,
                                        save_as_emf: bool=False,
-                                       inkscape_path: str=INKSCAPE_PATH, **kwargs):
+                                       inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, plt.Axes]:
     """
     Plots target positions from actual poses DataFrame and a constant reference position.
     All inputs are in SI units.
@@ -543,20 +721,22 @@ def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: 
     ax.legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
 
     return fig, ax
 
 def plot_z_position_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
                               save_as: str = None, save_as_emf: bool = False,
-                              inkscape_path: str = INKSCAPE_PATH, **kwargs):
+                              inkscape_path: str = INKSCAPE_PATH, **kwargs) -> Tuple[Figure, plt.Axes]:
     """
     Plots Z positions over time from actual poses and reference poses.
     All inputs are in SI units.
@@ -586,16 +766,18 @@ def plot_z_position_variable_reference(actual_poses: pd.DataFrame, reference_pos
     ax.legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     # Save as SVG/EMF if required
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, ax
 
 def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
@@ -628,14 +810,16 @@ def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_ang
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
@@ -692,14 +876,16 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
                 ax.autoscale()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
@@ -760,14 +946,16 @@ def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
                 ax.autoscale()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_z_position_Fz_constant_reference(actual_poses: pd.DataFrame, reference_z: float,
@@ -818,16 +1006,18 @@ def plot_z_position_Fz_constant_reference(actual_poses: pd.DataFrame, reference_
         ax.grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     # Save as SVG/EMF if needed
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axes
 
 def plot_z_position_Fz_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
@@ -878,16 +1068,18 @@ def plot_z_position_Fz_variable_reference(actual_poses: pd.DataFrame, reference_
         ax.grid(which='minor', color=mcolors.CSS4_COLORS['lightslategray'], linestyle=':', linewidth=0.5)
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     # Save as SVG/EMF if needed
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axes
 
 
@@ -943,16 +1135,18 @@ def plot_alpha_beta_variable_reference(actual_poses: pd.DataFrame, reference_pos
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     # Save as SVG/EMF if required
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
@@ -1022,14 +1216,16 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
                 ax.autoscale()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 
@@ -1065,13 +1261,15 @@ def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_o
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray,
@@ -1106,13 +1304,15 @@ def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, referenc
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, scale_equal: bool = True,
@@ -1171,13 +1371,15 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
                 ax.autoscale()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 
@@ -1206,13 +1408,15 @@ def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_pose
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
@@ -1248,13 +1452,15 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
         axs[i].legend()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
@@ -1323,16 +1529,16 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
     ax.legend()
 
     # Show plot
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, ax
-
-
 
 def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
                                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
@@ -1394,13 +1600,15 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     ax.legend()
 
     # Show plot
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, ax
 
 ######################################
@@ -1426,13 +1634,15 @@ def plot_actual_currents(system_state_df: pd.DataFrame,
         axs[i].grid(True)
 
     # Adjust layout to prevent overlap
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
 
     return fig, axs
 
@@ -1457,13 +1667,15 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
         axs[i].grid(True)
 
     # Adjust layout to prevent overlap
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
 
     return fig, axs
 
@@ -1548,13 +1760,15 @@ def plot_forces_and_torques(ft_df: pd.DataFrame,
         ax.set_xlabel('Time (s)')
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Leave space for the title
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # Leave space for the title
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axes
 
 def plot_forces_and_torques_from_wrench_stamped(ft_df: pd.DataFrame,
@@ -1614,11 +1828,13 @@ def plot_3d_quiver(dataframe: pd.DataFrame,
     ax.set_title('3D Quiver Plot of Field Vectors (Field in mT)')
     
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, ax
 
 def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
@@ -1662,14 +1878,16 @@ def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
     ax.set_zlabel('Z (mm)')
     ax.set_title(f'3D Quiver Plot of Field Vectors (Field in mT), Scale: {scale_factor}x')
     ax.legend()
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, ax
 
 def plot_field_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
@@ -1726,13 +1944,15 @@ def plot_field_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, des
 
     axs[-1].set_xlabel("Time [s]")
     fig.suptitle("Actual (Non-Linear Model) v/s Desired Field (Linear Approx) Components at Dipole Center")
-    plt.tight_layout()
+    fig.tight_layout()
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_gradient_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
@@ -1791,15 +2011,17 @@ def plot_gradient_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, 
 
     axs[-1].set_xlabel("Time [s]")
     fig.suptitle("Actual (Non-Linear Model) v/s Desired Gradients (Linear Approx) at Dipole Center")
-    plt.tight_layout()
+    fig.tight_layout()
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_field_components_at_dipole_center_const_actuation_position(
@@ -1860,13 +2082,15 @@ def plot_field_components_at_dipole_center_const_actuation_position(
 
     axs[-1].set_xlabel("Time [s]")
     fig.suptitle(f"Actual (Non-Linear Model) v/s Desired Field Components at Dipole Center for A({des_actuation_pos})")
-    plt.tight_layout()
+    fig.tight_layout()
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
@@ -1926,15 +2150,71 @@ def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: 
 
     axs[-1].set_xlabel("Time [s]")
     fig.suptitle(f"Actual (Non-Linear Model) v/s Desired Gradients at Dipole Center For A({des_actuation_pos})")
-    plt.tight_layout()
+    fig.tight_layout()
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    return fig, axs
+
+def plot_actual_field_and_gradients(pose_df: pd.DataFrame, actual_currents_df: pd.DataFrame, 
+                                    calibrated_model: common.OctomagCalibratedModel, 
+                                    save_as: str = None, save_as_emf: bool = False, 
+                                    inkscape_path: str = INKSCAPE_PATH, **kwargs):
+    """
+    Plots the 3 magnetic field components (Bx, By, Bz) and the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz)
+    over time using the nonlinear model's forward computation function.
+
+    Parameters:
+        pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
+        actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
+        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
+        save_as (str): Filename to save the plot as SVG/EMF (without extension).
+        **kwargs: Additional parameters for plt.plot().
+    """
+    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
+    time = combined_actual['time']
+
+    actual_values = {'Bx': [], 'By': [], 'Bz': [], 'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
+
+    for i in range(len(combined_actual)):
+        position = np.array([
+            combined_actual['transform.translation.x'].iloc[i],
+            combined_actual['transform.translation.y'].iloc[i],
+            combined_actual['transform.translation.z'].iloc[i]
+        ])
+        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
+        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
+
+        for idx, key in enumerate(actual_values.keys()):
+            actual_values[key].append(actual_field[idx] * 1000)  # Convert to mT and mT/m
+
+    # Plot the components
+    fig, axs = plt.subplots(8, 1, figsize=(12, 14), sharex=True, sharey=False)
+    for i, key in enumerate(actual_values.keys()):
+        axs[i].plot(time, actual_values[key], linestyle='-', color='tab:red', **kwargs)
+        axs[i].set_ylabel(f'{key} [mT]' if 'dB' not in key else f'{key} [mT/m]')
+        axs[i].grid(True)
+
+    axs[-1].set_xlabel("Time [s]")
+    fig.suptitle("Actual Magnetic Field and Gradient Components at Dipole Center")
+    fig.tight_layout()
+
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
@@ -1946,7 +2226,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                         save_as: str = None,
                                         save_as_emf: bool = False,
                                         inkscape_path: str = INKSCAPE_PATH,
-                                        **kwargs):
+                                        **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
     """
     Plots the actual and desired wrench (force and torque) components over time for a dipole center,
     based on the given pose and current data.
@@ -2081,15 +2361,17 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                 ax.relim()   
                 ax.autoscale()
 
-    plt.tight_layout()
+    fig.tight_layout()
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()    
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()    
     return fig, axes
 
 ######################################
@@ -2165,16 +2447,18 @@ def plot_fft_from_dataframe(dataframe: pd.DataFrame,
     if suptitle is not None:
         fig.suptitle(suptitle)
 
-    plt.tight_layout()
+    fig.tight_layout()
 
     # Save the plot if required
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_time_series_and_fft(dataframe: pd.DataFrame, 
@@ -2261,7 +2545,11 @@ def plot_time_series_and_fft(dataframe: pd.DataFrame,
             import subprocess
             subprocess.run([inkscape_path, svg_path, '--export-type=emf', '--export-filename', emf_path])
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+
+    return fig, axes
 
 def plot_ffts_from_two_dataframes(dataframe1: pd.DataFrame,
                                   dataframe2: pd.DataFrame,
@@ -2381,18 +2669,20 @@ def plot_ffts_from_two_dataframes(dataframe1: pd.DataFrame,
     if suptitle is not None:
         fig.suptitle(suptitle)
 
-    plt.tight_layout()
+    fig.tight_layout()
 
     # Save the plot if required
     if save_as:
-        plt.savefig(save_as, format='svg', dpi=300)
+        fig.savefig(save_as, format='svg', dpi=300)
         if save_as_emf:
             emf_path = save_as.replace('.svg', '.emf')
-            plt.savefig(emf_path, format='emf', dpi=300)
+            fig.savefig(emf_path, format='emf', dpi=300)
             if inkscape_path:
                 os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 ######################################
@@ -2413,15 +2703,17 @@ def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
     ax.legend()
     ax.grid(True, linestyle='--', alpha=0.7)
 
-    plt.tight_layout()
+    fig.tight_layout()
 
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
 
     return fig, ax
 
@@ -2489,13 +2781,15 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
             ax.autoscale()
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
-        plt.savefig(save_as, format='svg')
+        fig.savefig(save_as, format='svg')
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    plt.show()
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
     return fig, axs
 
 def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
@@ -2582,7 +2876,6 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
                                                                 cube_z_lim[0],
                                                                 cube_z_lim[1]])*1e3)
     mlab.outline()
-    rpy = np.rad2deg(geometry.euler_xyz_from_quaternion(orientation_quaternion))
 
     if save_as is not None:
         mlab.savefig(save_as, **save_kwargs)
@@ -2594,7 +2887,7 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
     if display_interactive_pane:
         mlab.show()
 
-    return cond_field
+    return (cond_field, cond_vol, axes)
 
 def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
                                                 calibration_model: common.OctomagCalibratedModel,
@@ -2763,7 +3056,7 @@ def plot_volumetric_current_allocation_condition_number_variation(calibration_mo
     if display_interactive_pane:
         mlab.show()
 
-    return cond_field
+    return (cond_field, cond_vol, axes)
 
 def plot_slices_currnet_allocation_condition_number_variation(calibration_model: common.OctomagCalibratedModel,
                                                                 cond_range: np.ndarray = np.array([0.0, 50.0]),
