@@ -1342,7 +1342,7 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
     reference_euler = np.rad2deg(reference_euler)
 
     # Plot positions
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10), sharex=True)
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
@@ -2230,6 +2230,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                         save_as: str = None,
                                         save_as_emf: bool = False,
                                         inkscape_path: str = INKSCAPE_PATH,
+                                        return_actual_wrench: bool = False,
                                         **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
     """
     Plots the actual and desired wrench (force and torque) components over time for a dipole center,
@@ -2394,7 +2395,11 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
 
     
     if not DISABLE_PLT_SHOW:
-        fig.show()    
+        fig.show()
+    
+    if return_actual_wrench:
+        actual_wrench_df['time'] = desired_wrench['time']
+        return fig, axes, actual_wrench_df
     return fig, axes
 
 def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
@@ -2402,6 +2407,9 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
                               save_as_emf: bool = False,
                               inkscape_path: str = INKSCAPE_PATH,
                               also_plot_pynumdiff: bool = True,
+                              also_use_wrench: bool = False,
+                              dipole_actual_wrench_df: pd.DataFrame = None,
+                              rigid_body_dipole : mechanical.MultiDipoleRigidBody = None,
                               cutoff_frequency: float = 50,
                               local_frame_for_ang_vel: bool = True,
                               **kwargs) -> Tuple[Figure, np.ndarray]:
@@ -2430,7 +2438,7 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
 
     # Prepare figure and axes for subplots (2 rows, 3 columns)
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Velocity (actual, reference), Angular Velocity (actual, reference)
+    colors = ['tab:blue', 'tab:red', 'tab:green']  # Velocity (actual, reference), Angular Velocity (actual, reference)
 
     # Plot angular velocities (wx, wy, wz) on second row
     angular_velocities_fd = np.array([geometry.local_angular_velocities_from_euler_xyz_rate(euler_angles[i], euler_rates_fd[i])
@@ -2471,6 +2479,22 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
         angular_velocities_pynumdiff = np.array([geometry.local_angular_velocities_from_euler_xyz_rate(euler_angles_filtered[i], euler_rates_pynumdiff[i])
                                                  for i in range(len(dipole_center_pose_df))]) # Get local angular velocities from Euler angle derivatives
 
+    linear_velocities_wrench = None
+    angular_velocities_wrench = None
+
+    if also_use_wrench:
+        dipole_actual_wrench_df["dt"] = dipole_actual_wrench_df["time"].diff().fillna(0)  # First entry has no previous sample
+        linear_velocities_wrench = np.zeros_like(linear_velocities)
+        angular_velocities_wrench = np.zeros_like(angular_velocities_fd)
+        # Compute linear velocity (integrate forces)
+        linear_velocities_wrench[:, 0] = ((dipole_actual_wrench_df["wrench.force.x"] / rigid_body_dipole.mass_properties.m) * dipole_actual_wrench_df["dt"]).cumsum()
+        linear_velocities_wrench[:, 1] = ((dipole_actual_wrench_df["wrench.force.y"] / rigid_body_dipole.mass_properties.m) * dipole_actual_wrench_df["dt"]).cumsum()
+        linear_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.force.z"] / rigid_body_dipole.mass_properties.m) * dipole_actual_wrench_df["dt"]).cumsum()
+
+        # Compute angular velocity (integrate torques)
+        angular_velocities_wrench[:, 0] = ((dipole_actual_wrench_df["wrench.torque.x"] / rigid_body_dipole.mass_properties.I_bf[0, 0]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 1] = ((dipole_actual_wrench_df["wrench.torque.y"] / rigid_body_dipole.mass_properties.I_bf[1, 1]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.torque.z"] / rigid_body_dipole.mass_properties.I_bf[2, 2]) * dipole_actual_wrench_df["dt"]).cumsum()
 
     if not local_frame_for_ang_vel:
         # Convert angular velocities to the global frame.
@@ -2487,6 +2511,9 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
         axes[0, i].plot(time, linear_velocities[:, i] * 1e3, label=f'{component} (mm/s)', color=colors[0], zorder=1, **kwargs)
         if also_plot_pynumdiff:
             axes[0, i].plot(time, linear_velocities_pynumdiff[:, i] * 1e3, label=f'Pynumdiff {component} (mm/s)', color=colors[1], zorder=2, **kwargs)
+        if also_use_wrench:
+            axes[0, i].plot(time, linear_velocities_wrench[:, i] * 1e3, label=f'Torque integrated {component} (mm/s)', color=colors[2], zorder=3, **kwargs)
+
         axes[0, i].set_title(f'{component} - Linear Velocity')
         axes[0, i].minorticks_on()
         axes[0, i].grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
@@ -2497,9 +2524,11 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
             axes[0, i].legend(loc='upper right')
     
     for i, component in enumerate(['wx', 'wy', 'wz']):
-        axes[1, i].plot(time, np.rad2deg(angular_velocities_fd[:, i]), label=f'{component} (deg/s)', color=colors[2], zorder=1, **kwargs)
+        axes[1, i].plot(time, np.rad2deg(angular_velocities_fd[:, i]), label=f'{component} (deg/s)', color=colors[0], zorder=1, **kwargs)
         if also_plot_pynumdiff:
-            axes[1, i].plot(time, np.rad2deg(angular_velocities_pynumdiff[:, i]), label=f'Pynumdiff {component} (deg/s)', color=colors[3], zorder=2, **kwargs)
+            axes[1, i].plot(time, np.rad2deg(angular_velocities_pynumdiff[:, i]), label=f'Pynumdiff {component} (deg/s)', color=colors[1], zorder=2, **kwargs)
+        if also_use_wrench:
+            axes[1, i].plot(time, np.rad2deg(angular_velocities_wrench[:, i]), label=f'Torque integrated {component} (deg/s)', color=colors[2], zorder=3, **kwargs)
         axes[1, i].set_title(f'{component} - Angular Velocity')
         axes[1, i].minorticks_on()
         axes[1, i].grid(which='major', color=mcolors.CSS4_COLORS['lightslategray'], linewidth=0.8)
