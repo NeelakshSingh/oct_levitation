@@ -259,6 +259,20 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     v_rot = (Ml @ Mr @ v_aug).flatten()
     return v_rot[1:]*v_mag
 
+def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        R: 3x3 rotation matrix
+    
+    Returns
+    -------
+        q: Quaternion in the form [x, y, z, w]
+    """
+    scipy_rotation = scitf.Rotation.from_matrix(R)
+    q = scipy_rotation.as_quat(scalar_first=False)
+    return q
+
 #############################################
 # Euler Angle Related Functions
 #############################################
@@ -500,6 +514,15 @@ def inertial_reduced_attitude_from_quaternion(q: np.ndarray, b: np.ndarray) -> n
     return Lambda
 
 z_axis_inertial_attitude_from_quaternion = partial(inertial_reduced_attitude_from_quaternion, b=np.array([0, 0, 1]))
+
+def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    This function computes the inertial reduced attitude representation from the current pose
+    rotation matrix for a body fixed vector b expressed in the body frame.
+    """
+    b = b/np.linalg.norm(b, 2)
+    Lambda = R @ b
+    return Lambda
 
 #############################################
 # Magnetic Interaction Matrix Calculations

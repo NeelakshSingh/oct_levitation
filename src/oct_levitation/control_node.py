@@ -24,7 +24,7 @@ class ControlSessionNodeBase:
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
-        self.MAX_CURRENT = 10 # A
+        self.MAX_CURRENT = 4 # A
 
         self.control_rate = rospy.get_param("~control_rate", 100)
 

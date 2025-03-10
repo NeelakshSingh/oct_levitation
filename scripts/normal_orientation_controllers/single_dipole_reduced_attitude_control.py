@@ -68,8 +68,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.diff_alpha = self.control_rate
         self.diff_beta = 0
         self.control_gains_message.vector = np.concatenate(([self.kp], self.Kd.flatten()))
-        self.last_quaternion = geometry.IDENTITY_QUATERNION
-        self.q_dot = np.zeros(4)
+        self.last_R = np.eye(3)
+        self.R_dot = np.zeros((3,3))
 
         self.__first_reading = True
         self.metadata_msg.data = f"""
@@ -193,6 +193,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
         # Getting the desired COM wrench.
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
         e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
 
         ### Reference for tracking
@@ -211,17 +212,16 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
 
         if self.__first_reading:
-            self.last_quaternion = dipole_quaternion
+            self.last_R = R
             self.__first_reading = False
 
-        self.q_dot = self.diff_alpha*(dipole_quaternion - self.last_quaternion) + self.diff_beta*self.q_dot
-        self.last_quaternion = dipole_quaternion
+        self.R_dot = self.diff_alpha*(R - self.last_R) + self.diff_beta*self.R_dot
+        self.last_R = R
 
-        omega = geometry.angular_velocity_from_quaternion(dipole_quaternion, q_dot=self.q_dot)
+        omega = geometry.angular_velocity_from_rotation_matrix(R, self.R_dot)
         E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
         omega_tilde = E @ omega
-        R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
-        Lambda = geometry.inertial_reduced_attitude_from_quaternion(dipole_quaternion, b=np.array([0.0, 0.0, 1.0]))
+        Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
         reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
         # Conventional reduced attitude stabilization control law
         u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ (geometry.get_skew_symmetric_matrix(Lambda) @ Lambda_d)
