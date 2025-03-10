@@ -67,12 +67,9 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
         self.diff_alpha = self.control_rate
         self.diff_beta = 0
-        self.control_gains_message.vector = np.concatenate((self.K_phi.flatten(), self.K_theta.flatten()))
+        self.control_gains_message.vector = np.concatenate(([self.kp], self.Kd.flatten()))
         self.last_quaternion = geometry.IDENTITY_QUATERNION
         self.q_dot = np.zeros(4)
-
-        # Desired reduced pose
-        self.Lambda_d = np.eye(3) @ np.array([0.0, 0.0, 1.0])
 
         self.__first_reading = True
         self.metadata_msg.data = f"""
@@ -156,6 +153,29 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
         des_currents = (np.linalg.pinv(A) @ B_des).flatten()
 
+        JMA = A
+        jma_condition = np.linalg.cond(JMA)
+
+        if self.warn_jma_condition:
+            condition_check_tol = 9e3
+            if jma_condition > condition_check_tol:
+                np.set_printoptions(linewidth=np.inf)
+                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, Current TF: {tf_msg}
+                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
+                                    \n JMA: \n {JMA}""")
+                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
+                
+                rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
+                                    A: {A},
+                                    A condition number: {np.linalg.cond(A)}""")
+
+        if self.publish_jma_condition:
+            jma_condition_msg = VectorStamped()
+            jma_condition_msg.header.stamp = rospy.Time.now()
+            # jma_condition = np.linalg.cond(M_tau @ A_field)
+            jma_condition_msg.vector = [jma_condition]
+            self.jma_condition_pub.publish(jma_condition_msg)
+
         return des_currents
 
     def callback_control_logic(self, tf_msg: TransformStamped):
@@ -173,6 +193,22 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
         # Getting the desired COM wrench.
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
+
+        ### Reference for tracking
+        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg)
+        ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
+
+        ### Publishing the reference and actual values.
+        phi = e_xyz[0]
+        theta = e_xyz[1]
+        phi_ref = ref_e_xyz[0]
+        theta_ref = ref_e_xyz[1]
+        self.ref_actual_msg.vector = [phi, phi_ref, theta, theta_ref]
+        self.ref_actual_pub.publish(self.ref_actual_msg)
+
+        ## Calculating the reference reduced attitude.
+        Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
 
         if self.__first_reading:
             self.last_quaternion = dipole_quaternion
@@ -186,12 +222,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         omega_tilde = E @ omega
         R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
         Lambda = geometry.inertial_reduced_attitude_from_quaternion(dipole_quaternion, b=np.array([0.0, 0.0, 1.0]))
-        reduced_attitude_error = 1 - np.dot(self.Lambda_d, Lambda)
+        reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
         # Conventional reduced attitude stabilization control law
-        u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ (geometry.get_skew_symmetric_matrix(Lambda) @ self.Lambda_d)
+        u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ (geometry.get_skew_symmetric_matrix(Lambda) @ Lambda_d)
         
-        Tau_x = u[0, 0]*self.Iavg
-        Tau_y = u[1, 0]*self.Iavg
+        Tau_x = u[0]*self.Iavg
+        Tau_y = u[1]*self.Iavg
 
         ## Filtering out spikes through a median filter
         # Tau_des = np.array([Tau_x, Tau_y])
@@ -199,7 +235,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # Tau_x = Tau_des[0]
         # Tau_y = Tau_des[1]
 
-        self.error_state_msg.vector = np.concatenate((reduced_attitude_error, omega_tilde))
+        self.error_state_msg.vector = np.concatenate(([reduced_attitude_error], np.rad2deg(omega_tilde.flatten())))
         self.error_state_pub.publish(self.error_state_msg)
         self.control_input_message.vector = [Tau_x, Tau_y]
 
