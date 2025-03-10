@@ -2,6 +2,7 @@ import numpy as np
 import scipy.spatial.transform as scitf
 
 from scipy.linalg import block_diag
+from functools import partial
 
 from geometry_msgs.msg import TransformStamped
 
@@ -86,6 +87,10 @@ def get_non_homoegeneous_vector(v_h: np.ndarray) -> np.ndarray:
     """
     assert v_h.size == 4, "Input vector must have 4 elements."
     return v_h[:3]
+
+#############################################
+# Quaternion Related Functions
+#############################################
 
 def rotation_matrix_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
@@ -253,6 +258,10 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     Mr = get_right_quaternion_matrix(q_T)
     v_rot = (Ml @ Mr @ v_aug).flatten()
     return v_rot[1:]*v_mag
+
+#############################################
+# Euler Angle Related Functions
+#############################################
 
 def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
@@ -435,6 +444,66 @@ def angle_residual(a: float, b: float):
     if residual > np.pi:
         residual -= 2*np.pi
     return residual
+
+#############################################
+# Reduced Attitude Representation Realted
+# Functions
+#############################################
+
+def angular_velocity_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        R: 3x3 rotation matrix from the local frame to the reference frame.
+        R_dot: 3x3 time derivative of the rotation matrix.
+    
+    Returns
+    -------
+        omega: 3x1 angular velocity of local frame w.r.t refrence frame expressed in the local frame.
+    """
+    omega = np.zeros(3)
+    omega_skew = R_dot @ R.T
+    omega[0] = (omega_skew[2, 1] - omega_skew[1, 2])/2
+    omega[1] = (omega_skew[0, 2] - omega_skew[2, 0])/2
+    omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2
+    return omega
+
+def angular_velocity_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        q: Quaternion in the form [x, y, z, w]
+        q_dot: Time derivative of the quaternion, can be calculated however you want, first order approximation, etc.
+    
+    Returns
+    -------
+        omega: 3 element angular velocity of local frame w.r.t refrence frame expressed in the local frame.
+    """
+    left_component_matrix = np.array([
+        [ q[3], -q[2], q[1]],
+        [ q[2], q[3], -q[0]],
+        [ -q[1], q[0], q[3]],
+        [ -q[0], -q[1], -q[2]]
+    ])
+
+    omega = 2*left_component_matrix.T @ q_dot
+    return omega.flatten()
+
+def inertial_reduced_attitude_from_quaternion(q: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    This function computes the inertial reduced attitude representation from the current pose
+    quaternion for a body fixed vector b expressed in the body frame.
+    """
+    R = rotation_matrix_from_quaternion(q)
+    b = b/np.linalg.norm(b, 2)
+    Lambda = R @ b
+    return Lambda
+
+z_axis_inertial_attitude_from_quaternion = partial(inertial_reduced_attitude_from_quaternion, b=np.array([0, 0, 1]))
+
+#############################################
+# Magnetic Interaction Matrix Calculations
+#############################################
 
 def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray:
     M_F = np.array([

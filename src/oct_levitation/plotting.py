@@ -2414,6 +2414,13 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
                               local_frame_for_ang_vel: bool = True,
                               **kwargs) -> Tuple[Figure, np.ndarray]:
 
+    """
+    Plots the linear velocities and angular velocities (in local frame) over time for a dipole center,
+    based on the given pose data.
+
+    This function computes the linear and angular velocities using finite differences on the pose data.
+    """
+
     # Time and pose data (Assuming pose is given in quaternion, position in xyz)
     time = dipole_center_pose_df['time'].to_numpy()
     position_columns = ['transform.translation.x', 'transform.translation.y', 'transform.translation.z']
