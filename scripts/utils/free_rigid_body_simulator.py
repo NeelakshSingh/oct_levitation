@@ -3,14 +3,15 @@ import rospy
 import tf2_ros
 import tf.transformations as tr
 
-from geometry_msgs.msg import TransformStamped, WrenchStamped
+from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
 
 import oct_levitation.common as common
 import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
+import oct_levitation.numerical as numerical
 
-from scipy.linalg import expm
+from scipy.integrate import solve_ivp
 
 def ft_array_from_wrench(wrench: WrenchStamped):
     return (np.array([wrench.wrench.force.x, wrench.wrench.force.y, wrench.wrench.force.z]),
@@ -41,7 +42,8 @@ class DynamicsSimulator:
         gravity_on = rospy.get_param("~gravity_on", False)
         self.p = np.array(rospy.get_param("~initial_position", [0.0, 0.0, 0.0])) # World frame
         self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
-        self.q = np.array(rospy.get_param("~initial_orientation", [0.0, 0.0, 0.0])) # Local frame orientation w.r.t world frame
+        initial_rpy = np.array(rospy.get_param("~initial_rpy", [0.0, 0.0, 0.0])) # World frame
+        self.q = geometry.quaternion_from_euler_xyz(np.rad2deg(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
 
@@ -85,23 +87,17 @@ class DynamicsSimulator:
 
         # Computing the velocity and position
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
-        self.v += (F + self.F_amb)/self.m * dt
-        self.p += self.v * dt
+        self.p, self.v = numerical.integrate_linear_dynamics_constant_force(self.p, self.v, F, self.m, dt)
 
         # Numerically integration the orientation through the lie group exponential map of angular velocity.
         # The angular velocity is resolved in the local frame.
-        omega_dot = self.I_bf_inv @ (Tau - np.cross(self.omega, self.I_bf @ self.omega))
-        self.omega += omega_dot * dt
-        # In the following step, we make use of the fact that the angular velocity represents the instantaneous
-        # axis of rotation and use the skew symmetric tangent space representation of the lie group SO(3) to
-        # compute the change rotation matrix.
-        R_dot = expm(geometry.skew_symmetric(self.omega) * dt)
-        self.R = self.R @ R_dot
+        self.R, self.omega = numerical.integrate_R_omega_constant_torque(self.R, self.omega, Tau, self.I_bf, dt)
 
-        self.q = geometry.quaternion_from_
+        self.q = geometry.quaternion_from_rotation_matrix(self.R)
 
         self.__tf_msg.header.stamp = rospy.Time.now()
-        self.__tf_msg.transform.translation.z = state[0]
+        self.__tf_msg.transform.translation = Vector3(*self.p)
+        self.__tf_msg.transform.rotation = Quaternion(*self.q / np.linalg.norm(self.q))
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
         self.vicon_pub.publish(self.__tf_msg)
 

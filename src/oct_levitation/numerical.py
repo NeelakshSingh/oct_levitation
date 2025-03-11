@@ -1,6 +1,15 @@
 import numpy as np
 import numpy.typing as np_t
+
+import oct_levitation.geometry as geometry
+
 from typing import Union, Iterable
+from scipy.linalg import expm
+from scipy.integrate import solve_ivp
+
+########################################
+# Different solutions for allocation
+########################################
 
 def solve_tikhonov_regularization(A: np_t.ArrayLike, b: np_t.ArrayLike, alpha: float) -> np_t.ArrayLike:
     """
@@ -15,6 +24,86 @@ def solve_tikhonov_regularization(A: np_t.ArrayLike, b: np_t.ArrayLike, alpha: f
         np_t.ArrayLike: The solution to the least squares problem.
     """
     return np.linalg.solve(A.T @ A + alpha*np.eye(A.shape[1]), A.T @ b)
+
+########################################
+# Numerical integration of orientation
+########################################
+
+def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torque: np_t.NDArray, I: np_t.NDArray, dt: float,
+                                      damping: np_t.NDArray = np.zeros(3)) -> np_t.NDArray:
+    """
+    This function integrates the orientation of a rigid body with constant angular velocity and torque.
+    Geometric integration over SO(3) using the exponential map works for constant angular velocity but not so well under
+    angular acceleration. I found a good alternative which assumes constant angular acceleration and uses magnus expansion 
+    with rotation matrix kinematics to integrate the orientation. 
+    Source1: https://cwzx.wordpress.com/2013/12/16/numerical-integration-for-rotational-dynamics/
+    Source2.1: https://github.com/stephane-caron/pymanoid/blob/master/pymanoid/transformations.py#L135
+    Source2.2: https://scaron.info/doc/pymanoid/forward-kinematics.html
+
+    Parameters:
+        R (np_t.NDArray): The rotation matrix at the current time step.
+        omega (np_t.NDArray): The angular velocity at the current time step (in body fixed frame).
+        torque (np_t.NDArray): The torque at the current time step, applied in ZOH fashion (given in body fixed frame).
+        I (np_t.NDArray): The inertia tensor of the rigid body in body fixed frame.
+        dt (float): The time step.
+        damping (np_t.NDArray): The damping coefficients along the three axes. Not normalized by inertia (given in body fixed frame).
+
+    Returns:
+        (R, omega) Tuple(np_t.NDArray, np_t.NDArray, ): The rotation matrix and body fixed angular velocities at the next time step.
+    """
+    # First we convert angvel and I to world frame.
+    omega_world = R @ omega
+    I_world = R @ I @ R.T
+
+    # This computation is not going to be exact since the inertia matrix will actually vary in time.
+    # But we are assuming that the inertia matrix is constant for the time step.
+    alpha = np.linalg.solve(I_world, torque - np.cross(omega_world, I_world @ omega_world) - np.multiply(damping, omega_world))
+
+    omega_new = omega_world + alpha*dt
+
+    # Now we use magnus expansion
+    Omega1 = 0.5*(omega + omega_new)*dt
+    Omega2 = (1/12)*(np.cross(omega_new, omega))*np.power(dt, 2)
+    Omega3 = (1/240)*(np.cross( alpha, np.cross(alpha, omega) ))*np.power(dt, 5)
+
+    Omega = Omega1 + Omega2 + Omega3
+
+    R_new = expm(geometry.get_skew_symmetric_matrix(Omega)) @ R
+
+    omega_new_body = R_new.T @ omega_new
+
+    return R_new, omega_new_body
+
+def integrate_linear_dynamics_constant_force(p: np_t.NDArray, v: np_t.NDArray, F: np_t.NDArray, m: float, dt: float,
+                                             damping: np_t.NDArray = np.zeros(3)) -> np_t.NDArray:
+    """
+    This function integrates the linear dynamics of a rigid body with constant force.
+    This function assumes that the force is constant and the damping is constant as well.
+
+    Parameters:
+        p (np_t.NDArray): The position at the current time step.
+        v (np_t.NDArray): The velocity at the current time step.
+        F (np_t.NDArray): The force at the current time step.
+        m (float): The mass of the rigid body.
+        dt (float): The time step.
+        damping (np_t.NDArray): The damping coefficients along the three axes. Not normalized by mass.
+    
+    Returns:
+        np_t.NDArray: The position at the next time step.
+    """
+    def linear_dynamics_diffeqn(t, x):
+        p_dot = v
+        v_dot = (F + np.multiply(damping, v))/m
+        return np.concatenate([p_dot, v_dot])
+    
+    sol = solve_ivp(linear_dynamics_diffeqn, [0, dt], np.concatenate([p, v]), t_eval=[dt])
+    position_new = sol.y[:3]
+    velocity_new = sol.y[3:]
+    return position_new, velocity_new
+
+########################################
+# Other utility functions
+########################################
 
 class SigmoidSoftStarter:
 

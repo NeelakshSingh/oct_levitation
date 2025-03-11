@@ -324,6 +324,9 @@ def local_angular_velocity_to_euler_xyz_rate_map_matrix(euler: np.ndarray) -> np
     -------
         E_exyz_inv: 3x3 matrix that maps the body frame angular velocity to the Euler XYZ rates.
     """
+    # If you are referring to the robot dynamics lecture notes, the expression there relates the
+    # world frame angular velocity, this map here is for the local frame angular velocity to the
+    # Euler XYZ rates.
     y = euler[1]
     z = euler[2]
     return np.array([

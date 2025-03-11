@@ -183,6 +183,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/fake_pose_publisher.py
   scripts/utils/reference_pose_publisher.py
   scripts/utils/condition_number_plot.py
+  scripts/utils/free_rigid_body_simulator.py
 
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
