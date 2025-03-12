@@ -1,5 +1,6 @@
 <launch>
-    <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen"/>
+    <!-- <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen"/> -->
+    <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen"/>
     <!-- <node pkg="oct_levitation" name="fake_pose_publisher" type="fake_pose_publisher.py" output="screen"/> -->
     <!-- <node pkg="tnb_mns_driver" name="tnb_mns_driver_node" type="tnb_mns_driver_node" output="screen" launch-prefix="xterm -e" /> -->
 </launch>

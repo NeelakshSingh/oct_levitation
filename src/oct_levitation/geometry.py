@@ -270,7 +270,7 @@ def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
         q: Quaternion in the form [x, y, z, w]
     """
     scipy_rotation = scitf.Rotation.from_matrix(R)
-    q = scipy_rotation.as_quat(scalar_first=False)
+    q = scipy_rotation.as_quat() # Always returned in scalar last from scipy 1.10
     return q
 
 #############################################
@@ -467,7 +467,7 @@ def angle_residual(a: float, b: float):
 # Functions
 #############################################
 
-def angular_velocity_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
+def angular_velocity_body_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
@@ -485,7 +485,7 @@ def angular_velocity_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> n
     omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2
     return omega
 
-def angular_velocity_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.ndarray:
+def angular_velocity_ref_frame_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
@@ -494,7 +494,7 @@ def angular_velocity_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.nda
     
     Returns
     -------
-        omega: 3 element angular velocity of local frame w.r.t refrence frame expressed in the local frame.
+        omega: 3 element angular velocity of local frame w.r.t refrence frame expressed in the reference frame.
     """
     left_component_matrix = np.array([
         [ q[3], -q[2], q[1]],

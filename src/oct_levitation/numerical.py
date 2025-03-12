@@ -97,8 +97,8 @@ def integrate_linear_dynamics_constant_force(p: np_t.NDArray, v: np_t.NDArray, F
         return np.concatenate([p_dot, v_dot])
     
     sol = solve_ivp(linear_dynamics_diffeqn, [0, dt], np.concatenate([p, v]), t_eval=[dt])
-    position_new = sol.y[:3]
-    velocity_new = sol.y[3:]
+    position_new = sol.y.flatten()[:3]
+    velocity_new = sol.y.flatten()[3:]
     return position_new, velocity_new
 
 ########################################

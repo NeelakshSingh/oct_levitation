@@ -1,9 +1,10 @@
 import numpy as np
 import rospy
 import tf2_ros
+import os
 import tf.transformations as tr
 
-from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion
+from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion, Vector3Stamped
 from tnb_mns_driver.msg import DesCurrentsReg
 
 import oct_levitation.common as common
@@ -27,8 +28,10 @@ class DynamicsSimulator:
         self.__tf_msg = TransformStamped()
         self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.vicon_frame = self.rigid_body.pose_frame
+        self.rpy_frame = os.path.join(self.vicon_frame, "sim_rpy")
         self.world_frame = "vicon/world"
         self.vicon_pub = rospy.Publisher(self.vicon_frame, TransformStamped, queue_size=10)
+        self.rpy_pub = rospy.Publisher(self.rpy_frame, Vector3Stamped, queue_size=10)
 
         self.last_command_recv = 0
         self.last_commmand_timeout = 0.2
@@ -54,6 +57,8 @@ class DynamicsSimulator:
         
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
+        self.__rpy_msg = Vector3Stamped()
+        self.__rpy_msg.header.frame_id = self.vicon_frame
 
         self.last_recvd_wrench = WrenchStamped()
 
@@ -63,8 +68,6 @@ class DynamicsSimulator:
         self.I_bf = self.rigid_body.mass_properties.I_bf
         self.m = self.rigid_body.mass_properties.m
         self.I_bf_inv = np.linalg.inv(self.I_bf)
-
-        self.simulation_timer = rospy.Timer(rospy.Duration(self.Ts), self.simulation_loop)
     
     def simulation_loop(self, event):
 
@@ -99,6 +102,11 @@ class DynamicsSimulator:
         self.__tf_msg.transform.translation = Vector3(*self.p)
         self.__tf_msg.transform.rotation = Quaternion(*self.q / np.linalg.norm(self.q))
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
+
+        self.__rpy_msg.header.stamp = rospy.Time.now()
+        self.__rpy_msg.vector = Vector3(*np.rad2deg(geometry.euler_xyz_from_quaternion(self.q)))
+        
+        self.rpy_pub.publish(self.__rpy_msg)
         self.vicon_pub.publish(self.__tf_msg)
 
     def wrench_callback(self, com_wrench: WrenchStamped):
@@ -111,9 +119,10 @@ class DynamicsSimulator:
             self.__last_command_warning_sent = False
     
     def run(self):
-        self.timer = rospy.Timer(rospy.Duration(self.Ts), self.timer_callback)
+        self.simulation_timer = rospy.Timer(rospy.Duration(self.Ts), self.simulation_loop)
+        rospy.spin()
+
 
 if __name__ == "__main__":
     dynamics_simulator = DynamicsSimulator()
     dynamics_simulator.run()
-    rospy.spin()

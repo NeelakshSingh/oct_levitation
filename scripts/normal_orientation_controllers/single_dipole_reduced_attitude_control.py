@@ -218,13 +218,13 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.R_dot = self.diff_alpha*(R - self.last_R) + self.diff_beta*self.R_dot
         self.last_R = R
 
-        omega = geometry.angular_velocity_from_rotation_matrix(R, self.R_dot)
+        omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
         E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
         omega_tilde = E @ omega
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
         reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
         # Conventional reduced attitude stabilization control law
-        u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ (geometry.get_skew_symmetric_matrix(Lambda) @ Lambda_d)
+        u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ np.cross(Lambda, Lambda_d)
         
         Tau_x = u[0]*self.Iavg
         Tau_y = u[1]*self.Iavg
