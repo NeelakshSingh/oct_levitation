@@ -54,14 +54,17 @@ def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torq
     # First we convert angvel and I to world frame.
     omega_world = R @ omega
     I_world = R @ I @ R.T
+    torque_world = R @ torque
 
     # This computation is not going to be exact since the inertia matrix will actually vary in time.
     # But we are assuming that the inertia matrix is constant for the time step.
-    alpha = np.linalg.solve(I_world, torque - np.cross(omega_world, I_world @ omega_world) - np.multiply(damping, omega_world))
+    alpha = np.linalg.solve(I_world, torque_world - np.cross(omega_world, I_world @ omega_world) - np.multiply(damping, omega_world))
 
     omega_new = omega_world + alpha*dt
 
     # Now we use magnus expansion
+    # NOTE: It might actually be simpler to get the magnus expansion for the body fixed frame
+    # dynamics and just directly integrate the body fixed frame dynamics.
     Omega1 = 0.5*(omega + omega_new)*dt
     Omega2 = (1/12)*(np.cross(omega_new, omega))*np.power(dt, 2)
     Omega3 = (1/240)*(np.cross( alpha, np.cross(alpha, omega) ))*np.power(dt, 5)

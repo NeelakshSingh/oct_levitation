@@ -46,8 +46,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
             
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
 
-        self.kp = 0.5
-        self.Kd = np.diag([0.05, 0.05])
+        self.kp = 4.5
+        self.Kd = np.diag([1.0, 1.0])*3.0
 
         rospy.loginfo(f"Control gains kp: {self.kp}, Kd: {self.Kd}")
 

@@ -55,7 +55,7 @@ class DynamicsSimulator:
         gravity_on = rospy.get_param("~gravity_on", False)
         self.p = np.array(rospy.get_param("~initial_position", [0.0, 0.0, 0.0])) # World frame
         self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
-        initial_rpy = np.array(rospy.get_param("~initial_rpy", [15.0, 0.0, 0.0])) # World frame
+        initial_rpy = np.array(rospy.get_param("~initial_rpy", [30.0, 30.0, 0.0])) # World frame
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
@@ -92,9 +92,10 @@ class DynamicsSimulator:
         self.wrench_sub = rospy.Subscriber(self.rigid_body.com_wrench_topic, WrenchStamped, self.wrench_callback, queue_size=1)
 
         self.last_sim_time = rospy.Time.now().to_sec()
-        # self.I_bf = self.rigid_body.mass_properties.I_bf
-        com_inertia = self.rigid_body.mass_properties.com_inertia_properties
-        self.I_bf = np.diag([com_inertia.Px, com_inertia.Py, com_inertia.Pz])
+        self.I_bf = self.rigid_body.mass_properties.I_bf
+        ### Uncomment the lines below to use the principal moments of inertia instead.
+        # com_inertia = self.rigid_body.mass_properties.com_inertia_properties
+        # self.I_bf = np.diag([com_inertia.Px, com_inertia.Py, com_inertia.Pz])
         self.m = self.rigid_body.mass_properties.m
         self.I_bf_inv = np.linalg.inv(self.I_bf)
     
