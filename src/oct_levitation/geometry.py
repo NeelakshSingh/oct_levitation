@@ -512,7 +512,7 @@ def inertial_reduced_attitude_from_quaternion(q: np.ndarray, b: np.ndarray) -> n
     quaternion for a body fixed vector b expressed in the body frame.
     """
     R = rotation_matrix_from_quaternion(q)
-    b = b/np.linalg.norm(b, 2)
+    b = b/np.linalg.norm(b, 2) # Reduced attitude should always be a unit vector representing a direction
     Lambda = R @ b
     return Lambda
 

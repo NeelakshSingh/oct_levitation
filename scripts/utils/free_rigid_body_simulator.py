@@ -65,7 +65,9 @@ class DynamicsSimulator:
         self.wrench_sub = rospy.Subscriber(self.rigid_body.com_wrench_topic, WrenchStamped, self.wrench_callback, queue_size=1)
 
         self.last_sim_time = rospy.Time.now().to_sec()
-        self.I_bf = self.rigid_body.mass_properties.I_bf
+        # self.I_bf = self.rigid_body.mass_properties.I_bf
+        com_inertia = self.rigid_body.mass_properties.com_inertia_properties
+        self.I_bf = np.diag([com_inertia.Px, com_inertia.Py, com_inertia.Pz])
         self.m = self.rigid_body.mass_properties.m
         self.I_bf_inv = np.linalg.inv(self.I_bf)
     
