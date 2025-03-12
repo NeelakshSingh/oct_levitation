@@ -226,6 +226,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # Conventional reduced attitude stabilization control law
         u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ np.cross(Lambda, Lambda_d)
         
+        # Local frame torque allocation
         Tau_x = u[0]*self.Iavg
         Tau_y = u[1]*self.Iavg
 
