@@ -5,8 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Grid1
-        - /WrenchStamped1
       Splitter Ratio: 0.5
     Tree Height: 425
   - Class: rviz/Selection
@@ -55,7 +53,7 @@ Visualization Manager:
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
-      Length: 0.6000000238418579
+      Length: 0.5
       Name: Axes
       Radius: 0.10000000149011612
       Reference Frame: <Fixed Frame>
@@ -63,13 +61,13 @@ Visualization Manager:
       Value: true
     - Alpha: 0.10000000149011612
       Class: rviz/Axes
-      Enabled: false
+      Enabled: true
       Length: 1
       Name: Axes
       Radius: 0.10000000149011612
       Reference Frame: vicon/onyx_disc_80x22/Origin
       Show Trail: true
-      Value: false
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /single_dipole_rviz_visualizations/reduced_attitude/marker
@@ -121,7 +119,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 7.946803569793701
+      Distance: 4.151142597198486
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -129,17 +127,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -2.466479539871216
-        Y: -1.7443417310714722
-        Z: -2.724283218383789
-      Focal Shape Fixed Size: true
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7353970408439636
+      Pitch: 0.6003984212875366
       Target Frame: <Fixed Frame>
-      Yaw: 0.6303977370262146
+      Yaw: 1.290396809577942
     Saved: ~
 Window Geometry:
   Displays:

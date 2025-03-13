@@ -479,7 +479,7 @@ def angular_velocity_body_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.nd
         omega: 3x1 angular velocity of local frame w.r.t refrence frame expressed in the local frame.
     """
     omega = np.zeros(3)
-    omega_skew = R_dot @ R.T
+    omega_skew = R.T @ R_dot # Should be this for body fixed frame resolved angular velocity.
     omega[0] = (omega_skew[2, 1] - omega_skew[1, 2])/2
     omega[1] = (omega_skew[0, 2] - omega_skew[2, 0])/2
     omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2

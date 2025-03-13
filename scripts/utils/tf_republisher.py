@@ -1,7 +1,6 @@
 import rospy
 import tf2_ros
 from geometry_msgs.msg import TransformStamped
-from rosgraph_msgs.msg import TopicStatistics
 import rosgraph.masterapi
 
 class DynamicTFRepublisher:

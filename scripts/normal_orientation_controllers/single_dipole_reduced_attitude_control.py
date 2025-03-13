@@ -205,7 +205,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         theta = e_xyz[1]
         phi_ref = ref_e_xyz[0]
         theta_ref = ref_e_xyz[1]
-        self.ref_actual_msg.vector = [phi, phi_ref, theta, theta_ref]
+        self.ref_actual_msg.vector = np.rad2deg([phi, phi_ref, theta, theta_ref])
         self.ref_actual_pub.publish(self.ref_actual_msg)
 
         ## Calculating the reference reduced attitude.

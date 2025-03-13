@@ -25,7 +25,7 @@ class DynamicsSimulator:
 
     def __init__(self):
         rospy.init_node('dynamics_simulator', anonymous=True)
-        self.Ts = 1e-3
+        self.Ts = 1e-2
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
         self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -43,9 +43,9 @@ class DynamicsSimulator:
 
         ### Initial Conditions
         gravity_on = rospy.get_param("~gravity_on", False)
-        self.p = np.array(rospy.get_param("~initial_position", [-1.0, -1.0, 0.5])) # World frame
+        self.p = np.array(rospy.get_param("~initial_position", [-0.02, -0.02, 0.02])) # World frame
         self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
-        initial_rpy = np.array(rospy.get_param("~initial_rpy", [5.0, 5.0, 0.0])) # World frame
+        initial_rpy = np.array(rospy.get_param("~initial_rpy", [90.0, 90.0, 0.0])) # World frame
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
