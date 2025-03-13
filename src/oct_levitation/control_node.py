@@ -57,6 +57,7 @@ class ControlSessionNodeBase:
         self.tracking_poses_on = True
 
         self.post_init()
+        
         self.mpem_model = mag_manip.ForwardModelMPEM()
         self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
         # Assuming that the dipole object has been set at this point. We will then start all the topics
@@ -112,20 +113,6 @@ class ControlSessionNodeBase:
         """
         raise NotImplementedError("The post init function has not been implemented yet.")
     
-    def timer_control_logic(self):
-        """
-        Implement all the important calculations and controller logic in this function.
-        Set all the empty messages which are supposed to be published. The following
-        mandatory attributed must be set:
-            1. self.desired_currents_msg : DesCurrentsReg
-            2. self.control_input_message
-
-        The following optional attributed must be set.
-            1. self.com_wrench_msg : WrenchStamped (if publish_desired_com_wrenches is True)
-            2. self.dipole_wrench_messages: List[WrenchStamped] (if publish_desired_dipole_wrenches is True)
-        """
-        raise NotImplementedError("Control logic must be implemented")
-    
     def callback_control_logic(self, tf_msg: TransformStamped):
         """
         Implement all the important calculations and controller logic in this function.
@@ -142,40 +129,33 @@ class ControlSessionNodeBase:
     
     def tf_reference_sub_callback(self, tf_ref_msg: TransformStamped):
         self.last_reference_tf_msg = tf_ref_msg
+
+    def publish_topics(self):
+        # Publishing all the mandatory messages. They are all
+        # set by the control_logic if it is implemented acc to
+        # the specifications.
+        self.control_input_publisher.publish(self.control_input_message)
+        des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
+        des_currents = np.clip(des_currents, -self.MAX_CURRENT, self.MAX_CURRENT)
+        if np.any(np.abs(des_currents) == self.MAX_CURRENT):
+            rospy.logwarn_once(f"CURRENT LIMIT OF {self.MAX_CURRENT}A HIT!")
+        self.desired_currents_msg.des_currents_reg = des_currents
+        self.currents_publisher.publish(self.desired_currents_msg)
+
+        if self.publish_desired_com_wrenches:
+            self.com_wrench_publisher.publish(self.com_wrench_msg)
+        
+        if self.publish_desired_dipole_wrenches:
+            for publisher, msg in zip(self.dipole_wrench_publishers, self.dipole_wrench_messages):
+                publisher.publish(msg)
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         self.callback_control_logic(tf_msg)
-        # Publishing all the mandatory messages. They are all
-        # set by the control_logic if it is implemented acc to
-        # the specifications.
-        self.control_input_publisher.publish(self.control_input_message)
-        self.currents_publisher.publish(self.desired_currents_msg)
-
-        if self.publish_desired_com_wrenches:
-            self.com_wrench_publisher.publish(self.com_wrench_msg)
-        
-        if self.publish_desired_dipole_wrenches:
-            for publisher, msg in zip(self.dipole_wrench_publishers, self.dipole_wrench_messages):
-                publisher.publish(msg)
+        self.publish_topics()
 
     def main_timer_loop(self, event: rospy.timer.TimerEvent):
+        dipole_tf = self.tf_buffer.lookup_transform("vicon/world", self.rigid_body_dipole.pose_frame, rospy.Time())
+        self.callback_control_logic(dipole_tf)
+        self.publish_topics()
 
-        self.timer_control_logic()
-
-        # Publishing all the mandatory messages. They are all
-        # set by the control_logic if it is implemented acc to
-        # the specifications.
-        self.control_input_publisher.publish(self.control_input_message)
-        des_currents = np.asarray(self.desired_currents_msg.vector)
-        des_currents = np.clip(des_currents, -self.MAX_CURRENT, self.MAX_CURRENT)
-        if np.any(np.abs(des_currents) == self.MAX_CURRENT):
-            rospy.logwarn(f"CURRENT LIMIT OF {self.MAX_CURRENT}A HIT!")
-        self.desired_currents_msg.vector = des_currents
-        self.currents_publisher.publish(self.desired_currents_msg)
-
-        if self.publish_desired_com_wrenches:
-            self.com_wrench_publisher.publish(self.com_wrench_msg)
         
-        if self.publish_desired_dipole_wrenches:
-            for publisher, msg in zip(self.dipole_wrench_publishers, self.dipole_wrench_messages):
-                publisher.publish(msg)

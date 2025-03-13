@@ -25,23 +25,13 @@ class DynamicsSimulator:
 
     def __init__(self):
         rospy.init_node('dynamics_simulator', anonymous=True)
-        self.PUBLISH_REDUCED_ATTITUDE = True
-        self.Ts = 1e-2
+        self.Ts = 1e-3
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
         self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.vicon_frame = self.rigid_body.pose_frame
-        self.rpy_frame = os.path.join(self.vicon_frame, "sim_rpy")
         self.world_frame = "vicon/world"
         self.vicon_pub = rospy.Publisher(self.vicon_frame, TransformStamped, queue_size=10)
-        self.rpy_pub = rospy.Publisher(self.rpy_frame, Vector3Stamped, queue_size=10)
-        self.reduced_attitude_topic = os.path.join(self.vicon_frame, "reduced_attitude")
-        self.reduced_attitude_marker_topic = os.path.join(self.vicon_frame, "reduced_attitude/marker")
-        self.reduced_attitude_pub = None
-        self.reduced_attitude_marker_pub = None
-        if self.PUBLISH_REDUCED_ATTITUDE:
-            self.reduced_attitude_pub = rospy.Publisher(self.reduced_attitude_topic, Vector3Stamped, queue_size=10)
-            self.reduced_attitude_marker_pub = rospy.Publisher(self.reduced_attitude_marker_topic, Marker, queue_size=10)
 
         self.last_command_recv = 0
         self.last_commmand_timeout = 0.2
@@ -53,12 +43,13 @@ class DynamicsSimulator:
 
         ### Initial Conditions
         gravity_on = rospy.get_param("~gravity_on", False)
-        self.p = np.array(rospy.get_param("~initial_position", [0.0, 0.0, 0.0])) # World frame
+        self.p = np.array(rospy.get_param("~initial_position", [-1.0, -1.0, 0.5])) # World frame
         self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
-        initial_rpy = np.array(rospy.get_param("~initial_rpy", [30.0, 30.0, 0.0])) # World frame
+        initial_rpy = np.array(rospy.get_param("~initial_rpy", [5.0, 5.0, 0.0])) # World frame
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
+        self.omega = np.deg2rad(self.omega)
 
         if gravity_on:
             self.F_amb = np.array([0, 0, -common.Constants.g])
@@ -67,25 +58,6 @@ class DynamicsSimulator:
         
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
-        self.__rpy_msg = Vector3Stamped()
-        self.__rpy_msg.header.frame_id = self.world_frame
-        self.__reduced_attitude_msg = Vector3Stamped()
-        self.__reduced_attitude_msg.header.frame_id = self.world_frame
-        # Marker to visualize the reduced attitude vector
-        self.__reduced_attitude_marker_msg = Marker()
-        self.__reduced_attitude_marker_msg.header.frame_id = self.world_frame # Because reduced attitude vector is resolved in the world frame.
-        self.__reduced_attitude_marker_msg.ns = "reduced_attitude"
-        self.__reduced_attitude_marker_msg.id = 0
-        self.__reduced_attitude_marker_msg.type = Marker.ARROW
-        self.__reduced_attitude_marker_msg.action = Marker.MODIFY
-        self.__reduced_attitude_marker_msg.pose.orientation = Quaternion(0, 0, 0, 1)  # No rotation
-        # Arrow properties
-        self.__reduced_attitude_marker_msg.scale = Vector3(0.05, 0.1, 0.1)  # Shaft diameter, head diameter, head length
-        self.__reduced_attitude_marker_msg.color = ColorRGBA(0.0, 0.0, 1.0, 1.0)  # Blue color (RGBA)
-        self.__reduced_attitude_marker_msg.lifetime = rospy.Duration(0)  # Keep arrow visible indefinitely
-
-        self.__reduced_attitude_ref_vec = np.array(rospy.get_param("~reduced_attitude_ref_vec", [0.0, 0.0, 1.0]))
-        self.__reduced_attitude_ref_vec = self.__reduced_attitude_ref_vec / np.linalg.norm(self.__reduced_attitude_ref_vec)
 
         self.last_recvd_wrench = WrenchStamped()
 
@@ -132,24 +104,6 @@ class DynamicsSimulator:
         self.__tf_msg.transform.translation = Vector3(*self.p)
         self.__tf_msg.transform.rotation = Quaternion(*self.q / np.linalg.norm(self.q))
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
-
-        self.__rpy_msg.header.stamp = rospy.Time.now()
-        self.__rpy_msg.vector = Vector3(*np.rad2deg(geometry.euler_xyz_from_quaternion(self.q)))
-
-        if self.reduced_attitude_pub:
-            self.__reduced_attitude_msg.header.stamp = rospy.Time.now()
-            Lambda_vec = Vector3(*geometry.inertial_reduced_attitude_from_quaternion(self.q, self.__reduced_attitude_ref_vec))
-            self.__reduced_attitude_msg.vector = Lambda_vec
-            self.reduced_attitude_pub.publish(self.__reduced_attitude_msg)
-
-            start_point = Point()
-            end_point = Point(Lambda_vec.x, Lambda_vec.y, Lambda_vec.z)
-            self.__reduced_attitude_marker_msg.points = [start_point, end_point]
-            self.__reduced_attitude_marker_msg.header.stamp = rospy.Time.now()
-
-            self.reduced_attitude_marker_pub.publish(self.__reduced_attitude_marker_msg)
-        
-        self.rpy_pub.publish(self.__rpy_msg)
         self.vicon_pub.publish(self.__tf_msg)
 
     def wrench_callback(self, com_wrench: WrenchStamped):

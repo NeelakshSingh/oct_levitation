@@ -259,7 +259,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin/sim_rpy</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin/rpy</topic>
                                     <type>geometry_msgs/Vector3Stamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -272,7 +272,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin/sim_rpy</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin/rpy</topic>
                                     <type>geometry_msgs/Vector3Stamped</type>
                                 </y_axis>
                             </axes>
@@ -333,7 +333,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin/sim_rpy</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin/rpy</topic>
                                     <type>geometry_msgs/Vector3Stamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -346,7 +346,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin/sim_rpy</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin/rpy</topic>
                                     <type>geometry_msgs/Vector3Stamped</type>
                                 </y_axis>
                             </axes>
@@ -407,7 +407,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin/sim_rpy</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin/rpy</topic>
                                     <type>geometry_msgs/Vector3Stamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -420,7 +420,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/vicon/onyx_disc_80x22/Origin/sim_rpy</topic>
+                                    <topic>/vicon/onyx_disc_80x22/Origin/rpy</topic>
                                     <type>geometry_msgs/Vector3Stamped</type>
                                 </y_axis>
                             </axes>

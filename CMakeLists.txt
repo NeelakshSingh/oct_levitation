@@ -184,7 +184,8 @@ catkin_install_python(PROGRAMS
   scripts/utils/reference_pose_publisher.py
   scripts/utils/condition_number_plot.py
   scripts/utils/free_rigid_body_simulator.py
-
+  scripts/utils/rviz_visualizations.py
+  scripts/utils/tf_republisher.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
