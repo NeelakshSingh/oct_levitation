@@ -485,6 +485,24 @@ def angular_velocity_body_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.nd
     omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2
     return omega
 
+def angular_velocity_ref_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        R: 3x3 rotation matrix from the local frame to the reference frame.
+        R_dot: 3x3 time derivative of the rotation matrix.
+    
+    Returns
+    -------
+        omega: 3x1 angular velocity of local frame w.r.t refrence frame expressed in the reference frame.
+    """
+    omega = np.zeros(3)
+    omega_skew = R_dot @ R.T # Should be this for reference frame resolved angular velocity.
+    omega[0] = (omega_skew[2, 1] - omega_skew[1, 2])/2
+    omega[1] = (omega_skew[0, 2] - omega_skew[2, 0])/2
+    omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2
+    return omega
+
 def angular_velocity_ref_frame_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -522,6 +540,15 @@ def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray)
     """
     This function computes the inertial reduced attitude representation from the current pose
     rotation matrix for a body fixed vector b expressed in the body frame.
+
+    Parameters
+    ----------
+        R: 3x3 rotation matrix from the local frame to the inertial reference frame.
+        b: 3x1 array representing the body fixed vector to represent the reduced attitude.
+
+    Returns
+    -------
+        Lambda: 3x1 array representing the inertial reduced attitude.
     """
     b = b/np.linalg.norm(b, 2)
     Lambda = R @ b

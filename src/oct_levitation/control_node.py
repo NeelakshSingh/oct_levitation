@@ -3,6 +3,7 @@ import rospy
 import oct_levitation.mechanical as mechanical
 import tf2_ros
 import numpy as np
+import time
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
@@ -30,6 +31,14 @@ class ControlSessionNodeBase:
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
+        self.publish_computation_time = rospy.get_param("~log_computation_time", True)
+        self.computation_time_avg_samples = rospy.get_param("~computation_time_avg_samples", 100)
+        self.computation_time_topic = rospy.get_param("~computation_time_topic", "control_session/computation_time")
+        self.compute_time_pub = None
+
+        if self.publish_computation_time:
+            self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
+
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = None # Set this in post init
         self.HARDWARE_CONNECTED = False;
 
@@ -53,6 +62,9 @@ class ControlSessionNodeBase:
         self.dipole_wrench_messages: List[WrenchStamped] = None
         self.control_input_message: VectorStamped = None
         self.control_gains_message: VectorStamped = None
+        self.computation_time_msg = VectorStamped()
+        self.computation_time_sample = 0
+        self.current_computation_time = 0
 
         self.tracking_poses_on = True
 
@@ -77,7 +89,6 @@ class ControlSessionNodeBase:
                                              for topic_name in self.rigid_body_dipole.dipole_wrench_topic_list]
         
         self.currents_publisher = rospy.Publisher("tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=1)
-
 
         # Start the timer
         timer_start_delay = rospy.get_param("~timer_start_delay", 1) # seconds
@@ -150,12 +161,34 @@ class ControlSessionNodeBase:
                 publisher.publish(msg)
         
     def tfsub_callback(self, tf_msg: TransformStamped):
+        start_time = time.time_ns()
         self.callback_control_logic(tf_msg)
         self.publish_topics()
+        stop_time = time.time_ns()
+        if self.publish_computation_time:
+            self.current_computation_time += (stop_time - start_time)
+            self.computation_time_sample += 1
+            if self.computation_time_sample % self.computation_time_avg_samples == 0:
+                self.computation_time_msg.header.stamp = rospy.Time.now()
+                self.computation_time_msg.vector = [self.current_computation_time/self.computation_time_avg_samples]
+                self.computation_time_pub.publish(self.computation_time_msg)
+                self.computation_time_sample = 0
+                self.current_computation_time = 0
 
     def main_timer_loop(self, event: rospy.timer.TimerEvent):
+        start_time = time.time_ns()
         dipole_tf = self.tf_buffer.lookup_transform("vicon/world", self.rigid_body_dipole.pose_frame, rospy.Time())
         self.callback_control_logic(dipole_tf)
         self.publish_topics()
+        stop_time = time.time_ns()
+        if self.publish_computation_time:
+            self.current_computation_time += (stop_time - start_time)
+            self.computation_time_sample += 1
+            if self.computation_time_sample % self.computation_time_avg_samples == 0:
+                self.computation_time_msg.header.stamp = rospy.Time.now()
+                self.computation_time_msg.vector = [self.current_computation_time/self.computation_time_avg_samples]
+                self.computation_time_pub.publish(self.computation_time_msg)
+                self.computation_time_sample = 0
+                self.current_computation_time = 0
 
         
