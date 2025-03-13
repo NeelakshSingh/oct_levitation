@@ -161,10 +161,10 @@ class ControlSessionNodeBase:
                 publisher.publish(msg)
         
     def tfsub_callback(self, tf_msg: TransformStamped):
-        start_time = time.time_ns()
+        start_time = time.perf_counter()
         self.callback_control_logic(tf_msg)
         self.publish_topics()
-        stop_time = time.time_ns()
+        stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time += (stop_time - start_time)
             self.computation_time_sample += 1
@@ -176,11 +176,11 @@ class ControlSessionNodeBase:
                 self.current_computation_time = 0
 
     def main_timer_loop(self, event: rospy.timer.TimerEvent):
-        start_time = time.time_ns()
+        start_time = time.perf_counter()
         dipole_tf = self.tf_buffer.lookup_transform("vicon/world", self.rigid_body_dipole.pose_frame, rospy.Time())
         self.callback_control_logic(dipole_tf)
         self.publish_topics()
-        stop_time = time.time_ns()
+        stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time += (stop_time - start_time)
             self.computation_time_sample += 1
