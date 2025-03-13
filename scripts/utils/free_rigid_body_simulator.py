@@ -41,15 +41,20 @@ class DynamicsSimulator:
         self.__first_sim_step = True
         self.last_time = rospy.Time.now().to_sec()
 
+        ### Calibration model to use nonlinear model.
+        self.calibration = common.OctomagCalibratedModel(calibration_type="legacy_yaml",
+                                                         calibration_file="mc3ao8s_md200_handp.yaml")
+
         ### Initial Conditions
         gravity_on = rospy.get_param("~gravity_on", False)
         self.p = np.array(rospy.get_param("~initial_position", [-0.02, -0.02, 0.02])) # World frame
         self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
-        initial_rpy = np.array(rospy.get_param("~initial_rpy", [90.0, 90.0, 0.0])) # World frame
+        initial_rpy = np.array(rospy.get_param("~initial_rpy", [85.0, 85.0, 0.0])) # World frame
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
         self.omega = np.deg2rad(self.omega)
+        self.use_wrench = rospy.get_param("~use_wrench", False)
 
         if gravity_on:
             self.F_amb = np.array([0, 0, -common.Constants.g])
@@ -61,7 +66,13 @@ class DynamicsSimulator:
 
         self.last_recvd_wrench = WrenchStamped()
 
-        self.wrench_sub = rospy.Subscriber(self.rigid_body.com_wrench_topic, WrenchStamped, self.wrench_callback, queue_size=1)
+        self.wrench_sub = None
+        self.currents_sub = None
+
+        if self.use_wrench:
+            self.wrench_sub = rospy.Subscriber(self.rigid_body.com_wrench_topic, WrenchStamped, self.wrench_callback, queue_size=1)
+        else:
+            self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
 
         self.last_sim_time = rospy.Time.now().to_sec()
         self.I_bf = self.rigid_body.mass_properties.I_bf
@@ -115,6 +126,24 @@ class DynamicsSimulator:
             rospy.loginfo("Command received again.")
             self.__last_command_warning_sent = False
     
+    def currents_callback(self, des_currents_msg: DesCurrentsReg):
+        # The idea is to use the latest available pose and the forward model
+        # to calculate the actual wrench at dipole center.
+        wrench = WrenchStamped()
+        dipole_quat, dipole_pos = geometry.numpy_arrays_from_tf_msg(self.__tf_msg)
+        Mq = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quat,
+                                                                  dipole_strength=self.rigid_body.dipole_list[0].strength,
+                                                                  full_mat=True,
+                                                                  torque_first=True,
+                                                                  dipole_axis=self.rigid_body.dipole_list[0].axis)
+        field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, np.asarray(des_currents_msg.des_currents_reg))
+        actual_Tau_force = (Mq @ field_grad).flatten()
+        
+        wrench.header.stamp = rospy.Time.now()
+        wrench.wrench.torque = Vector3(*actual_Tau_force[:3])
+        wrench.wrench.force = Vector3(*actual_Tau_force[3:])
+        self.wrench_callback(wrench)
+
     def run(self):
         self.simulation_timer = rospy.Timer(rospy.Duration(self.Ts), self.simulation_loop)
         rospy.spin()
