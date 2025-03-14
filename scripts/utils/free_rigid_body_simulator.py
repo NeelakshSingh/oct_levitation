@@ -3,6 +3,7 @@ import rospy
 import tf2_ros
 import os
 import tf.transformations as tr
+import time
 
 from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion, Vector3Stamped, Point
 from visualization_msgs.msg import Marker
@@ -25,7 +26,7 @@ class DynamicsSimulator:
 
     def __init__(self):
         rospy.init_node('dynamics_simulator', anonymous=True)
-        self.Ts = 1e-2
+        self.Ts = 1e-3
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
         self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -39,7 +40,6 @@ class DynamicsSimulator:
         self.__first_command = False
         self.__last_command_warning_sent = False
         self.__first_sim_step = True
-        self.last_time = rospy.Time.now().to_sec()
 
         ### Calibration model to use nonlinear model.
         self.calibration = common.OctomagCalibratedModel(calibration_type="legacy_yaml",
@@ -55,6 +55,9 @@ class DynamicsSimulator:
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
         self.omega = np.deg2rad(self.omega)
         self.use_wrench = rospy.get_param("~use_wrench", False)
+
+        self.vicon_pub_time_ns = 1e9/rospy.get_param("~vicon_pub_freq", 100) #
+        self.__last_vicon_pub_time_ns = -np.inf
 
         if gravity_on:
             self.F_amb = np.array([0, 0, -common.Constants.g])
@@ -87,11 +90,12 @@ class DynamicsSimulator:
         # This simulation loop will assume ZOH, therefore the last command is just kept on being repeated
         # we won't explicitly set it to zero here. The forces are assumed to be in the world frame while
         # the torques are assumed to be in the body fixed frame.
+        t_comp_start_ns = rospy.Time.now().to_nsec()
         if self.__first_sim_step:
             self.__first_sim_step = False
             self.last_sim_time = rospy.Time.now().to_sec()
             return
-
+        
         if rospy.Time.now().to_sec() - self.__last_command_recv_time > self.last_commmand_timeout:
             if self.__first_command:
                 if not self.__last_command_warning_sent:
@@ -103,7 +107,7 @@ class DynamicsSimulator:
 
         # Computing the velocity and position
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
-        self.p, self.v = numerical.integrate_linear_dynamics_constant_force(self.p, self.v, F, self.m, dt)
+        self.p, self.v = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
 
         # Numerically integration the orientation through the lie group exponential map of angular velocity.
         # The angular velocity is resolved in the local frame.
@@ -115,7 +119,11 @@ class DynamicsSimulator:
         self.__tf_msg.transform.translation = Vector3(*self.p)
         self.__tf_msg.transform.rotation = Quaternion(*self.q / np.linalg.norm(self.q))
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
-        self.vicon_pub.publish(self.__tf_msg)
+
+        t_comp_end_ns = rospy.Time.now().to_nsec()
+        if (rospy.Time.now().to_nsec() + t_comp_end_ns - t_comp_start_ns - self.__last_vicon_pub_time_ns) >= self.vicon_pub_time_ns:
+            self.__last_vicon_pub_time_ns = rospy.Time.now().to_nsec()
+            self.vicon_pub.publish(self.__tf_msg)
 
     def wrench_callback(self, com_wrench: WrenchStamped):
         if not self.__first_command:
@@ -142,7 +150,14 @@ class DynamicsSimulator:
         wrench.header.stamp = rospy.Time.now()
         wrench.wrench.torque = Vector3(*actual_Tau_force[:3])
         wrench.wrench.force = Vector3(*actual_Tau_force[3:])
-        self.wrench_callback(wrench)
+
+        if not self.__first_command:
+            self.__first_command = True
+        self.last_recvd_wrench = wrench
+        self.__last_command_recv_time = rospy.Time.now().to_sec()
+        if self.__last_command_warning_sent:
+            rospy.loginfo("Command received again.")
+            self.__last_command_warning_sent = False
 
     def run(self):
         self.simulation_timer = rospy.Timer(rospy.Duration(self.Ts), self.simulation_loop)

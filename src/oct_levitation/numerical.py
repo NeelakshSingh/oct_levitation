@@ -1,11 +1,10 @@
 import numpy as np
 import numpy.typing as np_t
+import numba
 
 import oct_levitation.geometry as geometry
 
 from typing import Union, Iterable
-from scipy.linalg import expm
-from scipy.integrate import solve_ivp
 
 ########################################
 # Different solutions for allocation
@@ -28,7 +27,22 @@ def solve_tikhonov_regularization(A: np_t.ArrayLike, b: np_t.ArrayLike, alpha: f
 ########################################
 # Numerical integration of orientation
 ########################################
+@numba.jit(nopython=True)
+def rodrigues_skew_symmetric_expm(vec: np_t.NDArray) -> np_t.NDArray:
+    """
+    This function takes a vector as input and then computes the matrix exponential
+    of its skew symmetric matrix using rodrigues formula. This formula is a consequence
+    of the fact that a skew symmetric matrix belongs to the tangent space of SO(3).
+    """
+    alpha = (np.linalg.norm(vec) + 1e-16)
+    vec_hat = vec/alpha
+    skmat = np.array([[0, -vec_hat[2], vec_hat[1]],
+                     [vec_hat[2], 0, -vec_hat[0]],
+                     [-vec_hat[1], vec_hat[0], 0]])
+    exp_skmat = np.eye(3) + np.sin(alpha)*skmat + (1 - np.cos(alpha))*(skmat @ skmat)
+    return exp_skmat
 
+@numba.jit(nopython=True)
 def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torque: np_t.NDArray, I: np_t.NDArray, dt: float,
                                       damping: np_t.NDArray = np.zeros(3)) -> np_t.NDArray:
     """
@@ -70,18 +84,17 @@ def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torq
     Omega3 = (1/240)*(np.cross( alpha, np.cross(alpha, omega) ))*np.power(dt, 5)
 
     Omega = Omega1 + Omega2 + Omega3
-
-    R_new = expm(geometry.get_skew_symmetric_matrix(Omega)) @ R
+    R_new = rodrigues_skew_symmetric_expm(Omega) @ R
 
     omega_new_body = R_new.T @ omega_new
 
     return R_new, omega_new_body
 
-def integrate_linear_dynamics_constant_force(p: np_t.NDArray, v: np_t.NDArray, F: np_t.NDArray, m: float, dt: float,
-                                             damping: np_t.NDArray = np.zeros(3)) -> np_t.NDArray:
+@numba.jit(nopython=True)
+def integrate_linear_dynamics_constant_force_undamped(p: np_t.NDArray, v: np_t.NDArray, F: np_t.NDArray, m: float, dt: float) -> np_t.NDArray:
     """
     This function integrates the linear dynamics of a rigid body with constant force.
-    This function assumes that the force is constant and the damping is constant as well.
+    It just uses stuff from high school.
 
     Parameters:
         p (np_t.NDArray): The position at the current time step.
@@ -94,14 +107,8 @@ def integrate_linear_dynamics_constant_force(p: np_t.NDArray, v: np_t.NDArray, F
     Returns:
         np_t.NDArray: The position at the next time step.
     """
-    def linear_dynamics_diffeqn(t, x):
-        p_dot = v
-        v_dot = (F + np.multiply(damping, v))/m
-        return np.concatenate([p_dot, v_dot])
-    
-    sol = solve_ivp(linear_dynamics_diffeqn, [0, dt], np.concatenate([p, v]), t_eval=[dt])
-    position_new = sol.y.flatten()[:3]
-    velocity_new = sol.y.flatten()[3:]
+    velocity_new = v + (F/m)*dt
+    position_new = p + v*dt + 0.5*(F/m)*dt**2
     return position_new, velocity_new
 
 ########################################
