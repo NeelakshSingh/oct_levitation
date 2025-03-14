@@ -13,6 +13,9 @@
 
     <group if="$(arg sim)">
         <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen"/>
+        <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen">
+            <param name="delay_time" value="0.0" />
+        </node>
     </group>
 
     <group if="$(eval not sim and hardware_connected)">

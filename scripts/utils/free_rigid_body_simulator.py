@@ -5,9 +5,8 @@ import os
 import tf.transformations as tr
 import time
 
-from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion, Vector3Stamped, Point
-from visualization_msgs.msg import Marker
-from std_msgs.msg import ColorRGBA
+from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion
+from std_msgs.msg import Bool
 from tnb_mns_driver.msg import DesCurrentsReg
 
 import oct_levitation.common as common
@@ -26,7 +25,7 @@ class DynamicsSimulator:
 
     def __init__(self):
         rospy.init_node('dynamics_simulator', anonymous=True)
-        self.Ts = 1e-3
+        self.Ts = 1/3000
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
         self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -55,8 +54,11 @@ class DynamicsSimulator:
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
         self.omega = np.deg2rad(self.omega)
         self.use_wrench = rospy.get_param("~use_wrench", False)
+        self.publish_status = rospy.get_param("~pub_status", False)
 
         self.vicon_pub_time_ns = 1e9/rospy.get_param("~vicon_pub_freq", 100) #
+        if self.publish_status:
+            self.sim_status_pub = rospy.Publisher("oct_levitation/free_rigid_body_sim/status", Bool, queue_size=1) # This is just to measure the simulator run freq
         self.__last_vicon_pub_time_ns = -np.inf
 
         if gravity_on:
@@ -75,7 +77,7 @@ class DynamicsSimulator:
         if self.use_wrench:
             self.wrench_sub = rospy.Subscriber(self.rigid_body.com_wrench_topic, WrenchStamped, self.wrench_callback, queue_size=1)
         else:
-            self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg", DesCurrentsReg, self.currents_callback, queue_size=1)
+            self.currents_sub = rospy.Subscriber("/tnb_mns_driver/des_currents_reg/delayed_sim", DesCurrentsReg, self.currents_callback, queue_size=1)
 
         self.last_sim_time = rospy.Time.now().to_sec()
         self.I_bf = self.rigid_body.mass_properties.I_bf
@@ -119,6 +121,9 @@ class DynamicsSimulator:
         self.__tf_msg.transform.translation = Vector3(*self.p)
         self.__tf_msg.transform.rotation = Quaternion(*self.q / np.linalg.norm(self.q))
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
+
+        if self.publish_status:
+            self.sim_status_pub.publish(Bool(True))
 
         t_comp_end_ns = rospy.Time.now().to_nsec()
         if (rospy.Time.now().to_nsec() + t_comp_end_ns - t_comp_start_ns - self.__last_vicon_pub_time_ns) >= self.vicon_pub_time_ns:

@@ -186,6 +186,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/free_rigid_body_simulator.py
   scripts/utils/rviz_visualizations.py
   scripts/utils/tf_republisher.py
+  scripts/utils/control_input_delay_sim.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
