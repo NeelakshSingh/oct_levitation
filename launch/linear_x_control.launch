@@ -12,6 +12,7 @@
     <arg name="sim_frequency" default="3000"/>
     <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
+    <arg name="sim_vicon_pub_freq" default="100"/>
 
     <node pkg="oct_levitation" name="single_dipole_x_control" type="x_control_single_dipole_full_alloc.py" output="screen"/>
 
@@ -22,6 +23,7 @@
     <group if="$(arg sim)">
         <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
             <param name="sim_freq" value="$(arg sim_frequency)" />
+            <param name="vicon_pub_freq" value="$(arg sim_vicon_pub_freq)" />
             <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
             <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />
             <param name="gravity_on" value="false" />

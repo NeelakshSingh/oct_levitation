@@ -1,5 +1,5 @@
 <launch>
-    <arg name="sim" default="true"/>
+    <arg name="sim" default="false"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
@@ -13,6 +13,7 @@
     <arg name="sim_gravity_on" default="false"/>
     <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
+    <arg name="sim_vicon_pub_freq" default="100"/>
 
     <node pkg="oct_levitation" name="single_dipole_xyz_rp_control" type="xyz_reduced_attitude_single_dipole.py" output="screen"/>
 
@@ -23,6 +24,7 @@
     <group if="$(arg sim)">
         <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
             <param name="sim_freq" value="$(arg sim_frequency)" />
+            <param name="vicon_pub_freq" value="$(arg sim_vicon_pub_freq)" />
             <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
             <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />
             <param name="gravity_on" value="$(arg sim_gravity_on)" />
