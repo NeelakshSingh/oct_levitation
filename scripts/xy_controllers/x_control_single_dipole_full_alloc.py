@@ -146,7 +146,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         jma_condition = np.linalg.cond(JMA)
 
         if self.warn_jma_condition:
-            condition_check_tol = 9e3
+            condition_check_tol = 50
             if jma_condition > condition_check_tol:
                 np.set_printoptions(linewidth=np.inf)
                 rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, Current TF: {tf_msg}
