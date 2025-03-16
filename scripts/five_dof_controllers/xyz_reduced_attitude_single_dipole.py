@@ -167,77 +167,27 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Calibration type: Legacy yaml file
         """
 
-    # def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
-    #     dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
-    #     dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
-    #     dipole = self.rigid_body_dipole.dipole_list[0]
-    #     dipole_vector = dipole.strength*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
-    #     Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
-    #     Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
-    #                                                                    dipole.axis,
-    #                                                                    dipole_quaternion)[:2] # Only first two rows will be nonzero
-    #     A = self.mpem_model.getActuationMatrix(dipole_position)
-    #     M = block_diag(Mt_local, Mf)
-
-    #     W_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
-
-    #     JMA = M @ A
-    #     des_currents = np.linalg.pinv(JMA) @ W_des
-
-    #     jma_condition = np.linalg.cond(JMA)
-
-    #     if self.warn_jma_condition:
-    #         condition_check_tol = 300
-    #         if jma_condition > condition_check_tol:
-    #             np.set_printoptions(linewidth=np.inf)
-    #             rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
-    #                                    Current TF: {tf_msg}
-    #                                 \n JMA pinv: \n {np.linalg.pinv(JMA)}
-    #                                 \n JMA: \n {JMA}""")
-    #             rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
-
-    #             rospy.loginfo_once(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
-    #                                 M: {M},
-    #                                 M condition number: {np.linalg.cond(M)}""")
-                
-    #             rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
-    #                                 A: {A},
-    #                                 A condition number: {np.linalg.cond(A)}""")
-
-    #     if self.publish_jma_condition:
-    #         jma_condition_msg = VectorStamped()
-    #         jma_condition_msg.header.stamp = rospy.Time.now()
-    #         jma_condition_msg.vector = [jma_condition]
-    #         self.jma_condition_pub.publish(jma_condition_msg)
-
-    #     return des_currents.flatten()
-
     def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
-        quaternion = np.array([
-            tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
-        ])
-        normal = -geometry.get_normal_vector_from_quaternion(quaternion) # -ve because south pole up
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
         dipole = self.rigid_body_dipole.dipole_list[0]
-        dipole_vector = dipole.strength * normal
-        dipole_position = np.array([
-            tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
-        ])
+        dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
         Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
         Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
                                                                        dipole.axis,
-                                                                       quaternion)[:2] # Only first two rows will be nonzero
-
-        w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
-
-        M = block_diag(Mt_local, Mf)
+                                                                       dipole_quaternion)[:2] # Only first two rows will be nonzero
         A = self.mpem_model.getActuationMatrix(dipole_position)
+        M = block_diag(Mt_local, Mf)
+
+        W_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
+
         JMA = M @ A
-        des_currents = np.linalg.pinv(JMA) @ w_des
-        
+        des_currents = np.linalg.pinv(JMA) @ W_des
+
         jma_condition = np.linalg.cond(JMA)
 
         if self.warn_jma_condition:
-            condition_check_tol = 50
+            condition_check_tol = 300
             if jma_condition > condition_check_tol:
                 np.set_printoptions(linewidth=np.inf)
                 rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
@@ -278,7 +228,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Getting the current orientation and positions
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
 
-        e_zyx = geometry.euler_zyx_from_quaternion(dipole_quaternion)
         e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
         z_com = tf_msg.transform.translation.z
         x_com = tf_msg.transform.translation.x
@@ -349,7 +298,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Local frame torque allocation
         Tau_x = u_RA[0]*self.Iavg
         Tau_y = u_RA[1]*self.Iavg
-        
+
         self.error_state_msg.vector = np.concatenate((x_error.flatten(), 
                                                       y_error.flatten(), 
                                                       z_error.flatten(), 
