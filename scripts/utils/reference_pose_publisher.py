@@ -34,9 +34,14 @@ class ReferencePosePublisher:
         # self.lissajous_counter = 0
 
         ### Sinusoidal Z
-        self.z_amplitude = 1e-2
-        self.Tz = 2
-        self.z_omega = 2*np.pi/self.Tz
+        # self.z_amplitude = 1e-2
+        # self.Tz = 2
+        # self.z_omega = 2*np.pi/self.Tz
+
+        ### Sinusoidal X
+        self.x_amplitude = 1e-2
+        self.Tx = 2
+        self.x_omega = 2*np.pi/self.Tx
 
 
         self.start_time = rospy.Time.now().to_sec()
@@ -55,7 +60,7 @@ class ReferencePosePublisher:
         # Origin position
         pose.transform.translation.x = 0.0
         pose.transform.translation.y = 0.0
-        pose.transform.translation.z = 0.015
+        pose.transform.translation.z = 0.0
         
         # Zero RPY
         pose.transform.rotation = Quaternion(0, 0, 0, 1)
@@ -80,7 +85,10 @@ class ReferencePosePublisher:
         # pose.transform.rotation = Quaternion(*quaternion)
         
         ### Sinusoidal Z
-        pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
+        # pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
+
+        ### Sinusoidal X
+        pose.transform.translation.x = self.x_amplitude*np.sin(self.x_omega*t) + 0.01
 
         self.tf_pub.publish(pose)
     

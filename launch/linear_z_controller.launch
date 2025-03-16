@@ -4,10 +4,15 @@
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
     <arg name="run_rqt_multiplot" default="false"/>
+    
+    <!-- Simulation parameters -->
     <arg name="sim_print_ft" default="false"/>
     <arg name="current_delay_time" default="0.0"/>
-    <arg name="sim_publish_status" default="false"/>
     <arg name="sim_frequency" default="3000"/>
+    <arg name="sim_publish_status" default="false"/>
+    <arg name="sim_gravity_on" default="false"/>
+    <arg name="sim_initial_rpy" default="[30.0, 30.0, 0.0]"/>
+    <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
 
     <node pkg="oct_levitation" name="single_dipole_z_control" type="z_control_single_dipole_simplified.py" output="screen"/>
 
@@ -17,9 +22,10 @@
 
     <group if="$(arg sim)">
         <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
-            <param name="initial_rpy" value="[0.0, 0.0, 0.0]" type="yaml" />
             <param name="sim_freq" value="$(arg sim_frequency)" />
-            <param name="gravity_on" value="false" />
+            <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
+            <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />
+            <param name="gravity_on" value="$(arg sim_gravity_on)" />
             <param name="print_ft" value="$(arg sim_print_ft)" />
             <param name="pub_status" value="$(arg sim_publish_status)" />
         </node>

@@ -143,13 +143,13 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
                                                                        quaternion)[:2] # Only first two rows will be nonzero
         w_des = np.array([0.0, 0.0, 0.0, 0.0, Fz_des]) # Tau_local_xy, F_v
         M = block_diag(Mt_local, Mf)
-        Af = self.mpem_model.getActuationMatrix(dipole_position)[3:, :]
-        des_currents = np.linalg.pinv(M @ Af) @ w_des
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+        des_currents = np.linalg.pinv(M @ A) @ w_des
 
         if self.publish_jma_condition:
             jma_condition_msg = VectorStamped()
             jma_condition_msg.header.stamp = rospy.Time.now()
-            jma_condition = np.linalg.cond(M @ Af)
+            jma_condition = np.linalg.cond(M @ A)
             jma_condition_msg.vector = [jma_condition]
             self.jma_condition_pub.publish(jma_condition_msg)
 

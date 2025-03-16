@@ -175,6 +175,7 @@ catkin_install_python(PROGRAMS
 
   # Single dipole 5DOF control nodes
   scripts/five_dof_controllers/xyz_rp_single_dipole.py
+  scripts/five_dof_controllers/xyz_reduced_attitude_single_dipole.py
 
   # Utilities
   scripts/utils/dynamics_simulator.py

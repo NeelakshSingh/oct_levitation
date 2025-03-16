@@ -115,7 +115,6 @@ class DynamicsSimulator:
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
         if self.print_ft:
             rospy.loginfo(f"Applying F: {F}, Tau: {Tau}")
-        Tau = np.zeros(3)
         F = F + self.F_amb # Adding gravity and other constant forces
 
         self.p, self.v = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)

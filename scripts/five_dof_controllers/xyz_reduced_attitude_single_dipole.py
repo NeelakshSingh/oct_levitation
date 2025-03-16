@@ -17,7 +17,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = True
+        self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.dt = 1/self.control_rate
@@ -50,8 +50,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ### Z CONTROL DLQR DESIGN ###
         self.mass = self.rigid_body_dipole.mass_properties.m
         self.k_lin_z = 1 # Friction damping parameter, to be tuned. Originally because of the rod.
-
-        self.south_pole_up = True
         
         ## Continuous time state space model.
         Az = np.array([[0, 1], [0, -self.k_lin_z/self.mass]])
@@ -97,43 +95,13 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #############################
 
         #############################
-        ### RP CONTROL DLQR DESIGN ###
-
-        # Technically I design the controller with average inertia of both roll and pitch because the object
-        # is almost symmetric.
-        k_rot = 1e-6 # rotational damping term
-        self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
-
-        Ar = np.array([[0, 1], [0, -k_rot/self.Iavg]])
-        Br = np.array([[0, 1/self.Iavg]]).T
-        Cr = np.array([[1, 0]])
-
-        # Let's use the normalized system close to the upright equilibrium.
-        r_max = np.deg2rad(30) # More than 30 degrees is not logical to consider.
-        r_dot_max = 5*z_max
-        Tx_max = 5*self.Iavg*r_dot_max # Assume very small maximum force.
-
-        ## Normalizing the state space model.
-        Trx = np.diag([r_max, r_dot_max])
-        Tru = np.diag([Tx_max])
-        Try = np.diag([r_max])
-
-        Ar_norm = np.linalg.inv(Trx) @ Ar @ Trx
-        Br_norm = np.linalg.inv(Trx) @ Br @ Tru
-        Cr_norm = np.linalg.inv(Try) @ Cr @ Trx
-
-        Ar_d_norm, Br_d_norm, Cr_d_norm, Dr_d_norm, dt = signal.cont2discrete((Ar_norm, Br_norm, Cr_norm, 0), dt=1/self.control_rate,
-                                                  method='zoh')
+        ### REDUCED ATTITUDE CONTROL DESIGN ###
         
-        Qr = np.diag([100.0, 10.0])
-        Rr = 1
-        Kr_norm, S, E = ct.dlqr(Ar_d_norm, Br_d_norm, Qr, Rr)
+        self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
+        self.k_ra_p = 4.5
+        self.K_ra_d = np.diag([1.0, 1.0])*3.0
 
-        # Denormalize the control gains.
-        self.K_phi = np.asarray(Tru @ Kr_norm @ np.linalg.inv(Trx))
-        self.K_theta = np.copy(self.K_phi)
-
-        ### RP CONTROL DLQR DESIGN ###
+        ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
 
         self.mass = self.rigid_body_dipole.mass_properties.m
@@ -146,16 +114,14 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         rospy.loginfo(f"""Control gains for Fx: {self.K_x}, 
                                             Fy: {self.K_y},
                                             Fz: {self.K_z}, 
-                                            Tx: {self.K_phi}, 
-                                            Ty: {self.K_theta}""")
+                                            RA Kp: {self.k_ra_p}, 
+                                            RA Kd: {self.K_ra_d}""")
 
         self.control_gains_message = VectorStamped()
         self.control_gains_message.header.stamp = rospy.Time.now()
 
-        self.diff_alpha_theta = self.control_rate
-        self.diff_beta_theta = 0
-        self.diff_alpha_phi = self.control_rate
-        self.diff_beta_phi = 0
+        self.diff_alpha_RA = self.control_rate
+        self.diff_beta_RA = 0
         self.diff_alpha_z = 1/self.dt
         self.diff_beta_z = 0
         self.diff_alpha_x = self.control_rate
@@ -163,32 +129,30 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.diff_alpha_y = self.control_rate
         self.diff_beta_y = 0
 
-        self.control_gains_message.vector = np.concatenate(
+        gains_arr = np.concatenate(
             (self.K_x.flatten(), 
              self.K_y.flatten(),
              self.K_z.flatten(),
-             self.K_phi.flatten(), 
-             self.K_theta.flatten(), 
+             [self.k_ra_p], 
+             self.K_ra_d.flatten(), 
              np.array([self.diff_alpha_x,
                        self.diff_beta_x,
                        self.diff_alpha_y,
                        self.diff_beta_y,
                        self.diff_alpha_z,
                        self.diff_beta_z,
-                       self.diff_alpha_phi,
-                       self.diff_beta_phi,
-                       self.diff_alpha_theta,
-                       self.diff_beta_theta]))
+                       self.diff_alpha_RA,
+                       self.diff_beta_RA]))
         )
 
-        self.phi_dot = 0.0
-        self.theta_dot = 0.0
+        self.control_gains_message.vector = gains_arr
+
         self.z_dot = 0.0
         self.x_dot = 0.0
         self.y_dot = 0.0
+        self.last_R = np.eye(3)
 
-        self.last_phi = 0.0
-        self.last_theta = 0.0
+        self.R_dot = np.zeros((3,3))
         self.last_z = 0.0
         self.last_x = 0.0
         self.last_y = 0.0
@@ -197,34 +161,25 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.metadata_msg.data = f"""
         Experiment metadata.
         Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
-        Controlled States: Z, Roll (Alpha), Pitch (Beta)
+        Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
         Calibration file: {self.calibration_file}
-        Gains: {self.K_z.flatten(), self.K_phi.flatten(), self.K_theta.flatten()}
+        Gains: {gains_arr}
         Calibration type: Legacy yaml file
-        Extra information: This run uses the solid fiberglass rod with some oil to reduce friction.
         """
 
-    def simplified_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
+    def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
         dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
-        s_d = self.rigid_body_dipole.dipole_list[0].strength
-        # dipole_moment = s_d*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
-        dipole_moment = s_d*np.array([0.0, 0.0, 1.0])
-        if self.south_pole_up:
-            dipole_moment = -dipole_moment
-        M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
-        # Rejecting the the Tz row since we are almost always nearly upright.
-        # We have to reject one row from the skew symmetric portion because it
-        # as one linearly dependent row which leads to very ill conditioned matrix.
-        M_tau = M_tau[:2]
-        M_f = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
+        dipole = self.rigid_body_dipole.dipole_list[0]
+        dipole_vector = dipole.strength*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
+        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
+        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
+                                                                       dipole.axis,
+                                                                       dipole_quaternion)[:2] # Only first two rows will be nonzero
         A = self.mpem_model.getActuationMatrix(dipole_position)
-        M = block_diag(M_tau, M_f)
+        M = block_diag(Mt_local, Mf)
 
-        Tau_des = np.array([[Tau_x, Tau_y]]).T
-        F_des = np.array([[F_x, F_y, F_z]]).T
-
-        W_des = np.vstack((Tau_des, F_des))
+        W_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
 
         JMA = M @ A
         des_currents = np.linalg.pinv(JMA) @ W_des
@@ -252,7 +207,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         if self.publish_jma_condition:
             jma_condition_msg = VectorStamped()
             jma_condition_msg.header.stamp = rospy.Time.now()
-            # jma_condition = np.linalg.cond(M_tau @ A_field)
             jma_condition_msg.vector = [jma_condition]
             self.jma_condition_pub.publish(jma_condition_msg)
 
@@ -295,61 +249,65 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                                                      np.rad2deg(np.array([phi, phi_ref, theta, theta_ref]))))
         self.ref_actual_pub.publish(self.ref_actual_msg)
 
+        Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
+        R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
+
         if self.__first_reading:
-            self.last_phi = phi
-            self.last_theta = theta
+            self.last_R = R
             self.last_z = z_com
             self.last_x = x_com
             self.last_y = y_com
             self.__first_reading = False
 
-        self.phi_dot = self.diff_alpha_phi*(phi - self.last_phi) + self.diff_beta_phi*self.phi_dot
-        self.theta_dot = self.diff_alpha_theta*(theta - self.last_theta) + self.diff_beta_theta*self.theta_dot
+        self.R_dot = self.diff_alpha_RA*(R - self.last_R) + self.diff_beta_RA*self.R_dot
         self.z_dot = self.diff_alpha_z*(z_com - self.last_z) + self.diff_beta_z*self.z_dot
         self.x_dot = self.diff_alpha_x*(x_com - self.last_x) + self.diff_beta_x*self.x_dot
         self.y_dot = self.diff_alpha_y*(y_com - self.last_y) + self.diff_beta_y*self.y_dot
 
-        self.last_phi = phi
-        self.last_theta = theta
         self.last_z = z_com
         self.last_x = x_com
         self.last_y = y_com
+        self.last_R = R
 
-        x_phi = np.array([[phi, self.phi_dot]]).T
-        x_theta = np.array([[theta, self.theta_dot]]).T
         x_z = np.array([[z_com, self.z_dot]]).T
         x_x = np.array([[x_com, self.x_dot]]).T
         x_y = np.array([[y_com, self.y_dot]]).T
 
-        r_phi = np.array([[phi_ref, 0.0]]).T
-        r_theta = np.array([[theta_ref, 0.0]]).T
         r_z = np.array([[ref_z, 0.0]]).T
         r_x = np.array([[ref_x, 0.0]]).T
         r_y = np.array([[ref_y, 0.0]]).T
 
-        phi_error = x_phi - r_phi
-        theta_error = x_theta - r_theta
         z_error = x_z - r_z
         x_error = x_x - r_x
         y_error = x_y - r_y
 
-        u_phi = -self.K_phi @ phi_error
-        u_theta = -self.K_theta @ theta_error
         u_z = -self.K_z @ z_error + self.mass*common.Constants.g
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        Tau_x = u_phi[0, 0]
-        Tau_y = u_theta[0, 0]
         F_z = u_z[0, 0]
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
 
+        omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
+        E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
+        omega_tilde = E @ omega
+        Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
+        reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
+        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * E @ R.T @ np.cross(Lambda, Lambda_d)
+        # Local frame torque allocation
+        # Tau_x = u_RA[0]*self.Iavg
+        # Tau_y = u_RA[1]*self.Iavg
+        Tau_x = 0.0
+        Tau_y = 0.0
+        # F_x = 0.0
+        F_y = 0.0
+        F_z = 0.0
+
         self.error_state_msg.vector = np.concatenate((x_error.flatten(), 
                                                       y_error.flatten(), 
                                                       z_error.flatten(), 
-                                                      np.rad2deg(phi_error.flatten()), 
-                                                      np.rad2deg(theta_error.flatten())))
+                                                      [reduced_attitude_error]))
         self.error_state_pub.publish(self.error_state_msg)
         self.control_input_message.vector = [Tau_x, Tau_y, F_x, F_y, F_z]
 
@@ -358,7 +316,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.simplified_allocation(tf_msg, Tau_x=Tau_x, Tau_y=Tau_y, F_x=F_x, F_y=F_x, F_z=F_z)
+        des_currents = self.local_torque_inertial_force_allocation(tf_msg, Tau_x=Tau_x, Tau_y=Tau_y, F_x=F_x, F_y=F_x, F_z=F_z)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

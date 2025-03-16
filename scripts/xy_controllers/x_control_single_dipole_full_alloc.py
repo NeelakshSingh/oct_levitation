@@ -124,24 +124,25 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         """
 
     def local_frame_torque_global_force_allocation(self, tf_msg: TransformStamped, F_x: float):
-        dipole_quaternion, dipole_position = geometry.numpy_arrays_from_tf_msg(tf_msg)
+        quaternion = np.array([
+            tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
+        ])
+        normal = -geometry.get_normal_vector_from_quaternion(quaternion) # -ve because south pole up
         dipole = self.rigid_body_dipole.dipole_list[0]
-        dipole_moment_local = dipole.strength * dipole.axis
-        dipole_moment = geometry.get_normal_vector_from_quaternion(dipole_quaternion)*dipole.strength
-        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
-
-        # Now let's allocate for forces.
-        # Since we don't want any torques we really just want zero fields.
-        F_des = np.array([[F_x, 0.0, 0.0]]).T
-        b_des = np.zeros((3, 1))
-        g_des = np.linalg.pinv(Mf) @ F_des
-        B_des = np.vstack((b_des.reshape(-1,1), g_des))
-
+        dipole_vector = dipole.strength * normal
+        dipole_position = np.array([
+            tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
+        ])
+        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
+        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
+                                                                       dipole.axis,
+                                                                       quaternion)[:2] # Only first two rows will be nonzero
+        w_des = np.array([0.0, 0.0, F_x, 0.0, 0.0]) # Tau_local_xy, F_v
+        M = block_diag(Mt_local, Mf)
         A = self.mpem_model.getActuationMatrix(dipole_position)
-
-        des_currents = (np.linalg.pinv(A) @ B_des).flatten()
-
-        JMA = A
+        JMA = M @ A
+        des_currents = np.linalg.pinv(JMA) @ w_des
+        
         jma_condition = np.linalg.cond(JMA)
 
         if self.warn_jma_condition:
