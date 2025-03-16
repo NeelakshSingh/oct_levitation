@@ -303,7 +303,7 @@
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>Y Position</title>
+                    <title>XYZ Euler Roll</title>
                 </column_0>
                 <column_1>
                     <axes>
@@ -451,7 +451,7 @@
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>Untitled Plot</title>
+                    <title>XYZ Euler Yaw</title>
                 </column_2>
             </row_1>
         </plots>

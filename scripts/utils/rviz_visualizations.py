@@ -95,11 +95,11 @@ class OctLevitationRvizVisualizations:
             # in order to visualize them at the object origin in rviz.
             wrench_msg = msg
             wrench_msg.header.stamp = rospy.Time.now()
-            # Also we will publish torques in mN-m and forces in mN
+            # Also we will publish torques in mN-m and forces in N
             wrench_msg.header.frame_id = self.rigid_body.pose_frame
             local_force = geometry.rotate_vector_from_quaternion(
                 geometry.invert_quaternion(geometry.numpy_quaternion_from_tf_msg(self.last_received_vicon_msg)),
-                np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z])*1e3)
+                np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z]))
             wrench_msg.wrench.force = Vector3(*local_force)
             wrench_msg.wrench.torque = Vector3(*np.array([msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])*1e3)
             # Torques are assumed to be published in the object frame.

@@ -25,7 +25,9 @@ class DynamicsSimulator:
 
     def __init__(self):
         rospy.init_node('dynamics_simulator', anonymous=True)
-        self.Ts = 1/3000
+        self.Ts = 1/rospy.get_param("~sim_freq", 3000)
+        rospy.loginfo(f"[free_rigid_body_simulator] Requested frequency: {1/self.Ts}")
+        # self.Ts = 1/3000
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
         self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -46,25 +48,22 @@ class DynamicsSimulator:
 
         ### Initial Conditions
         gravity_on = rospy.get_param("~gravity_on", False)
-        self.p = np.array(rospy.get_param("~initial_position", [-0.02, -0.02, 0.02])) # World frame
+        self.p = np.array(rospy.get_param("~initial_position", [0.0, 0.0, 0.0])) # World frame
         self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
-        initial_rpy = np.array(rospy.get_param("~initial_rpy", [85.0, 85.0, 0.0])) # World frame
+        initial_rpy = np.array(rospy.get_param("~initial_rpy", [0.0, 0.0, 0.0])) # World frame
+        rospy.loginfo(f"[free_body_sim] initial_rpy: {initial_rpy}")
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
         self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
         self.omega = np.deg2rad(self.omega)
         self.use_wrench = rospy.get_param("~use_wrench", False)
         self.publish_status = rospy.get_param("~pub_status", False)
+        self.print_ft = rospy.get_param("~print_ft", False)
 
         self.vicon_pub_time_ns = 1e9/rospy.get_param("~vicon_pub_freq", 100) #
         if self.publish_status:
             self.sim_status_pub = rospy.Publisher("oct_levitation/free_rigid_body_sim/status", Bool, queue_size=1) # This is just to measure the simulator run freq
         self.__last_vicon_pub_time_ns = -np.inf
-
-        if gravity_on:
-            self.F_amb = np.array([0, 0, -common.Constants.g])
-        else:
-            self.F_amb = np.array([0, 0, 0])
         
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
@@ -86,6 +85,11 @@ class DynamicsSimulator:
         # self.I_bf = np.diag([com_inertia.Px, com_inertia.Py, com_inertia.Pz])
         self.m = self.rigid_body.mass_properties.m
         self.I_bf_inv = np.linalg.inv(self.I_bf)
+
+        if gravity_on:
+            self.F_amb = np.array([0, 0, -self.m*common.Constants.g])
+        else:
+            self.F_amb = np.array([0, 0, 0])
     
     def simulation_loop(self, event):
 
@@ -109,6 +113,11 @@ class DynamicsSimulator:
 
         # Computing the velocity and position
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
+        if self.print_ft:
+            rospy.loginfo(f"Applying F: {F}, Tau: {Tau}")
+        Tau = np.zeros(3)
+        F = F + self.F_amb # Adding gravity and other constant forces
+
         self.p, self.v = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
 
         # Numerically integration the orientation through the lie group exponential map of angular velocity.
@@ -150,7 +159,7 @@ class DynamicsSimulator:
                                                                   torque_first=True,
                                                                   dipole_axis=self.rigid_body.dipole_list[0].axis)
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, np.asarray(des_currents_msg.des_currents_reg))
-        actual_Tau_force = (Mq @ field_grad).flatten()
+        actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
         
         wrench.header.stamp = rospy.Time.now()
         wrench.wrench.torque = Vector3(*actual_Tau_force[:3])

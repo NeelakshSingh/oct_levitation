@@ -4,6 +4,10 @@
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
     <arg name="run_rqt_multiplot" default="false"/>
+    <arg name="sim_print_ft" default="false"/>
+    <arg name="current_delay_time" default="0.0"/>
+    <arg name="sim_frequency" default="3000"/>
+    <arg name="sim_publish_status" default="false"/>
 
     <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen"/>
 
@@ -12,9 +16,14 @@
     </group>
 
     <group if="$(arg sim)">
-        <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen"/>
+        <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
+            <param name="sim_freq" value="$(arg sim_frequency)" />
+            <param name="initial_rpy" value="[85, 85, 0.0]" type="yaml" />
+            <param name="print_ft" value="$(arg sim_print_ft)" />
+            <param name="pub_status" value="$(arg sim_publish_status)" />
+        </node>
         <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen">
-            <param name="delay_time" value="0.0" />
+            <param name="delay_time" value="$(arg current_delay_time)" />
         </node>
     </group>
 

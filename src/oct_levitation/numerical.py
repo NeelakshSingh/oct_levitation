@@ -43,7 +43,7 @@ def rodrigues_skew_symmetric_expm(vec: np_t.NDArray) -> np_t.NDArray:
     return exp_skmat
 
 @numba.jit(nopython=True)
-def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torque: np_t.NDArray, I: np_t.NDArray, dt: float,
+def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torque_world: np_t.NDArray, I: np_t.NDArray, dt: float,
                                       damping: np_t.NDArray = np.zeros(3)) -> np_t.NDArray:
     """
     This function integrates the orientation of a rigid body with constant angular velocity and torque.
@@ -57,7 +57,7 @@ def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torq
     Parameters:
         R (np_t.NDArray): The rotation matrix at the current time step.
         omega (np_t.NDArray): The angular velocity at the current time step (in body fixed frame).
-        torque (np_t.NDArray): The torque at the current time step, applied in ZOH fashion (given in body fixed frame).
+        torque_world (np_t.NDArray): The torque at the current time step, applied in ZOH fashion (given in the world frame).
         I (np_t.NDArray): The inertia tensor of the rigid body in body fixed frame.
         dt (float): The time step.
         damping (np_t.NDArray): The damping coefficients along the three axes. Not normalized by inertia (given in body fixed frame).
@@ -68,7 +68,6 @@ def integrate_R_omega_constant_torque(R: np_t.NDArray, omega: np_t.NDArray, torq
     # First we convert angvel and I to world frame.
     omega_world = R @ omega
     I_world = R @ I @ R.T
-    torque_world = R @ torque
 
     # This computation is not going to be exact since the inertia matrix will actually vary in time.
     # But we are assuming that the inertia matrix is constant for the time step.

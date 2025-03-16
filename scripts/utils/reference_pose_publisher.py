@@ -80,7 +80,7 @@ class ReferencePosePublisher:
         # pose.transform.rotation = Quaternion(*quaternion)
         
         ### Sinusoidal Z
-        # pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
+        pose.transform.translation.z = self.z_amplitude*np.sin(self.z_omega*t) + 0.01
 
         self.tf_pub.publish(pose)
     

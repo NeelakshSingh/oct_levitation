@@ -569,6 +569,11 @@ def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray
 def magnetic_interaction_field_to_torque(dipole_moment: np.ndarray) -> np.ndarray:
     return get_skew_symmetric_matrix(dipole_moment)
 
+def magnetic_interaction_field_to_local_torque(dipole_strength: float,
+                                               dipole_axis: np.ndarray,
+                                               dipole_quaternion: np.ndarray) -> np.ndarray:
+    return dipole_strength * get_skew_symmetric_matrix(dipole_axis) @ (rotation_matrix_from_quaternion(dipole_quaternion).T)
+
 def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
                                                    full_mat: float = True,
                                                    torque_first: bool = True) -> np.ndarray:
