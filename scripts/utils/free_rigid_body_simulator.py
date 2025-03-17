@@ -157,7 +157,10 @@ class DynamicsSimulator:
                                                                   full_mat=True,
                                                                   torque_first=True,
                                                                   dipole_axis=self.rigid_body.dipole_list[0].axis)
-        field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, np.asarray(des_currents_msg.des_currents_reg))
+        rospy.logwarn_once("[Free Rigid Body Sim]: This is to notify that coils 7 and 8 are shifted as of this version of the simulator.")
+        currents = np.asarray(des_currents_msg.des_currents_reg)
+        currents = np.concatenate((currents[:6], currents[7:]))
+        field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, currents)
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
         
         wrench.header.stamp = rospy.Time.now()

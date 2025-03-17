@@ -40,7 +40,9 @@ class ControlSessionNodeBase:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
 
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = None # Set this in post init
-        self.HARDWARE_CONNECTED = False;
+        self.coils_to_enable = [True]*9
+        self.coils_to_enable[6] = False # Coil 7 is not being used at the moment.
+        self.HARDWARE_CONNECTED = False
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
@@ -69,6 +71,8 @@ class ControlSessionNodeBase:
         self.tracking_poses_on = True
 
         self.post_init()
+
+        rospy.logwarn(f"[Control Node] HARDWARE_CONNECTED: {self.HARDWARE_CONNECTED}")
         
         self.mpem_model = mag_manip.ForwardModelMPEM()
         self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
@@ -77,7 +81,7 @@ class ControlSessionNodeBase:
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
         self.tf_reference_sub_topic = self.tf_sub_topic + "_reference"
 
-        init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED)
+        init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED, coils_to_enable=self.coils_to_enable)
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher = rospy.Publisher(self.rigid_body_dipole.com_wrench_topic,
@@ -150,6 +154,16 @@ class ControlSessionNodeBase:
         des_currents = np.clip(des_currents, -self.MAX_CURRENT, self.MAX_CURRENT)
         if np.any(np.abs(des_currents) == self.MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.MAX_CURRENT}A HIT!")
+        
+        # Now we need to reorder the des_currents for the new coil configuration where coils 7 and 8
+        # are shifted by one.
+        rospy.logwarn_once("""
+[Control Node] You are seeing this warning because this version of the controller assumes that
+coils 7 and 8 are shifted by one place to the right and therefore makes this adjustment to the 
+requested currents. The warning will go away once the new driver PCBs arrive and the corresponding
+lines of code are removed.
+        """)
+        des_currents = np.concatenate((des_currents[:6], [0], des_currents[6:]))
         self.desired_currents_msg.des_currents_reg = des_currents
         self.currents_publisher.publish(self.desired_currents_msg)
 

@@ -20,7 +20,7 @@ class OctomagCalibratedModel:
 
     def __init__(self,
                  calibration_type: str = "legacy_yaml",
-                 calibration_file: str = "octomag_5point.yaml",
+                 calibration_file: str = "mc3ao8s_md200_handp.yaml",
                  **kwargs):
         
         if calibration_type == "legacy_yaml":

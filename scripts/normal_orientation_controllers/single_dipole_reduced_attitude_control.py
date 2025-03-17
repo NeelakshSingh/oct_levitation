@@ -16,7 +16,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = True
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -46,8 +46,11 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
             
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
 
-        self.kp = 4.5
-        self.Kd = np.diag([1.0, 1.0])*3.0
+        # self.kp = 4.5
+        # self.Kd = np.diag([1.0, 1.0])*3.0
+
+        self.kp = 50
+        self.Kd = np.diag([1.0, 1.0])*30
 
         rospy.loginfo(f"Control gains kp: {self.kp}, Kd: {self.Kd}")
 
@@ -177,6 +180,51 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
             self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents
+    
+    def full_local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y:float):
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
+        dipole = self.rigid_body_dipole.dipole_list[0]
+        dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
+        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
+        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
+                                                                       dipole.axis,
+                                                                       dipole_quaternion)[:2] # Only first two rows will be nonzero
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+        M = block_diag(Mt_local, Mf)
+
+        W_des = np.array([Tau_x, Tau_y, 0.0, 0.0, 0.0])
+
+        JMA = M @ A
+        des_currents = np.linalg.pinv(JMA) @ W_des
+
+        jma_condition = np.linalg.cond(JMA)
+
+        if self.warn_jma_condition:
+            condition_check_tol = 300
+            if jma_condition > condition_check_tol:
+                np.set_printoptions(linewidth=np.inf)
+                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
+                                       Current TF: {tf_msg}
+                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
+                                    \n JMA: \n {JMA}""")
+                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
+
+                rospy.loginfo_once(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
+                                    M: {M},
+                                    M condition number: {np.linalg.cond(M)}""")
+                
+                rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
+                                    A: {A},
+                                    A condition number: {np.linalg.cond(A)}""")
+
+        if self.publish_jma_condition:
+            jma_condition_msg = VectorStamped()
+            jma_condition_msg.header.stamp = rospy.Time.now()
+            jma_condition_msg.vector = [jma_condition]
+            self.jma_condition_pub.publish(jma_condition_msg)
+
+        return des_currents.flatten()
 
     def callback_control_logic(self, tf_msg: TransformStamped):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
@@ -227,6 +275,10 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         u = -self.Kd @ omega_tilde + self.kp * E @ R.T @ np.cross(Lambda, Lambda_d)
         
         # Local frame torque allocation
+        # Tau_x = u[0]*self.Iavg
+        # Tau_y = u[1]*self.Iavg
+
+        # For the gimble
         Tau_x = u[0]*self.Iavg
         Tau_y = u[1]*self.Iavg
 
@@ -248,7 +300,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
 
         # Let's try the field local frame allocation which should always yield the correct torque configuration
-        des_currents =  self.local_frame_torque_allocation(tf_msg, Tau_x, Tau_y)
+        des_currents =  self.full_local_torque_inertial_force_allocation(tf_msg, Tau_x, Tau_y)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

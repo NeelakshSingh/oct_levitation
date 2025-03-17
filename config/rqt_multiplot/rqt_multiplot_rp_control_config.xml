@@ -847,7 +847,7 @@
                                     <type>tnb_mns_driver/DesCurrentsReg</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>des_currents_reg/6</field>
+                                    <field>des_currents_reg/7</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -898,7 +898,7 @@
                                     <type>tnb_mns_driver/DesCurrentsReg</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>des_currents_reg/7</field>
+                                    <field>des_currents_reg/8</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
