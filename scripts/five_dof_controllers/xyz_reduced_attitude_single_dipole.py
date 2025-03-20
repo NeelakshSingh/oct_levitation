@@ -17,7 +17,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = True
+        self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.dt = 1/self.control_rate
@@ -98,8 +98,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
-        self.k_ra_p = 4.5
-        self.K_ra_d = np.diag([1.0, 1.0])*3.0
+        self.k_ra_p = 50
+        self.K_ra_d = np.diag([1.0, 1.0])*30
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################

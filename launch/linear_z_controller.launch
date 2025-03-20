@@ -1,5 +1,5 @@
 <launch>
-    <arg name="sim" default="true"/>
+    <arg name="sim" default="false"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
@@ -11,7 +11,7 @@
     <arg name="sim_frequency" default="3000"/>
     <arg name="sim_publish_status" default="false"/>
     <arg name="sim_gravity_on" default="false"/>
-    <arg name="sim_initial_rpy" default="[30.0, 30.0, 0.0]"/>
+    <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_vicon_pub_freq" default="100"/>
 

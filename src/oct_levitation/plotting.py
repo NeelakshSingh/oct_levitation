@@ -12,6 +12,7 @@ import oct_levitation.geometry as geometry
 import oct_levitation.common as common
 import oct_levitation.mechanical as mechanical
 from oct_levitation.processing_utils import get_signal_fft
+from geometry_msgs.msg import Transform, Vector3, Quaternion
 import os
 
 import pandas as pd
@@ -2335,6 +2336,229 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
             desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
         
         actual_wrench = np.concatenate((forces_wf, torques))
+
+        for j, key in enumerate(list(actual_wrench_dict.keys())):
+            actual_wrench_dict[key].append(actual_wrench[j])
+
+    # Convert wrench dict to DataFrame
+    actual_wrench_df = pd.DataFrame(actual_wrench_dict)
+    
+    # Plot settings
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Force (actual, reference), Torque (actual, reference)
+    
+    fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
+    
+    # Force subplots (columns 0, 1, 2), Forces converted to mN
+    for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
+        axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], **kwargs)
+        axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
+        axes[0, i].set_title(f'{force_component} - Force')
+        axes[0, i].grid(True)
+        if i == 0:
+            axes[0, i].set_ylabel('Force (mN)')
+        if i == 2:
+            axes[0, i].legend(loc='upper right')
+
+    # Torque subplots (columns 0, 1, 2), Torques converted to mN-m
+    for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
+        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], **kwargs)
+        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
+        axes[1, i].set_title(f'{torque_component} - Torque')
+        axes[1, i].grid(True)
+        if i == 0:
+            axes[1, i].set_ylabel('Torque (mN-m)')
+        if i == 2:
+            axes[1, i].legend(loc='upper right')
+
+    # Shared X-axis
+    for ax in axes[1, :]:
+        ax.set_xlabel('Time (s)')
+    
+    axes[0, 1].sharey(axes[0, 0])
+    axes[0, 2].sharey(axes[0, 0])
+    axes[1, 1].sharey(axes[1, 0])
+    axes[1, 2].sharey(axes[1, 0])
+
+    # Autoscale axes
+    for ax_row in axes: 
+            for ax in ax_row:
+                ax.relim()   
+                ax.autoscale()
+
+    fig.tight_layout()
+
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    
+    if return_actual_wrench:
+        actual_wrench_df['time'] = desired_wrench['time']
+        return fig, axes, actual_wrench_df
+    return fig, axes
+
+def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
+                                                         actual_currents_df: pd.DataFrame,
+                                                         desired_wrench: pd.DataFrame,
+                                                         calibrated_model: common.OctomagCalibratedModel,
+                                                         dipole: mechanical.MagneticDipole,
+                                                         use_local_frame_for_torques: bool,
+                                                         dataset_torques_in_local_frame: bool,
+                                                         save_as: str = None,
+                                                         save_as_emf: bool = False,
+                                                         inkscape_path: str = INKSCAPE_PATH,
+                                                         return_actual_wrench: bool = False,
+                                                         **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
+    """
+    Plots the actual and desired wrench (force and torque) components over time for a dipole center,
+    based on the given body frame pose and current data.
+
+    This function computes the actual wrench exerted by the dipole based on the current data and
+    compares it to the desired wrench values. It then plots the components of force (Fx, Fy, Fz) and torque (Taux, Tauy)
+    against time. The plot allows visualization of the agreement between the actual and reference values. 
+
+    IMPORTANT: PLE
+
+    Parameters:
+        pose_df (pd.DataFrame):
+            DataFrame containing the pose of the COM.
+
+        actual_currents_df (pd.DataFrame):
+            DataFrame containing the actual currents (currents_reg_0 to currents_reg_7) applied to the dipole over time.
+            Each row corresponds to a specific time step.
+
+        desired_wrench (pd.DataFrame):
+            DataFrame containing the desired wrench (force and torque) components at each time step. Should have columns 'Fx', 'Fy', 
+            'Fz', 'Taux', 'Tauy', 'Tauz' representing the reference force and torque values.
+
+        calibrated_model (OctomagCalibratedModel):
+            An instance of a model used to calculate the exact field gradients based on the position and currents.
+            It should have a method `get_exact_field_grad5_from_currents(position, currents)` to compute the actual fields.
+
+        dipole_strength (float):
+            The strength of the dipole, which is used to compute the interaction matrix.
+
+        dipole_axis (np.ndarray):
+            A 3D vector representing the axis of the dipole for torque computation.
+
+        save_as (str):
+            The file path where the plot should be saved (in PNG format). If not provided, the plot is not saved.
+
+        save_as_emf (bool):
+            If True, the plot will also be saved in EMF format alongside the PNG file. Default is False.
+
+        inkscape_path (str):
+            Path to the Inkscape executable, used for converting the EMF file to PNG when `save_as_emf` is True. Default is None.
+
+        **kwargs (additional) keyword arguments
+            Additional arguments to be passed to the plotting function (e.g., for customizing the plot appearance).
+
+    Returns:
+        A tuple where the first element is the figure object while the second elements is the axes object.
+    
+    Notes:
+    - The plot consists of two rows: the first row for force components (Fx, Fy, Fz) and the second for torque components (Taux, Tauy, Tauz).
+    - The actual wrench is computed from the dipole's position, rotation, and current data using the calibrated model and interaction matrix.
+    - The plot includes both actual wrench and reference wrench (desired) values for comparison.
+    """
+    # Combine pose and current data
+    combined_pose_currents = pd.merge_asof(pose_df, actual_currents_df, on='time')
+    time = pose_df['time']
+    actual_wrench_dict = {'wrench.torque.x': [], 'wrench.torque.y': [], 'wrench.torque.z': [],
+                          'wrench.force.x': [], 'wrench.force.y': [], 'wrench.force.z': []}
+    
+    key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
+               'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
+
+    # Calculate actual wrench
+    for i in range(len(combined_pose_currents)):
+        position = np.array([
+            combined_pose_currents['transform.translation.x'].iloc[i],
+            combined_pose_currents['transform.translation.y'].iloc[i],
+            combined_pose_currents['transform.translation.z'].iloc[i]
+        ])
+        actual_currents = np.array([combined_pose_currents[f'currents_reg_{j}'].iloc[i] for j in range(8)])
+        
+        quaternion = np.array([
+            combined_pose_currents['transform.rotation.x'].iloc[i],
+            combined_pose_currents['transform.rotation.y'].iloc[i],
+            combined_pose_currents['transform.rotation.z'].iloc[i],
+            combined_pose_currents['transform.rotation.w'].iloc[i]
+        ])
+
+        quaternion = quaternion/np.linalg.norm(quaternion)
+
+        # Now we will iterate over each magnet in the dipole and we will treat each magnet
+        # as an individual dipole. This way, we can get the forces and torques on their own
+        # center. And using their pose w.r.t dipole center, we can then calculate the forces
+        # and torques applied to the dipole center as a result.
+        T_VM = geometry.transformation_matrix_from_quaternion(quaternion, position)
+        R_VM = T_VM[:3, :3]
+        actual_com_force = np.zeros(3)
+        actual_com_torque = np.zeros(3)
+
+        for magnet_tf, magnet in dipole.magnet_stack:
+            T_M_mag = geometry.transformation_matrix_from_compose_transforms(
+                dipole.transform,
+                magnet_tf
+            )
+            T_V_mag = T_VM @ T_M_mag
+            R_V_mag = T_V_mag[:3, :3]
+            magnet_dipole_moment = (R_V_mag @ magnet.magnetization_axis) * magnet.get_dipole_strength()
+            magnet_position = T_V_mag[:3, 3]
+            magnet_actual_fields = calibrated_model.get_exact_field_grad5_from_currents(magnet_position, actual_currents)
+            
+            M = geometry.magnetic_interaction_matrix_from_dipole_moment(magnet_dipole_moment,
+                                                                        full_mat=True,
+                                                                        torque_first=True)
+            
+            # Now we calculate the forces and torques on the magnet
+            magnet_wrench_world = (M @ magnet_actual_fields)
+            magnet_force_world = magnet_wrench_world[3:]
+            magnet_torque_world = magnet_wrench_world[:3]
+
+            actual_com_force += magnet_force_world
+
+            # For torques, we also need to consider the torque applied by the magnet on the COM.
+            # For this we will simply perform tay = r x F
+            # Also this analysis is likely easier in the body fixed frame.
+            r_M_mag_in_M = T_M_mag[3,:3]
+            r_M_mag_in_V = R_VM @ r_M_mag_in_M
+
+            magnet_torque_com_world = np.cross(r_M_mag_in_V, magnet_force_world) + magnet_torque_world
+            actual_com_torque += magnet_torque_com_world
+        
+        if use_local_frame_for_torques:
+            actual_com_torque = R_VM.T @ actual_com_torque
+
+        ## Depending on the torque evaluation frame and the current frame of the torques in the dataset.
+        ## convert the desired torques. This was implemented because some experiments perform direct world
+        ## frame torque control, while some perform body fixed frame torque control.
+        if not dataset_torques_in_local_frame and use_local_frame_for_torques:
+            # Also transform the desired torques from the world frame to the local frame.
+            des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
+            des_torques = geometry.rotate_vector_from_quaternion(
+                geometry.invert_quaternion(quaternion),
+                des_torques
+            )
+            desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
+        
+        if dataset_torques_in_local_frame and not use_local_frame_for_torques:
+             # Also transform the desired torques from the local frame to the world frame.
+            des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
+            des_torques = geometry.rotate_vector_from_quaternion(
+                quaternion,
+                des_torques
+            )
+            desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
+        
+        actual_wrench = np.concatenate((actual_com_force, actual_com_torque))
 
         for j, key in enumerate(list(actual_wrench_dict.keys())):
             actual_wrench_dict[key].append(actual_wrench[j])

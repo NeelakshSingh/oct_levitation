@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from mag_manip import mag_manip
 from geometry_msgs.msg import Transform, TransformStamped
 from oct_levitation.common import Constants
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Tuple
 
 @dataclass
 class PrincipleAxesAndMomentsOfInertia:
@@ -110,22 +110,42 @@ class CylindricalRingShape(ShapePropertiesInterface):
 
 @dataclass
 class PermanentMagnet:
+    """
+    Represents a permanent magnet with defined geometry, material properties.
+
+    Attributes:
+        geometry (ShapePropertiesInterface): The geometric properties of the magnet.
+        material (MaterialProperties): The material properties, including remanent magnetization.
+    """
     geometry: ShapePropertiesInterface
     material: MaterialProperties
+    magnetization_axis: np_t.NDArray
 
     def get_dipole_strength(self):
         return self.material.Br*self.geometry.volume/Constants.mu_0 # kg*m^2/s
     
 @dataclass
 class MagneticDipole:
+    """
+    Represents a magnetic dipole, which can be associated with one or more permanent magnets.
+
+    Attributes:
+        name (str): The name of the dipole.
+        strength (float): The magnetic dipole moment strength (A·m²).
+        axis (np_t.NDArray): A 3D unit vector representing the dipole's orientation.
+        transform (Transform): The pose of the dipole w.r.t to the body fixed frame it is attached to.
+        frame_name (str): The name of the coordinate frame in which the dipole is defined.
+        magnet_stack (Dict[Transform, PermanentMagnet]): A map of magnet transforms w.r.t dipole center frame and the magnet properties themselves.
+    """
     name: str
     strength: float
     axis: np_t.NDArray
     transform: Transform
     frame_name: str
-
+    magnet_stack: List[Tuple[Transform, PermanentMagnet]]
     def update_strength_from_permanent_magnets(self, magnet: PermanentMagnet, stack_size: int) -> None:
-        self.strength = stack_size*magnet.get_dipole_strength()
+        for magnet in self.magnet_list:
+            self.strength += magnet.get_dipole_strength()
 
 @dataclass
 class SingleDipoleRigidBody:

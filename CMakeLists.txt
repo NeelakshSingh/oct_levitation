@@ -172,6 +172,7 @@ catkin_install_python(PROGRAMS
   # Roll and pitch control nodes
   scripts/normal_orientation_controllers/single_dipole_rp_control.py
   scripts/normal_orientation_controllers/single_dipole_reduced_attitude_control.py
+  scripts/normal_orientation_controllers/single_dipole_body_fixed_reduced_attitude_control.py
 
   # Single dipole 5DOF control nodes
   scripts/five_dof_controllers/xyz_rp_single_dipole.py

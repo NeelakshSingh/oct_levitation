@@ -1,5 +1,5 @@
 <launch>
-    <arg name="sim" default="true"/>
+    <arg name="sim" default="false"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>

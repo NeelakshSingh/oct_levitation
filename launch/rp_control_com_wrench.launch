@@ -10,7 +10,7 @@
     <arg name="current_delay_time" default="0.0"/>
     <arg name="sim_frequency" default="3000"/>
     <arg name="sim_publish_status" default="false"/>
-    <arg name="sim_initial_rpy" default="[30.0, 30.0, 0.0]"/>
+    <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_vicon_pub_freq" default="100"/>
 

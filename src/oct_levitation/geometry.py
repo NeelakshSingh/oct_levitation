@@ -4,7 +4,7 @@ import scipy.spatial.transform as scitf
 from scipy.linalg import block_diag
 from functools import partial
 
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Transform
 
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
 CLOSE_CHECK_TOLERANCE = 1e-3
@@ -23,23 +23,23 @@ def check_if_unit_quaternion_raise_error(q: np.ndarray):
     if not check_if_unit_quaternion(q):
         raise ValueError(f"Quaternion must be a unit quaternion. Received: {q}")
 
-def numpy_quaternion_from_tf_msg(tf_msg: TransformStamped):
+def numpy_quaternion_from_tf_msg(tf_msg: Transform):
     rotation = np.array([
-        tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
+        tf_msg.rotation.x, tf_msg.rotation.y, tf_msg.rotation.z, tf_msg.rotation.w
     ])
     return rotation
 
-def numpy_translation_from_tf_msg(tf_msg: TransformStamped):
+def numpy_translation_from_tf_msg(tf_msg: Transform):
     translation = np.array([
-        tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
+        tf_msg.translation.x, tf_msg.translation.y, tf_msg.translation.z
     ])
     return translation
 
-def numpy_arrays_from_tf_msg(tf_msg: TransformStamped):
+def numpy_arrays_from_tf_msg(tf_msg: Transform):
     """
     Parameters
     ----------
-        tf_msg: geometry_msgs/TransformStamped type object.
+        tf_msg: geometry_msgs/Transform type object.
     
     Returns
     -------
@@ -128,6 +128,12 @@ def get_normal_vector_from_quaternion(q: np.ndarray) -> np.ndarray:
     R = rotation_matrix_from_quaternion(q)
     return R[:, 2]
 
+def get_final_rotation_matrix_from_sequence_of_quaternions(*quaternions: np.ndarray) -> np.ndarray:
+    R = np.eye(3)
+    for quaternion in quaternions:
+        R = R @ rotation_matrix_from_quaternion(quaternion)
+    return R
+
 def get_normal_alpha_beta_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -214,6 +220,21 @@ def invert_transformation_matrix(T: np.ndarray) -> np.ndarray:
     T_inv[:3, :3] = R.T
     T_inv[:3, 3] = -R.T @ p
     return T_inv
+
+def transformation_matrix_from_compose_transforms(*transforms: Transform) -> Transform:
+    """
+    Applies transforms in the left-> right sequence supplied and gives the final transform from the
+    final frame to the initial frame.
+    """
+    T = np.eye(4)
+    for transform in transforms:
+        T_tf = transformation_matrix_from_quaternion(
+            numpy_quaternion_from_tf_msg(transform),
+            numpy_translation_from_tf_msg(transform)
+        )
+        T = T @ T_tf
+    
+    return T
 
 def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
@@ -606,6 +627,7 @@ def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
                                     dipole_strength:float,
                                     full_mat: float = True,
                                     torque_first: bool = True,
+                                    torque_in_local_frame: bool = False,
                                     dipole_axis: np.ndarray = np.array([0, 0, 1])) -> np.ndarray:
     """
     This function returns the magnetic interaction matrix of a dipole.
@@ -632,9 +654,21 @@ def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
     dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
     dipole_moment = dipole_strength*dipole_axis
 
-    return magnetic_interaction_matrix_from_dipole_moment(dipole_moment,
-                                                          full_mat=full_mat,
-                                                          torque_first=torque_first)
+    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
+
+    if torque_in_local_frame:
+        M_Tau = magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
+                                                           dipole_axis=dipole_axis,
+                                                           dipole_quaternion=dipole_quaternion)
+    else:
+        M_Tau = magnetic_interaction_field_to_torque(dipole_moment)
+    if full_mat:
+        if torque_first:
+            return block_diag(M_Tau, M_F)
+        else:
+            return block_diag(M_F, M_Tau)
+    else:
+        return M_F, M_Tau
 
 def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                     dipole_strength:float,
