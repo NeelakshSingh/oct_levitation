@@ -168,16 +168,16 @@ Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
         MagneticDipole(
             name="CenterRingDipole",
             strength=RingMagnet10x5x5.get_dipole_strength()*6, # Built by symmetric stacking of 6 magnets
-            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/onyx_disc_80x22/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), UNIT_QUATERNION), RingMagnet10x5x5),
-                (Transform(Vector3(0.0, 0.0, 8e-3), UNIT_QUATERNION), RingMagnet10x5x5),
-                (Transform(Vector3(0.0, 0.0, 11e-3), UNIT_QUATERNION), RingMagnet10x5x5),
-                (Transform(Vector3(0.0, 0.0, -3e-3), UNIT_QUATERNION), RingMagnet10x5x5),
-                (Transform(Vector3(0.0, 0.0, -8e-3), UNIT_QUATERNION), RingMagnet10x5x5),
-                (Transform(Vector3(0.0, 0.0, -11e-3), UNIT_QUATERNION), RingMagnet10x5x5),
+                (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5),
+                (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5),
+                (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5),
+                (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5),
+                (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5),
             ]
         )
     ]

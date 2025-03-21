@@ -2519,7 +2519,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                                         torque_first=True)
             
             # Now we calculate the forces and torques on the magnet
-            magnet_wrench_world = (M @ magnet_actual_fields)
+            magnet_wrench_world = (M @ magnet_actual_fields).flatten()
             magnet_force_world = magnet_wrench_world[3:]
             magnet_torque_world = magnet_wrench_world[:3]
 
@@ -2528,7 +2528,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             # For torques, we also need to consider the torque applied by the magnet on the COM.
             # For this we will simply perform tay = r x F
             # Also this analysis is likely easier in the body fixed frame.
-            r_M_mag_in_M = T_M_mag[3,:3]
+            r_M_mag_in_M = T_M_mag[:3,3]
             r_M_mag_in_V = R_VM @ r_M_mag_in_M
 
             magnet_torque_com_world = np.cross(r_M_mag_in_V, magnet_force_world) + magnet_torque_world

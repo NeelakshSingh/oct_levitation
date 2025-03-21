@@ -138,14 +138,21 @@ class MagneticDipole:
         magnet_stack (Dict[Transform, PermanentMagnet]): A map of magnet transforms w.r.t dipole center frame and the magnet properties themselves.
     """
     name: str
-    strength: float
     axis: np_t.NDArray
     transform: Transform
     frame_name: str
     magnet_stack: List[Tuple[Transform, PermanentMagnet]]
-    def update_strength_from_permanent_magnets(self, magnet: PermanentMagnet, stack_size: int) -> None:
-        for magnet in self.magnet_list:
-            self.strength += magnet.get_dipole_strength()
+    _strength: float = None
+    
+    @property
+    def strength(self):
+        # NOTE: Just a naive addition for now, because it considers all magnets to be aligned. 
+        # They won't stick to each other otherwise anyways.
+        if self._strength is None:
+            for magnet_tf, magnet in self.magnet_stack:
+                self._strength += magnet.get_dipole_strength()
+        return self._strength
+
 
 @dataclass
 class SingleDipoleRigidBody:
