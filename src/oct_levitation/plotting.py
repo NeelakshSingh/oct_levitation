@@ -2335,7 +2335,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
             )
             desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
         
-        actual_wrench = np.concatenate((forces_wf, torques))
+        actual_wrench = np.concatenate((torques, forces_wf))
 
         for j, key in enumerate(list(actual_wrench_dict.keys())):
             actual_wrench_dict[key].append(actual_wrench[j])
@@ -2558,7 +2558,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             )
             desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
         
-        actual_wrench = np.concatenate((actual_com_force, actual_com_torque))
+        actual_wrench = np.concatenate((actual_com_torque, actual_com_force)) # This sequence should be correct. Please double check.
 
         for j, key in enumerate(list(actual_wrench_dict.keys())):
             actual_wrench_dict[key].append(actual_wrench[j])
