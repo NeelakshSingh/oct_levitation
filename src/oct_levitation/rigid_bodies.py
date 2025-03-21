@@ -167,7 +167,6 @@ Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
     dipole_list = [
         MagneticDipole(
             name="CenterRingDipole",
-            strength=RingMagnet10x5x5.get_dipole_strength()*6, # Built by symmetric stacking of 6 magnets
             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/onyx_disc_80x22/Origin",
