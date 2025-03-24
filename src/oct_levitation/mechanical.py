@@ -149,6 +149,7 @@ class MagneticDipole:
         # NOTE: Just a naive addition for now, because it considers all magnets to be aligned. 
         # They won't stick to each other otherwise anyways.
         if self._strength is None:
+            self._strength = 0.0
             for magnet_tf, magnet in self.magnet_stack:
                 self._strength += magnet.get_dipole_strength()
         return self._strength

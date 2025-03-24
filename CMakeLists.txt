@@ -192,6 +192,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/rviz_visualizations.py
   scripts/utils/tf_republisher.py
   scripts/utils/control_input_delay_sim.py
+  scripts/utils/coil_subset_condition_calculator.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
