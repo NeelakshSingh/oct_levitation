@@ -12,10 +12,13 @@ import oct_levitation.common as common
 import alive_progress as ap
 
 from argparse import ArgumentParser
+from scipy.linalg import block_diag
 
 from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
 from tvtk.api import tvtk
+
+np.set_printoptions(linewidth=np.inf)
 
 if __name__=="__main__":
     parser = ArgumentParser(
@@ -39,14 +42,24 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     parser.add_argument("--y_eval_lim", type=float, default=0.02)
     parser.add_argument("--z_eval_lim", type=float, default=0.02)
     parser.add_argument("--clip_cond", type=float, default=100)
-
+    parser.add_argument("--mode", type=int, default=0, help="0: Only use A matrix. 1: Uses MA matrix. For 1, one can specify dipole rpy and dipole strength.")
+    parser.add_argument("--rpy", type=float, default=[0.0, 0.0, 0.0], nargs=3, help="[roll, pitch, yaw] intrinsic euler angles (in degrees) of local frame w.r.t inertial frame.")
+    parser.add_argument("--dipole_strength", type=float, default=1.0, help="In tesla.")
+    parser.add_argument("--dipole_axis", type=float, nargs=3, help="[x, y, z] local frame axis of the dipole.", default=[0.0, 0.0, 1.0])
 
     args = parser.parse_args()
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('oct_levitation')
     rospy.loginfo(f"[Coil Subset Condition Calculator]: Received number of coils: {args.num_coils}")
+    
+    if args.mode == 0:
+        base_folder = "A_matrix"
+    elif args.mode == 1:
+        base_folder = "MA_matrix"
+    else:
+        raise ValueError("Invalid value received for parameter 'mode'. Please select among 0 and 1.")
 
-    save_path = os.path.join(pkg_path, "data/subset_allocation_cond_plots", f"coil_count_{args.num_coils}")
+    save_path = os.path.join(pkg_path, "data/subset_allocation_cond_plots", f"{base_folder}/coil_count_{args.num_coils}")
 
     calibration_model = common.OctomagCalibratedModel(calibration_file=args.calib_file)
 
@@ -98,14 +111,43 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     # Offscreen rendering for mayavi
     mlab.options.offscreen = True
 
+    rpy = np.deg2rad(np.asarray(args.rpy))
+    quat = geometry.quaternion_from_euler_xyz(rpy)
+    dipole_strength = np.asarray(args.dipole_strength)
+    R = geometry.rotation_matrix_from_euler_xyz(rpy)
+    normal = R[:, 2]
+    dipole_moment = dipole_strength * normal
+
+    Mf = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
+    dipole_axis = np.asarray(args.dipole_axis)
+    M_tau_local = geometry.magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
+                                                                      dipole_axis=dipole_axis,
+                                                                      dipole_quaternion=quat) 
+    M = block_diag(M_tau_local[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
+
+    if args.mode == 1:
+        rospy.loginfo(f"[Coil Subset Condition Calculator]: M matrix: {M}")
+
     for coil_set in ap.alive_it(all_configs):
         count += 1
+        cond_eval_func = None
         @np.vectorize
-        def get_ma_condition_subset(x, y, z):
+        def get_A_condition_subset(x, y, z):
             A = calibration_model.get_actuation_matrix(np.array([x, y, z]))[:, coil_set]
             return np.linalg.cond(A)
         
-        cond = get_ma_condition_subset(X, Y, Z)
+        @np.vectorize
+        def get_MA_condition_subset(x, y, z):
+            A = calibration_model.get_actuation_matrix(np.array([x, y, z]))[:, coil_set]
+            return np.linalg.cond(M @ A)
+        
+        if args.mode == 0:
+            cond_eval_func = get_A_condition_subset
+        elif args.mode == 1:
+            cond_eval_func = get_MA_condition_subset
+        else:
+            raise ValueError("Invalid mode value. Should be among [0, 1].")
+        cond = cond_eval_func(X, Y, Z)
         dataset_df = pd.DataFrame({
             'X': X.flatten(),
             'Y': Y.flatten(),
@@ -210,6 +252,10 @@ Arguments from the argument parser:
 - Y evaluation limit (y_eval_lim): {args.y_eval_lim}
 - Z evaluation limit (z_eval_lim): {args.z_eval_lim}
 - Condition number clipping (clip_cond): {args.clip_cond}
+- Mode (mode): {args.mode}
+- Dipole roll, pitch, yaw (rpy): {args.rpy}
+- Dipole strength (dipole_strength): {args.dipole_strength}
+- Dipole axis (dipole_axis): {args.dipole_axis}
 
 Number of possible combinations: {count},
 Minimum RMS allocation condition number encountered: {min_rms},

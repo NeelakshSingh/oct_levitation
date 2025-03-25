@@ -30,6 +30,7 @@ from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
 from tvtk.api import tvtk
 from warnings import warn
+from copy import deepcopy
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
 
@@ -2410,6 +2411,10 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          dipole: mechanical.MagneticDipole,
                                                          use_local_frame_for_torques: bool,
                                                          dataset_torques_in_local_frame: bool,
+                                                         plot_for_each_magnet: bool = True,
+                                                         include_rpy_in_label: bool = False,
+                                                         min_opacity: float = 0.1,
+                                                         max_opacity: float = 0.8,
                                                          save_as: str = None,
                                                          save_as_emf: bool = False,
                                                          inkscape_path: str = INKSCAPE_PATH,
@@ -2472,6 +2477,14 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
     time = pose_df['time']
     actual_wrench_dict = {'wrench.torque.x': [], 'wrench.torque.y': [], 'wrench.torque.z': [],
                           'wrench.force.x': [], 'wrench.force.y': [], 'wrench.force.z': []}
+
+    # This list of dictionaries will help us plot the force and torque contribution of
+    # each magnet to the dipole center.
+    per_magnet_wrench_contributions = [
+        deepcopy(actual_wrench_dict) for _ in dipole.magnet_stack
+    ]
+
+    opacity_list = np.linspace(min_opacity, max_opacity, len(dipole.magnet_stack))
     
     key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
                'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
@@ -2503,7 +2516,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         actual_com_force = np.zeros(3)
         actual_com_torque = np.zeros(3)
 
-        for magnet_tf, magnet in dipole.magnet_stack:
+        for i, (magnet_tf, magnet) in enumerate(dipole.magnet_stack):
             T_M_mag = geometry.transformation_matrix_from_compose_transforms(
                 dipole.transform,
                 magnet_tf
@@ -2533,6 +2546,22 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
 
             magnet_torque_com_world = np.cross(r_M_mag_in_V, magnet_force_world) + magnet_torque_world
             actual_com_torque += magnet_torque_com_world
+
+            # let's convert the contribution to its respective frame too.
+            magnet_com_torque_contribution = magnet_torque_com_world
+            if use_local_frame_for_torques:
+                magnet_com_torque_contribution = R_VM.T @ magnet_com_torque_contribution
+            
+            # Explicit appending to avoid confusion. There were indexing errors with the overall
+            # contribution dictionary. So I won't do that for this edit.
+            magnet_contribution_dict = per_magnet_wrench_contributions[i]
+            magnet_contribution_dict[key_map['Fx']].append(magnet_force_world[0])
+            magnet_contribution_dict[key_map['Fy']].append(magnet_force_world[1])
+            magnet_contribution_dict[key_map['Fz']].append(magnet_force_world[2])
+            magnet_contribution_dict[key_map['Taux']].append(magnet_com_torque_contribution[0])
+            magnet_contribution_dict[key_map['Tauy']].append(magnet_com_torque_contribution[1])
+            magnet_contribution_dict[key_map['Tauz']].append(magnet_com_torque_contribution[2])
+
         
         if use_local_frame_for_torques:
             actual_com_torque = R_VM.T @ actual_com_torque
@@ -2576,6 +2605,18 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
     for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
         axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], **kwargs)
         axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
+        if plot_for_each_magnet:
+            for num, (magnet_wrench_contribution, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, dipole.magnet_stack)):
+                position = geometry.numpy_translation_from_tf_msg(magnet_tf)*1000
+                rpy = np.rad2deg(geometry.euler_xyz_from_quaternion(geometry.numpy_quaternion_from_tf_msg(magnet_tf)))
+                label_str = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
+                if include_rpy_in_label:
+                    label_str += f' RPY: ({rpy[0]:.2f}, {rpy[1]:.2f}, {rpy[2]:.2f}) deg'
+                axes[0, i].plot(time, np.array(magnet_wrench_contribution[key_map[force_component]])*1000, 
+                                label=label_str,
+                                color="tab:purple",
+                                alpha=opacity_list[num],
+                                **kwargs)
         axes[0, i].set_title(f'{force_component} - Force')
         axes[0, i].grid(True)
         if i == 0:
@@ -2588,6 +2629,18 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], **kwargs)
         axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
         axes[1, i].set_title(f'{torque_component} - Torque')
+        if plot_for_each_magnet:
+            for num, (magnet_wrench_contribution, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, dipole.magnet_stack)):
+                position = geometry.numpy_translation_from_tf_msg(magnet_tf)*1000
+                rpy = np.rad2deg(geometry.euler_xyz_from_quaternion(geometry.numpy_quaternion_from_tf_msg(magnet_tf)))
+                label_str = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
+                if include_rpy_in_label:
+                    label_str += f' RPY: ({rpy[0]:.2f}, {rpy[1]:.2f}, {rpy[2]:.2f}) deg'
+                axes[1, i].plot(time, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000, 
+                                label=label_str,
+                                color="tab:cyan",
+                                alpha=opacity_list[num],
+                                **kwargs)
         axes[1, i].grid(True)
         if i == 0:
             axes[1, i].set_ylabel('Torque (mN-m)')
