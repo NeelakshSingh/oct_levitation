@@ -2415,10 +2415,13 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          min_alpha: float = 0.1,
                                                          max_alpha: float = 0.8,
                                                          stack_label_color_map_func: Optional[Callable[[List[Tuple[Transform, mechanical.PermanentMagnet]]], List[Tuple[str, str, str, float]]]] = None,
+                                                         plot_overall_torque_component: bool = True,
+                                                         plot_torque_components_separately: bool = False,
                                                          save_as: str = None,
                                                          save_as_emf: bool = False,
                                                          inkscape_path: str = INKSCAPE_PATH,
                                                          return_actual_wrench: bool = False,
+                                                         component_plot_kwargs: Optional[Dict[str, Any]] = dict(),
                                                          **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
     """
     Plots the actual and desired wrench (force and torque) components over time for a dipole center,
@@ -2483,6 +2486,13 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
     per_magnet_wrench_contributions = [
         deepcopy(actual_wrench_dict) for _ in dipole.magnet_stack
     ]
+
+    if not plot_overall_torque_component and not plot_torque_components_separately:
+        plot_overall_torque_component = True
+
+    # This one will just follow the same format as previous, but the force portion will actually
+    # contain the torque on the COM contributed by forces applied to the magnet. This is important.
+    per_magnet_torque_ft_contribution_components = deepcopy(per_magnet_wrench_contributions)
 
     key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
                'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
@@ -2565,7 +2575,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             # Now we calculate the forces and torques on the magnet
             magnet_wrench_world = (M @ magnet_actual_fields).flatten()
             magnet_force_world = magnet_wrench_world[3:]
-            magnet_torque_world = magnet_wrench_world[:3]
+            magnet_com_torque_from_torque = magnet_wrench_world[:3]
 
             actual_com_force += magnet_force_world
 
@@ -2575,13 +2585,16 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             r_M_mag_in_M = T_M_mag[:3,3]
             r_M_mag_in_V = R_VM @ r_M_mag_in_M
 
-            magnet_torque_com_world = np.cross(r_M_mag_in_V, magnet_force_world) + magnet_torque_world
+            magnet_com_torque_from_force = np.cross(r_M_mag_in_V, magnet_force_world) 
+            magnet_torque_com_world = magnet_com_torque_from_force + magnet_com_torque_from_torque
             actual_com_torque += magnet_torque_com_world
 
             # let's convert the contribution to its respective frame too.
             magnet_com_torque_contribution = magnet_torque_com_world
             if use_local_frame_for_torques:
                 magnet_com_torque_contribution = R_VM.T @ magnet_com_torque_contribution
+                magnet_com_torque_from_torque = R_VM.T @ magnet_com_torque_from_torque
+                magnet_com_torque_from_force = R_VM.T @ magnet_com_torque_from_force
             
             # Explicit appending to avoid confusion. There were indexing errors with the overall
             # contribution dictionary. So I won't do that for this edit.
@@ -2592,6 +2605,13 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             magnet_contribution_dict[key_map['Taux']].append(magnet_com_torque_contribution[0])
             magnet_contribution_dict[key_map['Tauy']].append(magnet_com_torque_contribution[1])
             magnet_contribution_dict[key_map['Tauz']].append(magnet_com_torque_contribution[2])
+            magnet_torque_ft_contribution_dict = per_magnet_torque_ft_contribution_components[i]
+            magnet_torque_ft_contribution_dict[key_map['Fx']].append(magnet_com_torque_from_force[0])
+            magnet_torque_ft_contribution_dict[key_map['Fy']].append(magnet_com_torque_from_force[1])
+            magnet_torque_ft_contribution_dict[key_map['Fz']].append(magnet_com_torque_from_force[2])
+            magnet_torque_ft_contribution_dict[key_map['Taux']].append(magnet_com_torque_from_torque[0])
+            magnet_torque_ft_contribution_dict[key_map['Tauy']].append(magnet_com_torque_from_torque[1])
+            magnet_torque_ft_contribution_dict[key_map['Tauz']].append(magnet_com_torque_from_torque[2])
 
         
         if use_local_frame_for_torques:
@@ -2643,7 +2663,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                 label=label,
                                 color=force_color,
                                 alpha=alpha,
-                                **kwargs)
+                                **component_plot_kwargs)
         axes[0, i].set_title(f'{force_component} - Force')
         axes[0, i].grid(True)
         if i == 0:
@@ -2652,18 +2672,34 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             axes[0, i].legend(loc='upper right')
 
     # Torque subplots (columns 0, 1, 2), Torques converted to mN-m
-    for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
+    for i, (torque_component, torque_from_force_component) in enumerate(zip(['Taux', 'Tauy', 'Tauz'], ['Fx', 'Fy', 'Fz'])):
         axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], **kwargs)
         axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
-        axes[1, i].set_title(f'{torque_component} - Torque')
+        title = f'{torque_component} - Torque'
+        if plot_torque_components_separately:
+            title += ' \n(dotted: F contrib., dashed: Tau contrib,)'
         if plot_for_each_magnet:
-            for num, (magnet_wrench_contribution, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, dipole.magnet_stack)):
+            for num, (magnet_wrench_contribution, magnet_torque_components, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, per_magnet_torque_ft_contribution_components, dipole.magnet_stack)):
                 label, _, torque_color, alpha = stack_properties[num]
-                axes[1, i].plot(time, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000, 
-                                label=label,
-                                color=torque_color,
-                                alpha=alpha,
-                                **kwargs)
+                if plot_overall_torque_component:
+                    axes[1, i].plot(time, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000, 
+                                    label=label,
+                                    color=torque_color,
+                                    alpha=alpha,
+                                    **component_plot_kwargs)
+                if plot_torque_components_separately:
+                    # Plotting the contribution from forces
+                    axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_from_force_component]])*1000,
+                                    color=torque_color,
+                                    alpha=alpha,
+                                    linestyle=":",
+                                    **component_plot_kwargs)
+                    axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_component]])*1000,
+                                    color=torque_color,
+                                    alpha=alpha,
+                                    linestyle="--",
+                                    **component_plot_kwargs)
+        axes[1, i].set_title(title)
         axes[1, i].grid(True)
         if i == 0:
             axes[1, i].set_ylabel('Torque (mN-m)')
