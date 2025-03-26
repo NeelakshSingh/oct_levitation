@@ -25,7 +25,7 @@ import scipy.fft as scifft
 import pynumdiff.optimize
 import pynumdiff.smooth_finite_difference
 
-from typing import Optional, Tuple, List, Dict, Union, Any
+from typing import Optional, Tuple, List, Dict, Union, Any, Callable
 from mayavi import mlab
 from tvtk.util.ctf import ColorTransferFunction
 from tvtk.api import tvtk
@@ -2412,9 +2412,9 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          use_local_frame_for_torques: bool,
                                                          dataset_torques_in_local_frame: bool,
                                                          plot_for_each_magnet: bool = True,
-                                                         include_rpy_in_label: bool = False,
-                                                         min_opacity: float = 0.1,
-                                                         max_opacity: float = 0.8,
+                                                         min_alpha: float = 0.1,
+                                                         max_alpha: float = 0.8,
+                                                         stack_label_color_map_func: Optional[Callable[[List[Tuple[Transform, mechanical.PermanentMagnet]]], List[Tuple[str, str, str, float]]]] = None,
                                                          save_as: str = None,
                                                          save_as_emf: bool = False,
                                                          inkscape_path: str = INKSCAPE_PATH,
@@ -2484,11 +2484,42 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         deepcopy(actual_wrench_dict) for _ in dipole.magnet_stack
     ]
 
-    opacity_list = np.linspace(min_opacity, max_opacity, len(dipole.magnet_stack))
-    
     key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
                'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
+    
+    def z_color_ft_mapping(magnet_stack: List[Tuple[Transform, mechanical.PermanentMagnet]]) -> List[Tuple[str, str, str, float]]:
+        label_color_list = []
+        max_dist = -np.inf
+        min_dist = np.inf
+        for magnet_tf, _ in magnet_stack:
+            # For negative z values use a different color and for positive z values use a different color.
+            # Scale the alpha according to the distnce from the dipole reference frame.
+            position = geometry.numpy_translation_from_tf_msg(magnet_tf)*1000 # in mm
+            label = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
+            dist = np.linalg.norm(position)
+            if min_dist > dist:
+                min_dist = dist
+            if max_dist < dist:
+                max_dist = dist
+            if magnet_tf.translation.z > 0:
+                label_color_list.append([label, "tab:purple", "tab:cyan", dist])
+            else:
+                label_color_list.append([label, "tab:brown", "tab:pink", dist])
+            
+        for i in range(len(label_color_list)): # rescaling opacities
+            dist = label_color_list[i][3]
+            # The closer the magnet, the darker its plot should be
+            alpha = max_alpha - (max_alpha - min_alpha)*((dist - min_dist)/(max_dist - min_dist))
+            label_color_list[i][3] = alpha
+            label_color_list[i] = tuple(label_color_list[i])
+        
+        return label_color_list
 
+    
+    if stack_label_color_map_func is None:
+        stack_label_color_map_func = z_color_ft_mapping
+    
+    stack_properties = stack_label_color_map_func(dipole.magnet_stack)
     # Calculate actual wrench
     for i in range(len(combined_pose_currents)):
         position = np.array([
@@ -2607,15 +2638,11 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
         if plot_for_each_magnet:
             for num, (magnet_wrench_contribution, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, dipole.magnet_stack)):
-                position = geometry.numpy_translation_from_tf_msg(magnet_tf)*1000
-                rpy = np.rad2deg(geometry.euler_xyz_from_quaternion(geometry.numpy_quaternion_from_tf_msg(magnet_tf)))
-                label_str = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
-                if include_rpy_in_label:
-                    label_str += f' RPY: ({rpy[0]:.2f}, {rpy[1]:.2f}, {rpy[2]:.2f}) deg'
+                label, force_color, _, alpha = stack_properties[num]
                 axes[0, i].plot(time, np.array(magnet_wrench_contribution[key_map[force_component]])*1000, 
-                                label=label_str,
-                                color="tab:purple",
-                                alpha=opacity_list[num],
+                                label=label,
+                                color=force_color,
+                                alpha=alpha,
                                 **kwargs)
         axes[0, i].set_title(f'{force_component} - Force')
         axes[0, i].grid(True)
@@ -2631,15 +2658,11 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         axes[1, i].set_title(f'{torque_component} - Torque')
         if plot_for_each_magnet:
             for num, (magnet_wrench_contribution, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, dipole.magnet_stack)):
-                position = geometry.numpy_translation_from_tf_msg(magnet_tf)*1000
-                rpy = np.rad2deg(geometry.euler_xyz_from_quaternion(geometry.numpy_quaternion_from_tf_msg(magnet_tf)))
-                label_str = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
-                if include_rpy_in_label:
-                    label_str += f' RPY: ({rpy[0]:.2f}, {rpy[1]:.2f}, {rpy[2]:.2f}) deg'
+                label, _, torque_color, alpha = stack_properties[num]
                 axes[1, i].plot(time, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000, 
-                                label=label_str,
-                                color="tab:cyan",
-                                alpha=opacity_list[num],
+                                label=label,
+                                color=torque_color,
+                                alpha=alpha,
                                 **kwargs)
         axes[1, i].grid(True)
         if i == 0:
@@ -3283,6 +3306,7 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
                                                   reject_M_component: str = "Tz",
                                                   num_samples: int = 20,
                                                   display_interactive_pane : bool = True,
+                                                  coil_subset: Optional[np.ndarray] = None,
                                                   save_as: str = None,
                                                   save_dataset: bool = False,
                                                   vtk_dataset_save_kwargs: Dict = dict(),
@@ -3313,6 +3337,8 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
     @np.vectorize
     def get_ma_condition(x, y, z):
         A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+        if coil_subset is not None:
+            A = A[:, coil_subset]
         return np.linalg.cond(M @ A)
     
     cond = get_ma_condition(X, Y, Z)
@@ -3384,6 +3410,7 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
                                                 disable_y_slice: bool = False,
                                                 disable_z_slice: bool = False,
                                                 display_interactive_pane : bool = True,
+                                                coil_subset: Optional[np.ndarray] = None,
                                                 save_as: str = None,
                                                 **save_kwargs):
     """
@@ -3412,6 +3439,8 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
     @np.vectorize
     def get_ma_condition(x, y, z):
         A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+        if coil_subset is not None:
+            A = A[:, coil_subset]
         return np.linalg.cond(M @ A)
     
     cond = get_ma_condition(X, Y, Z)

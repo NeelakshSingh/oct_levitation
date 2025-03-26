@@ -120,10 +120,12 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
 
     Mf = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
     dipole_axis = np.asarray(args.dipole_axis)
-    M_tau_local = geometry.magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
-                                                                      dipole_axis=dipole_axis,
-                                                                      dipole_quaternion=quat) 
-    M = block_diag(M_tau_local[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
+    # M_tau_local = geometry.magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
+    #                                                                   dipole_axis=dipole_axis,
+    #                                                                   dipole_quaternion=quat) 
+    M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
+    # M = block_diag(M_tau_local[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
+    M = block_diag(M_tau[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
 
     if args.mode == 1:
         rospy.loginfo(f"[Coil Subset Condition Calculator]: M matrix: {M}")
