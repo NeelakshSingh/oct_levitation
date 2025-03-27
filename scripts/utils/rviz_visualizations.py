@@ -65,7 +65,7 @@ class OctLevitationRvizVisualizations:
     def vicon_callback(self, msg: TransformStamped) -> None:
         ## Publishing reduced attitude and its marker
         self.__reduced_attitude_msg.header.stamp = rospy.Time.now()
-        Lambda_vec = Vector3(*geometry.inertial_reduced_attitude_from_quaternion(geometry.numpy_quaternion_from_tf_msg(msg), 
+        Lambda_vec = Vector3(*geometry.inertial_reduced_attitude_from_quaternion(geometry.numpy_quaternion_from_tf_msg(msg.transform), 
                                                                                  self.reduced_attitude_params["fixed_vector"]))
         self.__reduced_attitude_msg.vector = Lambda_vec
         self.reduced_attitude_pub.publish(self.__reduced_attitude_msg)
@@ -78,7 +78,7 @@ class OctLevitationRvizVisualizations:
         self.reduced_attitude_marker_pub.publish(self.__reduced_attitude_marker_msg)
 
         ## Publishing RPY
-        rpy = geometry.euler_xyz_from_quaternion(geometry.numpy_quaternion_from_tf_msg(msg))
+        rpy = geometry.euler_xyz_from_quaternion(geometry.numpy_quaternion_from_tf_msg(msg.transform))
         self.__rpy_msg.header.stamp = rospy.Time.now()
         self.__rpy_msg.vector = Vector3(*np.rad2deg(rpy))
         self.rpy_pub.publish(self.__rpy_msg)
@@ -98,7 +98,7 @@ class OctLevitationRvizVisualizations:
             # Also we will publish torques in mN-m and forces in N
             wrench_msg.header.frame_id = self.rigid_body.pose_frame
             local_force = geometry.rotate_vector_from_quaternion(
-                geometry.invert_quaternion(geometry.numpy_quaternion_from_tf_msg(self.last_received_vicon_msg)),
+                geometry.invert_quaternion(geometry.numpy_quaternion_from_tf_msg(self.last_received_vicon_msg.transform)),
                 np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z]))
             wrench_msg.wrench.force = Vector3(*local_force)
             wrench_msg.wrench.torque = Vector3(*np.array([msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])*1e3)

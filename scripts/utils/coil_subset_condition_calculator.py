@@ -38,14 +38,16 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     parser.add_argument("--x_lim", type=float, default=0.06)
     parser.add_argument("--y_lim", type=float, default=0.06)
     parser.add_argument("--z_lim", type=float, default=0.06)
-    parser.add_argument("--x_eval_lim", type=float, default=0.02)
-    parser.add_argument("--y_eval_lim", type=float, default=0.02)
-    parser.add_argument("--z_eval_lim", type=float, default=0.02)
+    parser.add_argument("--x_eval_lim", type=float, default=0.01)
+    parser.add_argument("--y_eval_lim", type=float, default=0.01)
+    parser.add_argument("--z_eval_lim", type=float, default=0.01)
     parser.add_argument("--clip_cond", type=float, default=100)
+    parser.add_argument("--slice_cond_max", type=float, default=100) # to make it consistent with the plotting.py plotter.
     parser.add_argument("--mode", type=int, default=0, help="0: Only use A matrix. 1: Uses MA matrix. For 1, one can specify dipole rpy and dipole strength.")
     parser.add_argument("--rpy", type=float, default=[0.0, 0.0, 0.0], nargs=3, help="[roll, pitch, yaw] intrinsic euler angles (in degrees) of local frame w.r.t inertial frame.")
-    parser.add_argument("--dipole_strength", type=float, default=1.0, help="In tesla.")
-    parser.add_argument("--dipole_axis", type=float, nargs=3, help="[x, y, z] local frame axis of the dipole.", default=[0.0, 0.0, 1.0])
+    # These two parameters default to the Onyx disc's values.
+    parser.add_argument("--dipole_strength", type=float, default=1.6453125, help="In tesla.")
+    parser.add_argument("--dipole_axis", type=float, nargs=3, help="[x, y, z] local frame axis of the dipole.", default=[0.0, 0.0, -1.0])
 
     args = parser.parse_args()
     rospack = rospkg.RosPack()
@@ -71,6 +73,7 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     x_eval_lim = args.x_eval_lim
     y_eval_lim = args.y_eval_lim
     z_eval_lim = args.z_eval_lim
+    print(f"x_eval_lim: {x_eval_lim} | y_eval_lim: {y_eval_lim} | z_eval_lim: {z_eval_lim}")
     x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], args.num_samples)
     y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], args.num_samples)
     z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], args.num_samples)
@@ -115,11 +118,10 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     quat = geometry.quaternion_from_euler_xyz(rpy)
     dipole_strength = np.asarray(args.dipole_strength)
     R = geometry.rotation_matrix_from_euler_xyz(rpy)
-    normal = R[:, 2]
-    dipole_moment = dipole_strength * normal
+    dipole_axis = np.asarray(args.dipole_axis)
+    dipole_moment = (dipole_strength * R @ dipole_axis).flatten()
 
     Mf = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
-    dipole_axis = np.asarray(args.dipole_axis)
     # M_tau_local = geometry.magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
     #                                                                   dipole_axis=dipole_axis,
     #                                                                   dipole_quaternion=quat) 
@@ -135,12 +137,14 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         cond_eval_func = None
         @np.vectorize
         def get_A_condition_subset(x, y, z):
-            A = calibration_model.get_actuation_matrix(np.array([x, y, z]))[:, coil_set]
+            A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+            A = A[:, coil_set]
             return np.linalg.cond(A)
         
         @np.vectorize
         def get_MA_condition_subset(x, y, z):
-            A = calibration_model.get_actuation_matrix(np.array([x, y, z]))[:, coil_set]
+            A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+            A = A[:, coil_set]
             return np.linalg.cond(M @ A)
         
         if args.mode == 0:
@@ -157,10 +161,17 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
             'cond': cond.flatten()
         })
 
-        cond = np.clip(cond, 0.0, clip_cond)
+        # Let's evaluate the configuration's RMS value before clipping and select the best one.
+        config_rms = calc_rms(cond[subspace_selection_mask])
+        all_rms.append(config_rms)
+        if config_rms < min_rms:
+            min_rms = config_rms
+            min_config = coil_set
+
+        clipped_cond = np.clip(cond, 0.0, clip_cond)
 
         ### PLOTTING VOLUME
-        cond_field = mlab.pipeline.scalar_field(cond)
+        cond_field = mlab.pipeline.scalar_field(clipped_cond)
 
         ctf = ColorTransferFunction()
 
@@ -211,7 +222,7 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         x_plane_idx = args.num_samples // 2
         y_plane_idx = args.num_samples // 2
         z_plane_idx = args.num_samples // 2
-        cond_range = np.array([0.0, clip_cond])
+        cond_range = np.array([0.0, args.slice_cond_max])
         slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
                                         vmin=cond_range[0], vmax=cond_range[1])
         slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
@@ -233,13 +244,6 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         mlab.savefig(save_slices_as)
         mlab.close()
 
-        # Let's evaluate the configuration's RMS value and select the best one.
-        config_rms = calc_rms(cond[subspace_selection_mask])
-        all_rms.append(config_rms)
-        if config_rms < min_rms:
-            min_rms = config_rms
-            min_config = coil_set
-
     ## Saving the results in a sort of a final report file.
     report = f"""
 Arguments from the argument parser:
@@ -250,9 +254,9 @@ Arguments from the argument parser:
 - X dimension limit (x_lim): {args.x_lim}
 - Y dimension limit (y_lim): {args.y_lim}
 - Z dimension limit (z_lim): {args.z_lim}
-- X evaluation limit (x_eval_lim): {args.x_eval_lim}
-- Y evaluation limit (y_eval_lim): {args.y_eval_lim}
-- Z evaluation limit (z_eval_lim): {args.z_eval_lim}
+- X evaluation limit (x_eval_lim): {x_eval_lim}
+- Y evaluation limit (y_eval_lim): {y_eval_lim}
+- Z evaluation limit (z_eval_lim): {z_eval_lim}
 - Condition number clipping (clip_cond): {args.clip_cond}
 - Mode (mode): {args.mode}
 - Dipole roll, pitch, yaw (rpy): {args.rpy}

@@ -17,6 +17,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
     def post_init(self):
         self.HARDWARE_CONNECTED = False
+        # self.ACTIVE_COILS = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+        self.ACTIVE_COILS = np.array([2, 3, 4, 5, 7])
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -240,12 +242,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.ref_actual_msg.header.stamp = rospy.Time.now()
 
         # Getting the desired COM wrench.
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
         R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
         e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
 
         ### Reference for tracking
-        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg)
+        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform)
         ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
 
         ### Publishing the reference and actual values.
@@ -300,7 +302,9 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # des_currents = self.simplified_Tauxy_allocation(tf_msg, Tau_x, Tau_y)
 
         # Let's try the field local frame allocation which should always yield the correct torque configuration
-        des_currents =  self.full_local_torque_inertial_force_allocation(tf_msg, Tau_x, Tau_y)
+        # des_currents =  self.full_local_torque_inertial_force_allocation(tf_msg, Tau_x, Tau_y)
+        com_wrench_5dof = np.array([Tau_x, Tau_y, 0.0, 0.0, 0.0])
+        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, com_wrench_5dof)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

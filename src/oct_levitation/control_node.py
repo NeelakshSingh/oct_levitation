@@ -1,6 +1,7 @@
 import os
 import rospy
 import oct_levitation.mechanical as mechanical
+import oct_levitation.geometry as geometry
 import tf2_ros
 import numpy as np
 import time
@@ -11,6 +12,7 @@ from control_utils.msg import VectorStamped
 from std_msgs.msg import String
 from mag_manip import mag_manip
 from typing import List
+from scipy.linalg import block_diag
 
 from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
 
@@ -35,6 +37,12 @@ class ControlSessionNodeBase:
         self.computation_time_avg_samples = rospy.get_param("~computation_time_avg_samples", 100)
         self.computation_time_topic = rospy.get_param("~computation_time_topic", "control_session/computation_time")
         self.compute_time_pub = None
+        self.ACTIVE_COILS = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+        self.warn_jma_condition = True
+        self.publish_jma_condition = True
+        if self.publish_jma_condition:
+            self.jma_condition_pub = rospy.Publisher("/control_session/jma_condition",
+                                                     VectorStamped, queue_size=1)
 
         if self.publish_computation_time:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
@@ -73,6 +81,7 @@ class ControlSessionNodeBase:
         self.post_init()
 
         rospy.logwarn(f"[Control Node] HARDWARE_CONNECTED: {self.HARDWARE_CONNECTED}")
+        rospy.logwarn(f"[Control Node] Active Coils: {self.ACTIVE_COILS}")
         
         self.mpem_model = mag_manip.ForwardModelMPEM()
         self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
@@ -114,6 +123,56 @@ class ControlSessionNodeBase:
         self.control_gain_publisher.publish(self.control_gains_message)
         self.metadata_pub.publish(self.metadata_msg)
 
+    def five_dof_wrench_allocation_single_dipole(self, tf_msg: TransformStamped, w_com: np.ndarray):
+        """
+        This function assumes that the dipole moment in the local frame aligns with the z axis and thus clips the 3rd row
+        of the torque allocation map.
+        tf_msg: The transform feedback from any state feedback sensor. Vicon usually.
+        w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
+        """
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
+        dipole = self.rigid_body_dipole.dipole_list[0]
+        dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
+        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
+        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
+                                                                       dipole.axis,
+                                                                       dipole_quaternion)[:2] # Only first two rows will be nonzero
+        A = self.mpem_model.getActuationMatrix(dipole_position)
+        A = A[:, self.ACTIVE_COILS] # only use active coils to compute currents.
+        M = block_diag(Mt_local, Mf)
+
+        JMA = M @ A
+        des_currents = np.zeros(8)
+        des_currents[self.ACTIVE_COILS] = np.linalg.pinv(JMA) @ w_com
+
+        jma_condition = np.linalg.cond(JMA)
+
+        if self.warn_jma_condition:
+            condition_check_tol = 300
+            if jma_condition > condition_check_tol:
+                np.set_printoptions(linewidth=np.inf)
+                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
+                                       Current TF: {tf_msg}
+                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
+                                    \n JMA: \n {JMA}""")
+                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
+
+                rospy.loginfo_once(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
+                                    M: {M},
+                                    M condition number: {np.linalg.cond(M)}""")
+                
+                rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
+                                    A: {A},
+                                    A condition number: {np.linalg.cond(A)}""")
+
+        if self.publish_jma_condition:
+            jma_condition_msg = VectorStamped()
+            jma_condition_msg.header.stamp = rospy.Time.now()
+            jma_condition_msg.vector = [jma_condition]
+            self.jma_condition_pub.publish(jma_condition_msg)
+
+        return des_currents.flatten()
 
     def post_init(self):
         """
@@ -155,15 +214,6 @@ class ControlSessionNodeBase:
         if np.any(np.abs(des_currents) == self.MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.MAX_CURRENT}A HIT!")
         
-        # Now we need to reorder the des_currents for the new coil configuration where coils 7 and 8
-        # are shifted by one.
-        rospy.logwarn_once("""
-[Control Node] You are seeing this warning because this version of the controller assumes that
-coils 7 and 8 are shifted by one place to the right and therefore makes this adjustment to the 
-requested currents. The warning will go away once the new driver PCBs arrive and the corresponding
-lines of code are removed.
-        """)
-        des_currents = np.concatenate((des_currents[:6], [0], des_currents[6:]))
         self.desired_currents_msg.des_currents_reg = des_currents
         self.currents_publisher.publish(self.desired_currents_msg)
 

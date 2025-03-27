@@ -151,15 +151,13 @@ class DynamicsSimulator:
         # The idea is to use the latest available pose and the forward model
         # to calculate the actual wrench at dipole center.
         wrench = WrenchStamped()
-        dipole_quat, dipole_pos = geometry.numpy_arrays_from_tf_msg(self.__tf_msg)
+        dipole_quat, dipole_pos = geometry.numpy_arrays_from_tf_msg(self.__tf_msg.transform)
         Mq = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quat,
                                                                   dipole_strength=self.rigid_body.dipole_list[0].strength,
                                                                   full_mat=True,
                                                                   torque_first=True,
                                                                   dipole_axis=self.rigid_body.dipole_list[0].axis)
-        rospy.logwarn_once("[Free Rigid Body Sim]: This is to notify that coils 7 and 8 are shifted as of this version of the simulator.")
         currents = np.asarray(des_currents_msg.des_currents_reg)
-        currents = np.concatenate((currents[:6], currents[7:]))
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, currents)
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
         

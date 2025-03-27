@@ -3368,7 +3368,7 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
     
     reject_row_map = {"Tx": 0, "Ty": 1, "Tz": 2}
     idx_r = reject_row_map[reject_M_component]
-    M = np.vstack((M[:idx_r], M[idx_r+1,:]))
+    M = np.vstack((M[:idx_r], M[idx_r+1:]))
 
     @np.vectorize
     def get_ma_condition(x, y, z):
@@ -3378,7 +3378,16 @@ def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDip
         return np.linalg.cond(M @ A)
     
     cond = get_ma_condition(X, Y, Z)
+    subspace_selection_mask = (np.abs(X) < 0.02) & (np.abs(Y) < 0.02) & (np.abs(Z) < 0.02)
+    cond_subspace = cond[subspace_selection_mask]
+    print(f"cond shape: {cond.shape}, subspace selection mask count: {np.sum(subspace_selection_mask)}, cond subspace shape: {cond_subspace.shape}")
+    def calc_rms(arr):
+        return np.sqrt(np.mean(np.square(arr)))
+    print(f"RMS Condition number value in a 2x2x2mm workspace around origin: {calc_rms(cond_subspace)}")
+    
+    # Clipping for visualization
     cond = np.clip(cond, 0.0, clip_cond)
+
 
     # Volumetric rendering
     cond_field = mlab.pipeline.scalar_field(cond)
@@ -3470,7 +3479,7 @@ def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
     
     reject_row_map = {"Tx": 0, "Ty": 1, "Tz": 2}
     idx_r = reject_row_map[reject_M_component]
-    M = np.vstack((M[:idx_r], M[idx_r+1,:]))
+    M = np.vstack((M[:idx_r], M[idx_r+1:]))
 
     @np.vectorize
     def get_ma_condition(x, y, z):
