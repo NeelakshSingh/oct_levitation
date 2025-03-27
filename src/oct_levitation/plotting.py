@@ -2677,7 +2677,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
         title = f'{torque_component} - Torque'
         if plot_torque_components_separately:
-            title += ' \n(dotted: F contrib., dashed: Tau contrib,)'
+            title += ' \n(dotted: F contrib., dashed: Tau contrib.)'
         if plot_for_each_magnet:
             for num, (magnet_wrench_contribution, magnet_torque_components, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, per_magnet_torque_ft_contribution_components, dipole.magnet_stack)):
                 label, _, torque_color, alpha = stack_properties[num]
