@@ -59,6 +59,7 @@ class DynamicsSimulator:
         self.use_wrench = rospy.get_param("~use_wrench", False)
         self.publish_status = rospy.get_param("~pub_status", False)
         self.print_ft = rospy.get_param("~print_ft", False)
+        self.current_noise_covariance = rospy.get_param("~current_noise_covariance", 0.01)
 
         self.vicon_pub_time_ns = 1e9/rospy.get_param("~vicon_pub_freq", 100) #
         if self.publish_status:

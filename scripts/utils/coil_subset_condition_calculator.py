@@ -38,9 +38,7 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     parser.add_argument("--x_lim", type=float, default=0.06)
     parser.add_argument("--y_lim", type=float, default=0.06)
     parser.add_argument("--z_lim", type=float, default=0.06)
-    parser.add_argument("--x_eval_lim", type=float, default=0.01)
-    parser.add_argument("--y_eval_lim", type=float, default=0.01)
-    parser.add_argument("--z_eval_lim", type=float, default=0.01)
+    parser.add_argument("--eval_lim", type=float, default=0.01)
     parser.add_argument("--clip_cond", type=float, default=100)
     parser.add_argument("--slice_cond_max", type=float, default=100) # to make it consistent with the plotting.py plotter.
     parser.add_argument("--mode", type=int, default=0, help="0: Only use A matrix. 1: Uses MA matrix. For 1, one can specify dipole rpy and dipole strength.")
@@ -48,6 +46,7 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     # These two parameters default to the Onyx disc's values.
     parser.add_argument("--dipole_strength", type=float, default=1.6453125, help="In tesla.")
     parser.add_argument("--dipole_axis", type=float, nargs=3, help="[x, y, z] local frame axis of the dipole.", default=[0.0, 0.0, -1.0])
+    parser.add_argument("--store_cond_field_dataset", type=bool, default=False)
 
     args = parser.parse_args()
     rospack = rospkg.RosPack()
@@ -70,9 +69,9 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     cube_x_lim = np.array([-args.x_lim, args.x_lim])
     cube_y_lim = np.array([-args.y_lim, args.y_lim])
     cube_z_lim = np.array([-args.z_lim, args.z_lim])
-    x_eval_lim = args.x_eval_lim
-    y_eval_lim = args.y_eval_lim
-    z_eval_lim = args.z_eval_lim
+    x_eval_lim = args.eval_lim
+    y_eval_lim = args.eval_lim
+    z_eval_lim = args.eval_lim
     print(f"x_eval_lim: {x_eval_lim} | y_eval_lim: {y_eval_lim} | z_eval_lim: {z_eval_lim}")
     x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], args.num_samples)
     y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], args.num_samples)
@@ -131,10 +130,16 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
 
     if args.mode == 1:
         rospy.loginfo(f"[Coil Subset Condition Calculator]: M matrix: {M}")
+    
+    rms_config_dict = {
+        "rms_values": [],
+        "configurations": []
+    }
 
     for coil_set in ap.alive_it(all_configs):
         count += 1
         cond_eval_func = None
+        rms_config_dict["configurations"].append(str(coil_set))
         @np.vectorize
         def get_A_condition_subset(x, y, z):
             A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
@@ -154,12 +159,15 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         else:
             raise ValueError("Invalid mode value. Should be among [0, 1].")
         cond = cond_eval_func(X, Y, Z)
-        dataset_df = pd.DataFrame({
-            'X': X.flatten(),
-            'Y': Y.flatten(),
-            'Z': Z.flatten(),
-            'cond': cond.flatten()
-        })
+        if args.store_cond_field_dataset:
+            dataset_df = pd.DataFrame({
+                'X': X.flatten(),
+                'Y': Y.flatten(),
+                'Z': Z.flatten(),
+                'cond': cond.flatten()
+            })
+            dataset_save = os.path.join(dataset_save_path, f"coils_{np.asarray(coil_set)}.csv")
+            dataset_df.to_csv(dataset_save, index=False)
 
         # Let's evaluate the configuration's RMS value before clipping and select the best one.
         config_rms = calc_rms(cond[subspace_selection_mask])
@@ -209,12 +217,10 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         mlab.outline()
 
         save_volume_as = os.path.join(plot_save_path, f"volumes/coils_{np.asarray(coil_set)}.png")
-        dataset_save = os.path.join(dataset_save_path, f"coils_{np.asarray(coil_set)}.csv")
         mlab.draw()
         mlab.process_ui_events()
 
         mlab.savefig(save_volume_as)
-        dataset_df.to_csv(dataset_save, index=False)
         
         ### PLOTTING VOLUME SLICES
         # Next we need to add slicing planes to this plot.
@@ -244,6 +250,10 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         mlab.savefig(save_slices_as)
         mlab.close()
 
+    rms_config_dict["rms_values"] = all_rms
+
+    rms_df = pd.DataFrame(rms_config_dict)
+
     ## Saving the results in a sort of a final report file.
     report = f"""
 Arguments from the argument parser:
@@ -271,14 +281,13 @@ Volume plots of condition numbers saved to: {os.path.join(plot_save_path, "volum
 Volume slice plots of condition numbers saved to: {os.path.join(plot_save_path, "volume_slices")},
 Datasets saved to: {dataset_save_path},
 
-All RMS values: {all_rms},
-All evaluated configurations: {all_configs}
-
 """
     
     report_save_file = os.path.join(save_path, "results.txt")
+    rms_save_file = os.path.join(save_path, "rms_values.csv")
     with open(report_save_file, "w") as f:
         f.write(report)
+    rms_df.to_csv(rms_save_file, index=False)
     
 
     rospy.loginfo("[Coil Subset Condition Calculator]: Saved the report. Calculations ended.")

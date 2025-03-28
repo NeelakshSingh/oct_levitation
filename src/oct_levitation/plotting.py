@@ -2229,6 +2229,7 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                         dipole_strength: float,
                                         dipole_axis: np.ndarray,
                                         use_local_frame_for_torques: bool = False,
+                                        dataset_torques_in_local_frame: bool = False,
                                         save_as: str = None,
                                         save_as_emf: bool = False,
                                         inkscape_path: str = INKSCAPE_PATH,
@@ -2319,8 +2320,8 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                                                  torque_first=True,
                                                                  dipole_axis=dipole_axis)
         actual_wrench = (M @ actual_fields).flatten()
-        forces_wf = actual_wrench[:3]
-        torques = actual_wrench[3:]
+        torques = actual_wrench[:3]
+        forces_wf = actual_wrench[3:]
 
         if use_local_frame_for_torques:
             torques = geometry.rotate_vector_from_quaternion(
@@ -2328,6 +2329,10 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                 torques
             )
 
+        ## Depending on the torque evaluation frame and the current frame of the torques in the dataset.
+        ## convert the desired torques. This was implemented because some experiments perform direct world
+        ## frame torque control, while some perform body fixed frame torque control.
+        if not dataset_torques_in_local_frame and use_local_frame_for_torques:
             # Also transform the desired torques from the world frame to the local frame.
             des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
             des_torques = geometry.rotate_vector_from_quaternion(
@@ -2336,6 +2341,15 @@ def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
             )
             desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
         
+        if dataset_torques_in_local_frame and not use_local_frame_for_torques:
+             # Also transform the desired torques from the local frame to the world frame.
+            des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
+            des_torques = geometry.rotate_vector_from_quaternion(
+                quaternion,
+                des_torques
+            )
+            desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
+                
         actual_wrench = np.concatenate((torques, forces_wf))
 
         for j, key in enumerate(list(actual_wrench_dict.keys())):
@@ -2415,7 +2429,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          min_alpha: float = 0.1,
                                                          max_alpha: float = 0.8,
                                                          stack_label_color_map_func: Optional[Callable[[List[Tuple[Transform, mechanical.PermanentMagnet]]], List[Tuple[str, str, str, float]]]] = None,
-                                                         plot_overall_torque_component: bool = True,
+                                                         plot_overall_magnet_torque_component: bool = True,
                                                          plot_torque_components_separately: bool = False,
                                                          save_as: str = None,
                                                          save_as_emf: bool = False,
@@ -2487,8 +2501,8 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         deepcopy(actual_wrench_dict) for _ in dipole.magnet_stack
     ]
 
-    if not plot_overall_torque_component and not plot_torque_components_separately:
-        plot_overall_torque_component = True
+    if not plot_overall_magnet_torque_component and not plot_torque_components_separately:
+        plot_overall_magnet_torque_component = True
 
     # This one will just follow the same format as previous, but the force portion will actually
     # contain the torque on the COM contributed by forces applied to the magnet. This is important.
@@ -2681,7 +2695,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         if plot_for_each_magnet:
             for num, (magnet_wrench_contribution, magnet_torque_components, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, per_magnet_torque_ft_contribution_components, dipole.magnet_stack)):
                 label, _, torque_color, alpha = stack_properties[num]
-                if plot_overall_torque_component:
+                if plot_overall_magnet_torque_component:
                     axes[1, i].plot(time, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000, 
                                     label=label,
                                     color=torque_color,
@@ -2689,16 +2703,31 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                     **component_plot_kwargs)
                 if plot_torque_components_separately:
                     # Plotting the contribution from forces
-                    axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_from_force_component]])*1000,
-                                    color=torque_color,
-                                    alpha=alpha,
-                                    linestyle=":",
-                                    **component_plot_kwargs)
-                    axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_component]])*1000,
-                                    color=torque_color,
-                                    alpha=alpha,
-                                    linestyle="--",
-                                    **component_plot_kwargs)
+                    if plot_overall_magnet_torque_component:
+                        # No need to label
+                        axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_from_force_component]])*1000,
+                                        color=torque_color,
+                                        alpha=alpha,
+                                        linestyle=":",
+                                        **component_plot_kwargs)
+                        axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_component]])*1000,
+                                        color=torque_color,
+                                        alpha=alpha,
+                                        linestyle="--",
+                                        **component_plot_kwargs)
+                    if not plot_overall_magnet_torque_component:
+                        # Need to label one plot. I just label pure torques.
+                        axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_from_force_component]])*1000,
+                                        color=torque_color,
+                                        alpha=alpha,
+                                        linestyle=":",
+                                        **component_plot_kwargs)
+                        axes[1, i].plot(time, np.array(magnet_torque_components[key_map[torque_component]])*1000,
+                                        color=torque_color,
+                                        alpha=alpha,
+                                        label=label,
+                                        linestyle="--",
+                                        **component_plot_kwargs)
         axes[1, i].set_title(title)
         axes[1, i].grid(True)
         if i == 0:
