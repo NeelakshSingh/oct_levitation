@@ -1,5 +1,6 @@
 import numpy as np
 import rospy
+import scipy.signal as signal
 import tf2_ros
 import os
 import tf.transformations as tr
@@ -60,8 +61,17 @@ class DynamicsSimulator:
         self.publish_status = rospy.get_param("~pub_status", False)
         self.print_ft = rospy.get_param("~print_ft", False)
         self.current_noise_covariance = rospy.get_param("~current_noise_covariance", 0.01)
+        self.ecb_bandwidth = rospy.get_param("~ecb_bandwidth_hz", 15) * 2 * np.pi # Conservative ecb bandwidth in rad/s
+        self.vicon_pub_freq = rospy.get_param("~vicon_pub_freq", 100)
+        self.vicon_pub_time_ns = 1e9/self.vicon_pub_freq
+        # Closed form soln is known, I will still do it cause why not
+        self.__ecbd_A, self.__ecbd_B, *_ = signal.cont2discrete((np.array([[-self.ecb_bandwidth]]), np.array([[self.ecb_bandwidth]]), 0, 0), dt=1/self.vicon_pub_freq, method='zoh')
+        self.__ecbd_A = self.__ecbd_A[0,0]
+        self.__ecbd_B = self.__ecbd_B[0,0]
+        self.__last_output_currents = np.zeros(8)
 
-        self.vicon_pub_time_ns = 1e9/rospy.get_param("~vicon_pub_freq", 100) #
+        rospy.loginfo("[free_rigid_body_simulator] ecbd_A: %f, ecbd_B: %f" % (self.__ecbd_A, self.__ecbd_B))
+
         if self.publish_status:
             self.sim_status_pub = rospy.Publisher("oct_levitation/free_rigid_body_sim/status", Bool, queue_size=1) # This is just to measure the simulator run freq
         self.__last_vicon_pub_time_ns = -np.inf
@@ -116,7 +126,8 @@ class DynamicsSimulator:
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
         if self.print_ft:
             rospy.loginfo(f"Applying F: {F}, Tau: {Tau}")
-        F = F + self.F_amb # Adding gravity and other constant forces
+        if self.__first_command:
+            F = F + self.F_amb # Adding gravity and other constant forces, IF we have started receiving commands.
 
         self.p, self.v = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
 
@@ -159,7 +170,10 @@ class DynamicsSimulator:
                                                                   torque_first=True,
                                                                   dipole_axis=self.rigid_body.dipole_list[0].axis)
         currents = np.asarray(des_currents_msg.des_currents_reg)
-        field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, currents)
+        # First order TF on currents to simulate current bandwidth.
+        self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
+        noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_covariance, size=(8,))
+        field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents)
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
         
         wrench.header.stamp = rospy.Time.now()

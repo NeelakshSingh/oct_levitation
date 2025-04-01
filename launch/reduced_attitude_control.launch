@@ -14,6 +14,8 @@
     <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_vicon_pub_freq" default="100"/>
+    <arg name="sim_current_noise_covariance" default="0.01"/>
+    <arg name="sim_ecb_bandwidth_hz" default="15"/>
 
     <group unless="$(arg body_fixed)">
         <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen"/>
@@ -30,6 +32,8 @@
     <group if="$(arg sim)">
         <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
             <param name="sim_freq" value="$(arg sim_frequency)" />
+            <param name="current_noise_covariance" value="$(arg sim_current_noise_covariance)" />
+            <param name="ecb_bandwidth_hz" value="$(arg sim_ecb_bandwidth_hz)" />
             <param name="vicon_pub_freq" value="$(arg sim_vicon_pub_freq)" />
             <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
             <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />

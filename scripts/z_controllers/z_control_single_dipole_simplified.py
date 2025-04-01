@@ -22,6 +22,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.HARDWARE_CONNECTED = False
         self.ORIENTATION_VARYING_Mf = False
         self.POSITION_VARYING_Af = True
+        # self.ACTIVE_COILS = np.array([0, 1, 2, 3, 5]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
 
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
@@ -179,8 +180,8 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         x_z_ref = np.array([[self.last_reference_tf_msg.transform.translation.z, 0.0]]).T
         # rospy.loginfo(f"x_z_ref: {x_z_ref}")
         z_error = x - x_z_ref
-        # u = -self.K @ z_error + self.mass*common.Constants.g
-        u = -self.K @ z_error
+        u = -self.K @ z_error + self.mass*common.Constants.g
+        # u = -self.K @ z_error
         self.control_input_message.vector = u.flatten()
         self.estimated_state_msg.vector = z_error.flatten()
 
@@ -192,7 +193,9 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
         
         # Performing simplified allocation to get the currents
-        des_currents = self.simplified_Fz_allocation(tf_msg, F_z)
+        w_des = np.array([0, 0, 0, 0, F_z])
+        # des_currents = self.simplified_Fz_allocation(tf_msg, F_z)
+        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
         # self.desired_currents_msg.des_currents_reg = des_currents.flatten() * self.SoftStarter(self.dt)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 

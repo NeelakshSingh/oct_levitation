@@ -26,9 +26,9 @@ import pynumdiff.optimize
 import pynumdiff.smooth_finite_difference
 
 from typing import Optional, Tuple, List, Dict, Union, Any, Callable
-from mayavi import mlab
-from tvtk.util.ctf import ColorTransferFunction
-from tvtk.api import tvtk
+# from mayavi import mlab
+# from tvtk.util.ctf import ColorTransferFunction
+# from tvtk.api import tvtk
 from warnings import warn
 from copy import deepcopy
 

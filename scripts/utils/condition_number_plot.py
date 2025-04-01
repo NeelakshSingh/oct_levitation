@@ -51,10 +51,12 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
                                                            calibration_model,
                                                            quat,
                                                            save_as=volume_save_as,
-                                                           num_samples=args.num_samples)
+                                                           num_samples=args.num_samples,
+                                                           coil_subset=[1, 3])
     
     plotting.plot_slices_ma_condition_number_variation(dipole,
                                                        calibration_model,
                                                        quat,
                                                        save_as=slices_save_as,
-                                                       num_samples=args.num_samples)
+                                                       num_samples=args.num_samples,
+                                                       coil_subset=[1, 3])

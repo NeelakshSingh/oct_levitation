@@ -87,7 +87,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                   method='zoh')
         
-        Qz = np.diag([1.0, 1.0, 1.0, 1.0])
+        Qz = np.diag([10.0, 100.0, 1.0, 1.0])
         Rz = np.diag([1.0, 1.0])
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
@@ -131,8 +131,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         """
 
     def simplified_Tauxy_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float) -> np.ndarray:
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
-        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         s_d = self.rigid_body_dipole.dipole_list[0].strength
         dipole_moment = s_d*geometry.get_normal_vector_from_quaternion(dipole_quaternion)
         if self.south_pole_up:
@@ -184,7 +184,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         return des_currents.flatten()
     
     def local_frame_torque_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float):
-        dipole_quaternion, dipole_position = geometry.numpy_arrays_from_tf_msg(tf_msg)
+        dipole_quaternion, dipole_position = geometry.numpy_arrays_from_tf_msg(tf_msg.transform)
         dipole = self.rigid_body_dipole.dipole_list[0]
         dipole_moment_local = dipole.strength * dipole.axis
         Mtau_local = geometry.magnetic_interaction_field_to_torque(dipole_moment_local)[:2]
@@ -227,8 +227,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         return des_currents
     
     def full_local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y:float):
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
-        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         dipole = self.rigid_body_dipole.dipole_list[0]
         dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
         Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
@@ -285,12 +285,12 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.ref_actual_msg.header.stamp = rospy.Time.now()
 
         # Getting the desired COM wrench.
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
         R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
         e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
 
         ### Reference for tracking
-        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg)
+        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform)
         ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
 
         ### Publishing the reference and actual values.
