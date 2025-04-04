@@ -1,21 +1,23 @@
 <launch>
-    <arg name="sim" default="false"/>
+    <arg name="sim" default="true"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
-    <arg name="run_rviz" default="true"/>
+    <arg name="run_rviz" default="false"/>
     <arg name="run_rqt_multiplot" default="false"/>
     
     <!-- Simulation parameters -->
     <arg name="sim_print_ft" default="false"/>
     <arg name="current_delay_time" default="0.0"/>
-    <arg name="sim_frequency" default="3000"/>
+    <arg name="sim_frequency" default="300"/>
     <arg name="sim_publish_status" default="false"/>
-    <arg name="sim_gravity_on" default="false"/>
+    <arg name="sim_gravity_on" default="true"/>
     <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_vicon_pub_freq" default="100"/>
+    <arg name="sim_current_noise_covariance" default="0.0"/>
+    <arg name="sim_ecb_bandwidth_hz" default="15"/>
 
-    <node pkg="oct_levitation" name="single_dipole_xyz_rp_control" type="xyz_reduced_attitude_single_dipole.py" output="screen"/>
+    <node pkg="oct_levitation" name="xyz_reduced_attitude_single_dipole_control" type="xyz_reduced_attitude_single_dipole.py" output="screen"/>
 
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
     <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">
@@ -28,9 +30,10 @@
         <arg name="sim_print_ft" value="$(arg sim_print_ft)"/>
         <arg name="current_delay_time" value="$(arg current_delay_time)"/>
         <arg name="sim_frequency" value="$(arg sim_frequency)"/>
+        <arg name="sim_gravity_on" value="$(arg sim_gravity_on)"/>
         <arg name="sim_publish_status" value="$(arg sim_publish_status)"/>
-        <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)" type="yaml"/>
-        <arg name="sim_initial_position" value="$(arg sim_initial_position)" type="yaml"/>
+        <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)"/>
+        <arg name="sim_initial_position" value="$(arg sim_initial_position)"/>
         <arg name="sim_vicon_pub_freq" value="$(arg sim_vicon_pub_freq)"/>
         <arg name="sim_current_noise_covariance" value="$(arg sim_current_noise_covariance)"/>
         <arg name="sim_ecb_bandwidth_hz" value="$(arg sim_ecb_bandwidth_hz)"/>

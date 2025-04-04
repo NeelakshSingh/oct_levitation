@@ -18,7 +18,11 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.HARDWARE_CONNECTED = False
+        self.ACTIVE_COILS = np.array([2, 3, 4, 5, 7])
         self.tfsub_callback_style_control_loop = True
+        self.INITIAL_POSITION = np.array([0.0, 0.0, 0.0])
+        self.MAX_CURRENT = 8.0
+
         self.control_rate = 100 # Set it to the vicon frequency
         self.dt = 1/self.control_rate
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -168,8 +172,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         """
 
     def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
-        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         dipole = self.rigid_body_dipole.dipole_list[0]
         dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
         Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
@@ -226,7 +230,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.ref_actual_msg.header.stamp = rospy.Time.now()
 
         # Getting the current orientation and positions
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
 
         e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
         z_com = tf_msg.transform.translation.z
@@ -234,7 +238,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         y_com = tf_msg.transform.translation.y
 
         ### Reference for tracking
-        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg)
+        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform)
         ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
         ref_z = self.last_reference_tf_msg.transform.translation.z
         ref_x = self.last_reference_tf_msg.transform.translation.x
@@ -280,8 +284,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         x_error = x_x - r_x
         y_error = x_y - r_y
 
-        # u_z = -self.K_z @ z_error + self.mass*common.Constants.g
-        u_z = -self.K_z @ z_error
+        u_z = -self.K_z @ z_error + self.mass*common.Constants.g # Gravity compensation
+        # u_z = -self.K_z @ z_error
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
@@ -304,14 +308,16 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                                                       z_error.flatten(), 
                                                       [reduced_attitude_error]))
         self.error_state_pub.publish(self.error_state_msg)
-        self.control_input_message.vector = [Tau_x, Tau_y, F_x, F_y, F_z]
+        w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
+        self.control_input_message.vector = w_des
 
         com_wrench_des = np.array([Tau_x, Tau_y, 0.0, F_x, F_y, F_z])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.local_torque_inertial_force_allocation(tf_msg, Tau_x=Tau_x, Tau_y=Tau_y, F_x=F_x, F_y=F_y, F_z=F_z)
+        # des_currents = self.local_torque_inertial_force_allocation(tf_msg, Tau_x=Tau_x, Tau_y=Tau_y, F_x=F_x, F_y=F_y, F_z=F_z)
+        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 
