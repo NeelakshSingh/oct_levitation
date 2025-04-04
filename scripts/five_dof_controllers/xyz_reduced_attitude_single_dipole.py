@@ -21,7 +21,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.ACTIVE_COILS = np.array([2, 3, 4, 5, 7])
         self.tfsub_callback_style_control_loop = True
         self.INITIAL_POSITION = np.array([0.0, 0.0, 0.0])
-        self.MAX_CURRENT = 8.0
+        self.MAX_CURRENT = 15.0
 
         self.control_rate = 100 # Set it to the vicon frequency
         self.dt = 1/self.control_rate
@@ -306,7 +306,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.error_state_msg.vector = np.concatenate((x_error.flatten(), 
                                                       y_error.flatten(), 
                                                       z_error.flatten(), 
-                                                      [reduced_attitude_error]))
+                                                      [reduced_attitude_error],
+                                                      omega_tilde.flatten()))
         self.error_state_pub.publish(self.error_state_msg)
         w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
         self.control_input_message.vector = w_des
@@ -316,7 +317,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        # des_currents = self.local_torque_inertial_force_allocation(tf_msg, Tau_x=Tau_x, Tau_y=Tau_y, F_x=F_x, F_y=F_y, F_z=F_z)
         des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents

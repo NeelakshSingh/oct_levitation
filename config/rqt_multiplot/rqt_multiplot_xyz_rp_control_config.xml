@@ -1653,7 +1653,7 @@
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>vector/9</field>
+                                    <field>vector/8</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
