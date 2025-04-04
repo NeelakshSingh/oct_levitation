@@ -247,8 +247,14 @@ class DynamicsSimulator:
                                                                   dipole_axis=self.rigid_body.dipole_list[0].axis)
         currents = np.asarray(des_currents_msg.des_currents_reg)
         # First order TF on currents to simulate current bandwidth.
-        # self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
-        self.__last_output_currents = currents
+        if not self.__first_command:
+            # For the first time, bypass the bandwidth filter.
+            self.__last_output_currents = currents
+            self.__last_poke_time_ns = rospy.Time.now().to_nsec() + self.poke_start_time_ns # After the first command, we start poking.
+            self.__first_command = True
+        else:
+            # Apply the first order filter on the currents.
+            self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
         noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_covariance, size=(8,))
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents)
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
@@ -257,9 +263,6 @@ class DynamicsSimulator:
         wrench.wrench.torque = Vector3(*actual_Tau_force[:3])
         wrench.wrench.force = Vector3(*actual_Tau_force[3:])
 
-        if not self.__first_command:
-            self.__last_poke_time_ns = rospy.Time.now().to_nsec() + self.poke_start_time_ns # After the first command, we start poking.
-            self.__first_command = True
         self.last_recvd_wrench = wrench
         self.__last_command_recv_time = rospy.Time.now().to_sec()
         if self.__last_command_warning_sent:
