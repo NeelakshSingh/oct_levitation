@@ -22,7 +22,12 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.HARDWARE_CONNECTED = False
         self.ORIENTATION_VARYING_Mf = False
         self.POSITION_VARYING_Af = True
-        # self.ACTIVE_COILS = np.array([0, 1, 2, 3, 5]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
+        # self.ACTIVE_COILS = np.array([2,3,4,5,7]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
+        self.ACTIVE_COILS = np.array([1, 3, 4, 5, 6]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
+        # self.ACTIVE_COILS = np.array([0, 1, 3, 5, 6]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
+        # self.ACTIVE_COILS = np.array([0, 3, 5, 6, 7]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
+        self.INITIAL_POSITION = np.array([0.0, 0.0, 0.0])
+        self.MAX_CURRENT = 8.0 # Amps
 
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency

@@ -6,7 +6,7 @@ import tf2_ros
 import numpy as np
 import time
 
-from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion
+from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3
 from tnb_mns_driver.msg import DesCurrentsReg
 from control_utils.msg import VectorStamped
 from std_msgs.msg import String
@@ -38,6 +38,8 @@ class ControlSessionNodeBase:
         self.computation_time_topic = rospy.get_param("~computation_time_topic", "control_session/computation_time")
         self.compute_time_pub = None
         self.ACTIVE_COILS = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+        self.INITIAL_POSITION = np.array([0, 0, 0])
+        self.INITIAL_ORIENTATION_EXYZ = np.array([0, 0, 0])
         self.warn_jma_condition = True
         self.publish_jma_condition = True
         if self.publish_jma_condition:
@@ -115,6 +117,8 @@ class ControlSessionNodeBase:
         
         self.tf_reference_sub = None
         self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
+        self.last_reference_tf_msg.transform.translation = Vector3(*self.INITIAL_POSITION)
+        self.last_reference_tf_msg.transform.rotation = Quaternion(*geometry.quaternion_from_euler_xyz(self.INITIAL_ORIENTATION_EXYZ))
         self.last_reference_tf_msg.transform.rotation = Quaternion(0, 0, 0, 1)
         if self.tracking_poses_on:
             self.tf_reference_sub = rospy.Subscriber(self.tf_reference_sub_topic, TransformStamped,
