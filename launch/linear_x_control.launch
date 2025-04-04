@@ -16,37 +16,23 @@
 
     <node pkg="oct_levitation" name="single_dipole_x_control" type="x_control_single_dipole_full_alloc.py" output="screen"/>
 
-    <group if="$(arg enable_reference_pose)">
-        <node pkg="oct_levitation" name="reference_pose_publisher" type="reference_pose_publisher.py" output="screen"/>
-    </group>
+    <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
+    <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">
+        <arg name="sim" value="$(arg sim)"/>
+        <arg name="hardware_connected" value="$(arg hardware_connected)"/>
+        <arg name="enable_reference_pose" value="$(arg enable_reference_pose)"/>
+        <arg name="run_rviz" value="$(arg run_rviz)"/>
+        <arg name="run_rqt_multiplot" value="$(arg run_rqt_multiplot)"/>
 
-    <group if="$(arg sim)">
-        <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
-            <param name="sim_freq" value="$(arg sim_frequency)" />
-            <param name="vicon_pub_freq" value="$(arg sim_vicon_pub_freq)" />
-            <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
-            <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />
-            <param name="gravity_on" value="false" />
-            <param name="print_ft" value="$(arg sim_print_ft)" />
-            <param name="pub_status" value="$(arg sim_publish_status)" />
-        </node>
-        <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen">
-            <param name="delay_time" value="$(arg current_delay_time)" />
-        </node>
-    </group>
-
-    <group if="$(eval not sim and hardware_connected)">
-        <node pkg="tnb_mns_driver" name="tnb_mns_driver_node" type="tnb_mns_driver_node" output="screen" launch-prefix="xterm -e"/>
-    </group>
-
-    <group if="$(arg run_rviz)">
-        <node pkg="oct_levitation" name="rviz_visualizations_node" type="rviz_visualizations.py" output="screen"/>
-        <node pkg="rviz" type="rviz" name="rviz" args="-d $(find oct_levitation)/config/rviz/single_dipole_control_config.rviz" output="screen"/>
-    </group>
-
-    <group if="$(arg run_rqt_multiplot)">
-        <node pkg="rqt_multiplot" type="rqt_multiplot" name="rqt_multiplot" output="screen"
-            args="--force-config $(find your_package)/config/rqt_multiplot/rqt_multiplot_pose_config.xml" />
-    </group>
+        <arg name="sim_print_ft" value="$(arg sim_print_ft)"/>
+        <arg name="current_delay_time" value="$(arg current_delay_time)"/>
+        <arg name="sim_frequency" value="$(arg sim_frequency)"/>
+        <arg name="sim_publish_status" value="$(arg sim_publish_status)"/>
+        <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)" type="yaml"/>
+        <arg name="sim_initial_position" value="$(arg sim_initial_position)" type="yaml"/>
+        <arg name="sim_vicon_pub_freq" value="$(arg sim_vicon_pub_freq)"/>
+        <arg name="sim_current_noise_covariance" value="$(arg sim_current_noise_covariance)"/>
+        <arg name="sim_ecb_bandwidth_hz" value="$(arg sim_ecb_bandwidth_hz)"/>
+    </include>
 
 </launch>

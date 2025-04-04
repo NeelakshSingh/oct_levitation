@@ -41,7 +41,7 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     parser.add_argument("--eval_lim", type=float, default=0.01)
     parser.add_argument("--clip_cond", type=float, default=100)
     parser.add_argument("--slice_cond_max", type=float, default=100) # to make it consistent with the plotting.py plotter.
-    parser.add_argument("--mode", type=int, default=0, help="0: Only use A matrix. 1: Uses MA matrix. For 1, one can specify dipole rpy and dipole strength.")
+    parser.add_argument("--mode", type=int, default=0, help="0: Only use A matrix. 1: Uses MA matrix. 2: Uses Pendulum JMA matrix. For >0, one can specify dipole rpy and dipole strength.")
     parser.add_argument("--rpy", type=float, default=[0.0, 0.0, 0.0], nargs=3, help="[roll, pitch, yaw] intrinsic euler angles (in degrees) of local frame w.r.t inertial frame.")
     # These two parameters default to the Onyx disc's values.
     parser.add_argument("--dipole_strength", type=float, default=1.6453125, help="In tesla.")
@@ -57,6 +57,8 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         base_folder = "A_matrix"
     elif args.mode == 1:
         base_folder = "MA_matrix"
+    elif args.mode == 2:
+        base_folder = "pend_JMA_matrix"
     else:
         raise ValueError("Invalid value received for parameter 'mode'. Please select among 0 and 1.")
 
@@ -120,16 +122,30 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     dipole_axis = np.asarray(args.dipole_axis)
     dipole_moment = (dipole_strength * R @ dipole_axis).flatten()
 
-    Mf = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
-    # M_tau_local = geometry.magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
-    #                                                                   dipole_axis=dipole_axis,
-    #                                                                   dipole_quaternion=quat) 
-    M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
-    # M = block_diag(M_tau_local[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
-    M = block_diag(M_tau[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
+    def jacobian_torqueforce_to_torque(beta, alpha):
+        # jacobian mapping torques and forces to control-torques
+        l_mag = 38e-3
+        force_torque_relation = np.array([[0,-l_mag*np.cos(beta)*np.cos(alpha) ,-np.sin(beta)*l_mag],
+                                          [np.cos(beta)*np.cos(alpha)*l_mag, 0,-np.cos(beta)*np.sin(alpha)*l_mag],
+                                          [np.sin(beta)*l_mag,l_mag*np.cos(beta)*np.sin(alpha) ,0]])
+        
+        return np.hstack((np.eye(3), force_torque_relation))
+    
+    J = jacobian_torqueforce_to_torque(0, 0)[:2] # Because we cannot control Tz.
 
+    Mf = geometry.magnetic_interaction_grad5_to_force(dipole_moment)
     if args.mode == 1:
-        rospy.loginfo(f"[Coil Subset Condition Calculator]: M matrix: {M}")
+        M_tau_local = geometry.magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
+                                                                        dipole_axis=dipole_axis,
+                                                                        dipole_quaternion=quat) 
+        M = block_diag(M_tau_local[:2], Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
+    elif args.mode == 2:
+        M_tau = geometry.magnetic_interaction_field_to_torque(dipole_moment)
+        M = block_diag(M_tau, Mf) # We only consider the first 2 rows of M_tau. So its just best to let the dipole axis be [0, 0, 1].
+        rospy.loginfo("[Coil Subset Condition Calculator]: Using pendulum's JMA matrix for analysis.")
+
+    if args.mode > 0:
+        rospy.loginfo(f"[Coil Subset Condition Calculator]: M matrix: {M} \n J matrix: {J}")
     
     rms_config_dict = {
         "rms_values": [],
@@ -152,10 +168,18 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
             A = A[:, coil_set]
             return np.linalg.cond(M @ A)
         
+        @np.vectorize
+        def get_JMA_condition_subset(x, y, z):
+            A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
+            A = A[:, coil_set]
+            return np.linalg.cond(J @ M @ A)
+        
         if args.mode == 0:
             cond_eval_func = get_A_condition_subset
         elif args.mode == 1:
             cond_eval_func = get_MA_condition_subset
+        elif args.mode == 2:
+            cond_eval_func = get_JMA_condition_subset
         else:
             raise ValueError("Invalid mode value. Should be among [0, 1].")
         cond = cond_eval_func(X, Y, Z)

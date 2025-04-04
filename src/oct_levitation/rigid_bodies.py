@@ -17,6 +17,11 @@ N35Material = MaterialProperties(
     Br = 1.17
 )
 
+N45Material = MaterialProperties(
+    density = 7500,
+    Br = 1.35
+)
+
 ##############################################
 # PERMANENT MAGNETS #
 ##############################################
@@ -34,6 +39,14 @@ RingMagnet10x5x5 = PermanentMagnet(
         t=5e-3, Ri=5e-3/2, Ro=5e-3
     ),
     material=N35Material,
+    magnetization_axis=np.array([0, 0, 1])
+)
+
+RingMagnet8x3x4_N45 = PermanentMagnet(
+    geometry=CylindricalRingShape(
+        t=4e-3, Ri=(3e-3)/2, Ro=4e-3
+    ),
+    material=N45Material,
     magnetization_axis=np.array([0, 0, 1])
 )
 
