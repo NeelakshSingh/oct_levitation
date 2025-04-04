@@ -22,7 +22,7 @@
     <arg name="sim_ecb_bandwidth_hz" default="15"/>
 
     <group if="$(arg enable_reference_pose)">
-        <node pkg="oct_levitation" name="reference_pose_publisher" type="refrence_pose_publisher.py" output="screen"/>
+        <node pkg="oct_levitation" name="reference_pose_publisher" type="reference_pose_publisher.py" output="screen"/>
     </group>
 
     <group if="$(arg sim)">

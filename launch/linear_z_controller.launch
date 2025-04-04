@@ -32,8 +32,8 @@
         <arg name="sim_frequency" value="$(arg sim_frequency)"/>
         <arg name="sim_gravity_on" value="$(arg sim_gravity_on)"/>
         <arg name="sim_publish_status" value="$(arg sim_publish_status)"/>
-        <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)" type="yaml"/>
-        <arg name="sim_initial_position" value="$(arg sim_initial_position)" type="yaml"/>
+        <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)"/>
+        <arg name="sim_initial_position" value="$(arg sim_initial_position)"/>
         <arg name="sim_vicon_pub_freq" value="$(arg sim_vicon_pub_freq)"/>
         <arg name="sim_current_noise_covariance" value="$(arg sim_current_noise_covariance)"/>
         <arg name="sim_ecb_bandwidth_hz" value="$(arg sim_ecb_bandwidth_hz)"/>
