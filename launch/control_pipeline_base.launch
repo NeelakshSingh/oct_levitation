@@ -14,6 +14,7 @@
     <arg name="current_delay_time" default="0.0"/>
     <arg name="sim_frequency" default="3000"/>
     <arg name="sim_publish_status" default="false"/>
+    <arg name="sim_gravity_on" default="false"/>
     <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
     <arg name="sim_vicon_pub_freq" default="100"/>
@@ -33,7 +34,7 @@
             <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
             <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />
             <param name="print_ft" value="$(arg sim_print_ft)" />
-            <param name="gravity_on" value="false" />
+            <param name="gravity_on" value="$(arg sim_gravity_on)" />
             <param name="pub_status" value="$(arg sim_publish_status)" />
         </node>
         <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen">

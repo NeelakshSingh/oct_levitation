@@ -30,6 +30,7 @@
         <arg name="sim_print_ft" value="$(arg sim_print_ft)"/>
         <arg name="current_delay_time" value="$(arg current_delay_time)"/>
         <arg name="sim_frequency" value="$(arg sim_frequency)"/>
+        <arg name="sim_gravity_on" value="$(arg sim_gravity_on)"/>
         <arg name="sim_publish_status" value="$(arg sim_publish_status)"/>
         <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)" type="yaml"/>
         <arg name="sim_initial_position" value="$(arg sim_initial_position)" type="yaml"/>

@@ -25,7 +25,7 @@ def ft_array_from_wrench(wrench: WrenchStamped):
 @numba.njit
 def vector_clip_update_mask(vec, vec_lim):
     vec_lim = np.abs(vec_lim)
-    vel_update_mask = np.ones(3, dtype=bool)
+    vel_update_mask = np.array([True, True, True])
     if vec[0] > vec_lim[0]:
         vec[0] = vec_lim[0]
         vel_update_mask[0] = False
@@ -123,6 +123,7 @@ class DynamicsSimulator:
         self.__last_output_currents = np.zeros(8)
 
         rospy.loginfo("[free_rigid_body_simulator] ecbd_A: %f, ecbd_B: %f" % (self.__ecbd_A, self.__ecbd_B))
+        rospy.loginfo("[free_rigid_body_simulator] gravity_on: %s" % (gravity_on))
 
         if self.publish_status:
             self.sim_status_pub = rospy.Publisher("oct_levitation/free_rigid_body_sim/status", Bool, queue_size=1) # This is just to measure the simulator run freq
@@ -181,16 +182,16 @@ class DynamicsSimulator:
         if self.print_ft:
             rospy.loginfo(f"Applying F: {F}, Tau: {Tau}")
         if self.__first_command:
-            t_comp_poke_ns = rospy.Time.now().to_nsec() - t_comp_start_ns
-            if self.__last_poke_time_ns is not None and (rospy.Time.now().to_nsec() + t_comp_poke_ns - self.__last_poke_time_ns) >= self.poke_period_ns:
-                # Then we start the current poke cycle.
-                if (rospy.Time.now().to_nsec() + t_comp_poke_ns - self.__last_poke_time_ns - self.poke_period_ns) <= self.poke_duration_ns:
-                    # Then we are in the poke cycle.
-                    F = F + self.poke_force
-                    Tau = Tau + self.poke_torque
-                else:
-                    # Then we are done with the poke cycle.
-                    self.__last_poke_time_ns = rospy.Time.now().to_nsec()
+            # t_comp_poke_ns = rospy.Time.now().to_nsec() - t_comp_start_ns
+            # if self.__last_poke_time_ns is not None and (rospy.Time.now().to_nsec() + t_comp_poke_ns - self.__last_poke_time_ns) >= self.poke_period_ns:
+            #     # Then we start the current poke cycle.
+            #     if (rospy.Time.now().to_nsec() + t_comp_poke_ns - self.__last_poke_time_ns - self.poke_period_ns) <= self.poke_duration_ns:
+            #         # Then we are in the poke cycle.
+            #         F = F + self.poke_force
+            #         Tau = Tau + self.poke_torque
+            #     else:
+            #         # Then we are done with the poke cycle.
+            #         self.__last_poke_time_ns = rospy.Time.now().to_nsec()
             F = F + self.F_amb # Adding gravity and other constant forces, IF we have started receiving commands.
 
         p_next, v_next = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
@@ -198,6 +199,8 @@ class DynamicsSimulator:
         self.p, v_update_mask = vector_clip_update_mask(p_next, self.p_limit)
         self.v[v_update_mask] = v_next[v_update_mask]
         self.v[np.logical_not(v_update_mask)] = 0.0 # If we clipped the position, we set the velocity to zero.
+        # self.p = p_next
+        # self.v = v_next
 
         # Numerically integration the orientation through the lie group exponential map of angular velocity.
         # The angular velocity is resolved in the local frame.
@@ -205,6 +208,8 @@ class DynamicsSimulator:
         self.R, omega_update_mask = clip_R_from_rpy_lim(R_next, self.rpy_limit)
         self.omega[omega_update_mask] = omega_next[omega_update_mask]
         self.omega[np.logical_not(omega_update_mask)] = 0.0 # If we clipped the orientation, we set the angular velocity to zero.
+        # self.R = R_next
+        # self.omega = omega_next        
 
         self.q = geometry.quaternion_from_rotation_matrix(self.R)
 
