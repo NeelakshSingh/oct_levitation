@@ -10,44 +10,25 @@
     <arg name="run_rqt_multiplot" default="false"/>
 
     <!-- Simulation parameters -->
-    <arg name="sim_print_ft" default="false"/>
-    <arg name="current_delay_time" default="0.0"/>
-    <arg name="sim_frequency" default="3000"/>
-    <arg name="sim_publish_status" default="false"/>
-    <arg name="sim_gravity_on" default="false"/>
-    <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
-    <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
-    <arg name="sim_vicon_pub_freq" default="100"/>
-    <arg name="sim_current_noise_covariance" default="0.01"/>
-    <arg name="sim_ecb_bandwidth_hz" default="15"/>
+    <rosparam command="load" file="$(find oct_levitation)/config/controller_params.yaml"/>
+    <rosparam if="$(arg sim)" command="load" file="$(find oct_levitation)/config/free_body_sim_params.yaml"/>
 
     <group if="$(arg enable_reference_pose)">
         <node pkg="oct_levitation" name="reference_pose_publisher" type="reference_pose_publisher.py" output="screen"/>
     </group>
 
     <group if="$(arg sim)">
-        <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen">
-            <param name="sim_freq" value="$(arg sim_frequency)" />
-            <param name="current_noise_covariance" value="$(arg sim_current_noise_covariance)" />
-            <param name="ecb_bandwidth_hz" value="$(arg sim_ecb_bandwidth_hz)" />
-            <param name="vicon_pub_freq" value="$(arg sim_vicon_pub_freq)" />
-            <param name="initial_rpy" value="$(arg sim_initial_rpy)" type="yaml" />
-            <param name="initial_position" value="$(arg sim_initial_position)" type="yaml" />
-            <param name="print_ft" value="$(arg sim_print_ft)" />
-            <param name="gravity_on" value="$(arg sim_gravity_on)" />
-            <param name="pub_status" value="$(arg sim_publish_status)" />
-        </node>
-        <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen">
-            <param name="delay_time" value="$(arg current_delay_time)" />
-        </node>
+        <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen"/>
+        <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen"/>
     </group>
 
     <group if="$(eval not sim and hardware_connected)">
         <include file="$(find oct_levitation)/launch/tnb_mns_driver.launch"/>
     </group>
 
+    <!-- This node can be run without rviz, it publishes some important details. -->
+    <node pkg="oct_levitation" name="rviz_visualizations_node" type="rviz_visualizations.py" output="screen"/>
     <group if="$(arg run_rviz)">
-        <node pkg="oct_levitation" name="rviz_visualizations_node" type="rviz_visualizations.py" output="screen"/>
         <node pkg="rviz" type="rviz" name="rviz" args="-d $(find oct_levitation)/config/rviz/single_dipole_control_config.rviz" output="screen"/>
     </group>
 

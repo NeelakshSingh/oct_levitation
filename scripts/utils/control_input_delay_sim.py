@@ -5,8 +5,8 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class DelayedPublisher:
     def __init__(self):
         rospy.init_node('delayed_publisher')
-        self.delay_nsec = 1e9*rospy.get_param("~delay_time", 0.1)
-        self.delay_republisher_freq = rospy.get_param("~delay_repub_freq", 5e3)
+        self.delay_nsec = 1e9*rospy.get_param("free_body_sim_utils/delay_time", 0.01)
+        self.delay_republisher_freq = rospy.get_param("free_body_sim_utils/delay_repub_freq", 500)
         self.message_queue = deque()
         rospy.loginfo(f"[Control Delay Sim] Publishing delayed currents with a delay of {self.delay_nsec/1e9} sec.")
         self.pub = rospy.Publisher('/tnb_mns_driver/des_currents_reg/delayed_sim', DesCurrentsReg, queue_size=100)

@@ -1,0 +1,18 @@
+free_body_sim/sim_print_ft: false
+free_body_sim/sim_frequency: 500
+free_body_sim/sim_publish_status: false
+free_body_sim/sim_gravity_on: false
+free_body_sim/sim_initial_rpy: [0.0, 0.0, 0.0]
+free_body_sim/sim_initial_position: [0.0, 0.0, 0.0]
+free_body_sim/sim_vicon_pub_freq: 100
+free_body_sim/sim_ecb_bandwidth_hz: 15
+free_body_sim/vicon_noise_covariance_exyz:
+  - 1.01646014e-05
+  - 4.16398263e-06
+  - 6.27907061e-06
+  - 2.37471348e-04
+  - 8.75457449e-04
+  - 7.40946226e-05
+free_body_sim/sim_current_noise_covariance: 0.029008974233986275
+free_body_sim_utils/delay_time: 0.001
+free_body_sim_utils/delay_repub_freq: 200

@@ -88,35 +88,35 @@ class DynamicsSimulator:
                                                          calibration_file="mc3ao8s_md200_handp.yaml")
 
         ### Initial Conditions and Operation Parameters
-        gravity_on = rospy.get_param("~gravity_on", False)
-        self.p = np.array(rospy.get_param("~initial_position", [0.0, 0.0, 0.0])) # World frame
-        self.p_limit = np.abs(np.array(rospy.get_param("~position_limit", [0.02, 0.02, 0.02]))) # World frame
-        self.v = np.array(rospy.get_param("~initial_velocity", [0.0, 0.0, 0.0])) # World frame
+        gravity_on = rospy.get_param("free_body_sim/gravity_on", False)
+        self.p = np.array(rospy.get_param("free_body_sim/initial_position", [0.0, 0.0, 0.0])) # World frame
+        self.p_limit = np.abs(np.array(rospy.get_param("free_body_sim/position_limit", [0.02, 0.02, 0.02]))) # World frame
+        self.v = np.array(rospy.get_param("free_body_sim/initial_velocity", [0.0, 0.0, 0.0])) # World frame
 
-        initial_rpy = np.array(rospy.get_param("~initial_rpy", [0.0, 0.0, 0.0])) # World frame
-        self.rpy_limit = np.abs(np.deg2rad(np.array(rospy.get_param("~rpy_limit", [30, 30, 180])))) # World frame
+        initial_rpy = np.array(rospy.get_param("free_body_sim/initial_rpy", [0.0, 0.0, 0.0])) # World frame
+        self.rpy_limit = np.abs(np.deg2rad(np.array(rospy.get_param("free_body_sim/rpy_limit", [30, 30, 180])))) # World frame
         self.R_lim = geometry.rotation_matrix_from_euler_xyz(self.rpy_limit)
         rospy.loginfo(f"[free_body_sim] initial_rpy: {initial_rpy}")
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
-        self.omega = np.array(rospy.get_param("~initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
+        self.omega = np.array(rospy.get_param("free_body_sim/initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
         self.omega = np.deg2rad(self.omega)
-        self.use_wrench = rospy.get_param("~use_wrench", False)
-        self.publish_status = rospy.get_param("~pub_status", False)
-        self.print_ft = rospy.get_param("~print_ft", False)
-        self.vicon_noise_covariance_exyz = np.diag(rospy.get_param("~vicon_noise_covariance_exyz", 
+        self.use_wrench = rospy.get_param("free_body_sim/use_wrench", False)
+        self.publish_status = rospy.get_param("free_body_sim/pub_status", False)
+        self.print_ft = rospy.get_param("free_body_sim/print_ft", False)
+        self.vicon_noise_covariance_exyz = np.diag(rospy.get_param("free_body_sim/vicon_noise_covariance_exyz", 
                                                                [1.01646014e-05, 4.16398263e-06, 6.27907061e-06,
                                                                 2.37471348e-04, 8.75457449e-04, 7.40946226e-05])) # World frame
-        self.current_noise_covariance = rospy.get_param("~current_noise_covariance", 0.029008974233986275)
-        self.ecb_bandwidth = rospy.get_param("~ecb_bandwidth_hz", 15) * 2 * np.pi # Conservative ecb bandwidth in rad/s
-        self.vicon_pub_freq = rospy.get_param("~vicon_pub_freq", 100)
+        self.current_noise_covariance = rospy.get_param("free_body_sim/current_noise_covariance", 0.029008974233986275)
+        self.ecb_bandwidth = rospy.get_param("free_body_sim/ecb_bandwidth_hz", 15) * 2 * np.pi # Conservative ecb bandwidth in rad/s
+        self.vicon_pub_freq = rospy.get_param("free_body_sim/vicon_pub_freq", 100)
 
         ### Periodic Poke Disturbance Parameters
-        self.poke_period_ns = 1e9*rospy.get_param("~poke_period_sec", 2) # Give a force and torque poke to the object every poke_period_sec seconds.
-        self.poke_force = np.array(rospy.get_param("~poke_force_mN", [0.0, 0.0, 0.0]))*1e-3 # World frame
-        self.poke_torque = np.array(rospy.get_param("~poke_torque_mNm", [0.0, 0.0, 0.0]))*1e-3 # World frame
-        self.poke_start_time_ns = 1e9*rospy.get_param("~poke_start_time_sec", 0.0) # The time elapsed since simulation start to start poking.
-        self.poke_duration_ns = 1e9*rospy.get_param("~poke_duration_sec", 0.3) # The time for which the poke is applied.
+        self.poke_period_ns = 1e9*rospy.get_param("free_body_sim/poke_period_sec", 2) # Give a force and torque poke to the object every poke_period_sec seconds.
+        self.poke_force = np.array(rospy.get_param("free_body_sim/poke_force_mN", [0.0, 0.0, 0.0]))*1e-3 # World frame
+        self.poke_torque = np.array(rospy.get_param("free_body_sim/poke_torque_mNm", [0.0, 0.0, 0.0]))*1e-3 # World frame
+        self.poke_start_time_ns = 1e9*rospy.get_param("free_body_sim/poke_start_time_sec", 0.0) # The time elapsed since simulation start to start poking.
+        self.poke_duration_ns = 1e9*rospy.get_param("free_body_sim/poke_duration_sec", 0.3) # The time for which the poke is applied.
         
         self.vicon_pub_time_ns = 1e9/self.vicon_pub_freq
         # Closed form soln is known, I will still do it cause why not

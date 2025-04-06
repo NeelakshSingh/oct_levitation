@@ -1,21 +1,9 @@
 <launch>
-    <arg name="sim" default="true"/>
+    <arg name="sim"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="false"/>
     <arg name="run_rqt_multiplot" default="false"/>
-    
-    <!-- Simulation parameters -->
-    <arg name="sim_print_ft" default="false"/>
-    <arg name="current_delay_time" default="0.0"/>
-    <arg name="sim_frequency" default="300"/>
-    <arg name="sim_publish_status" default="false"/>
-    <arg name="sim_gravity_on" default="true"/>
-    <arg name="sim_initial_rpy" default="[0.0, 0.0, 0.0]"/>
-    <arg name="sim_initial_position" default="[0.0, 0.0, 0.0]"/>
-    <arg name="sim_vicon_pub_freq" default="100"/>
-    <arg name="sim_current_noise_covariance" default="0.0"/>
-    <arg name="sim_ecb_bandwidth_hz" default="15"/>
 
     <node pkg="oct_levitation" name="xyz_reduced_attitude_single_dipole_control" type="xyz_reduced_attitude_single_dipole.py" output="screen"/>
 
@@ -26,17 +14,6 @@
         <arg name="enable_reference_pose" value="$(arg enable_reference_pose)"/>
         <arg name="run_rviz" value="$(arg run_rviz)"/>
         <arg name="run_rqt_multiplot" value="$(arg run_rqt_multiplot)"/>
-
-        <arg name="sim_print_ft" value="$(arg sim_print_ft)"/>
-        <arg name="current_delay_time" value="$(arg current_delay_time)"/>
-        <arg name="sim_frequency" value="$(arg sim_frequency)"/>
-        <arg name="sim_gravity_on" value="$(arg sim_gravity_on)"/>
-        <arg name="sim_publish_status" value="$(arg sim_publish_status)"/>
-        <arg name="sim_initial_rpy" value="$(arg sim_initial_rpy)"/>
-        <arg name="sim_initial_position" value="$(arg sim_initial_position)"/>
-        <arg name="sim_vicon_pub_freq" value="$(arg sim_vicon_pub_freq)"/>
-        <arg name="sim_current_noise_covariance" value="$(arg sim_current_noise_covariance)"/>
-        <arg name="sim_ecb_bandwidth_hz" value="$(arg sim_ecb_bandwidth_hz)"/>
     </include>
 
 </launch>
