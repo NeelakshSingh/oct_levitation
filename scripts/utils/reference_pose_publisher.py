@@ -60,7 +60,7 @@ class ReferencePosePublisher:
         # Origin position
         pose.transform.translation.x = 0.0
         pose.transform.translation.y = 0.0
-        pose.transform.translation.z = 0.0
+        pose.transform.translation.z = 0.005
         
         # Zero RPY
         pose.transform.rotation = Quaternion(0, 0, 0, 1)

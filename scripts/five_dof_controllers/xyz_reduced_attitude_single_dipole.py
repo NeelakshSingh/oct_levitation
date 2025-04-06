@@ -116,10 +116,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_z = np.array([[9.0896, 1.3842]])
 
         rospy.loginfo(f"""Control gains for Fx: {self.K_x}, 
-                                            Fy: {self.K_y},
-                                            Fz: {self.K_z}, 
-                                            RA Kp: {self.k_ra_p}, 
-                                            RA Kd: {self.K_ra_d}""")
+Fy: {self.K_y},
+Fz: {self.K_z}, 
+RA Kp: {self.k_ra_p}, 
+RA Kd: {self.K_ra_d}""")
 
         self.control_gains_message = VectorStamped()
         self.control_gains_message.header.stamp = rospy.Time.now()

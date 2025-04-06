@@ -104,10 +104,10 @@ class DynamicsSimulator:
         self.use_wrench = rospy.get_param("free_body_sim/use_wrench", False)
         self.publish_status = rospy.get_param("free_body_sim/pub_status", False)
         self.print_ft = rospy.get_param("free_body_sim/print_ft", False)
-        self.vicon_noise_covariance_exyz = np.diag(rospy.get_param("free_body_sim/vicon_noise_covariance_exyz", 
+        self.vicon_noise_covariance_exyz = np.diag(np.square(rospy.get_param("free_body_sim/vicon_noise_std_exyz", 
                                                                [1.01646014e-05, 4.16398263e-06, 6.27907061e-06,
-                                                                2.37471348e-04, 8.75457449e-04, 7.40946226e-05])) # World frame
-        self.current_noise_covariance = rospy.get_param("free_body_sim/current_noise_covariance", 0.029008974233986275)
+                                                                2.37471348e-04, 8.75457449e-04, 7.40946226e-05]))) # World frame
+        self.current_noise_std = rospy.get_param("free_body_sim/current_noise_std", 0.029008974233986275)
         self.ecb_bandwidth = rospy.get_param("free_body_sim/ecb_bandwidth_hz", 15) * 2 * np.pi # Conservative ecb bandwidth in rad/s
         self.vicon_pub_freq = rospy.get_param("free_body_sim/vicon_pub_freq", 100)
 
@@ -260,7 +260,7 @@ class DynamicsSimulator:
         else:
             # Apply the first order filter on the currents.
             self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
-        noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_covariance, size=(8,))
+        noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_std, size=(8,))
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents)
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
         
