@@ -104,7 +104,10 @@ class DynamicsSimulator:
         self.use_wrench = rospy.get_param("~use_wrench", False)
         self.publish_status = rospy.get_param("~pub_status", False)
         self.print_ft = rospy.get_param("~print_ft", False)
-        self.current_noise_covariance = rospy.get_param("~current_noise_covariance", 0.01)
+        self.vicon_noise_covariance_exyz = np.diag(rospy.get_param("~vicon_noise_covariance_exyz", 
+                                                               [1.01646014e-05, 4.16398263e-06, 6.27907061e-06,
+                                                                2.37471348e-04, 8.75457449e-04, 7.40946226e-05])) # World frame
+        self.current_noise_covariance = rospy.get_param("~current_noise_covariance", 0.029008974233986275)
         self.ecb_bandwidth = rospy.get_param("~ecb_bandwidth_hz", 15) * 2 * np.pi # Conservative ecb bandwidth in rad/s
         self.vicon_pub_freq = rospy.get_param("~vicon_pub_freq", 100)
 
@@ -156,7 +159,6 @@ class DynamicsSimulator:
         else:
             self.F_amb = np.array([0, 0, 0])
 
-    
     def simulation_loop(self, event):
 
         # This simulation loop will assume ZOH, therefore the last command is just kept on being repeated
@@ -210,6 +212,9 @@ class DynamicsSimulator:
         self.omega[np.logical_not(omega_update_mask)] = 0.0 # If we clipped the orientation, we set the angular velocity to zero.
         # self.R = R_next
         # self.omega = omega_next        
+        pose_noise = np.random.multivariate_normal(mean=np.zeros(6), cov=self.vicon_noise_covariance_exyz)
+        self.p = self.p + pose_noise[:3]
+        self.R = self.R @ geometry.rotation_matrix_from_euler_xyz(pose_noise[3:])
 
         self.q = geometry.quaternion_from_rotation_matrix(self.R)
 

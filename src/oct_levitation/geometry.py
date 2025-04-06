@@ -1,4 +1,5 @@
 import numpy as np
+import numba
 import scipy.spatial.transform as scitf
 
 from scipy.linalg import block_diag
@@ -298,6 +299,7 @@ def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
 # Euler Angle Related Functions
 #############################################
 
+@numba.njit
 def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -317,6 +319,9 @@ def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
             [  np.cos(x) * np.sin(z) + np.sin(x) * np.sin(y) * np.cos(z),  np.cos(x) * np.cos(z) - np.sin(x) * np.sin(y) * np.sin(z),  -np.sin(x) * np.cos(y)  ],
             [  np.sin(x) * np.sin(z) - np.cos(x) * np.sin(y) * np.cos(z),  np.sin(x) * np.cos(z) + np.cos(x) * np.sin(y) * np.sin(z),   np.cos(x) * np.cos(y)  ]
         ])
+
+# Force compilation
+rotation_matrix_from_euler_xyz(np.zeros(3))
 
 def transformation_matrix_from_euler_xyz(euler: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
