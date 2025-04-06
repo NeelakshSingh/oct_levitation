@@ -1388,11 +1388,64 @@
                             </y_axis>
                         </axes>
                     </axes>
+                    <curves>
+                        <curve_0>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/xyz_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>vector/6</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/xyz_rp_control_single_dipole/error_states</topic>
+                                    <type>control_utils/VectorStamped</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#729fcf</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>2</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>1 - L.Ld</title>
+                        </curve_0>
+                    </curves>
                     <legend>
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>Untitled Plot</title>
+                    <title>Reduced Attitude Error</title>
                 </column_0>
                 <column_1>
                     <axes>
