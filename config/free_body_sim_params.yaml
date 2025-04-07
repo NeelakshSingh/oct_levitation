@@ -1,31 +1,56 @@
-free_body_sim/print_ft: false
-free_body_sim/frequency: 500
-free_body_sim/publish_status: false
-free_body_sim/gravity_on: true
-free_body_sim/initial_rpy:
-  - 0.0
-  - 0.0
-  - 0.0
-free_body_sim/initial_position:
-  - 0.0
-  - 0.0
-  - 0.0
-free_body_sim/vicon_pub_freq: 100
-free_body_sim/ecb_bandwidth_hz: 15
-free_body_sim/vicon_noise_std_exyz:
-  - 1.01646014e-05
-  - 4.16398263e-06
-  - 6.27907061e-06
-  - 2.37471348e-04
-  - 8.75457449e-04
-  - 7.40946226e-05
-# free_body_sim/vicon_noise_std_exyz:
-#   - 0.0
-#   - 0.0
-#   - 0.0
-#   - 0.0
-#   - 0.0
-#   - 0.0
-free_body_sim/current_noise_std: 0.029008974233986275
-free_body_sim_utils/delay_time: 0.001
-free_body_sim_utils/delay_repub_freq: 200
+free_body_sim:
+  gravity_on: true
+  initial_position:
+    - 0.0
+    - 0.0
+    - 0.0
+  position_limit:
+    - 0.02
+    - 0.02
+    - 0.02
+  initial_velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+  initial_rpy_deg:
+    - 0.0
+    - 0.0
+    - 0.0
+  rpy_limit_deg:
+    - 30.0
+    - 30.0
+    - 180.0
+  initial_angular_velocity_deg:
+    - 0.0
+    - 0.0
+    - 0.0
+  use_wrench: false
+  pub_status: false
+  print_ft: false
+  frequency: 500
+  publish_status: false
+  vicon_pub_freq: 100
+  vicon_noise_std_exyz:
+    - 1.01646014e-05
+    - 4.16398263e-06
+    - 6.27907061e-06
+    - 2.37471348e-04
+    - 8.75457449e-04
+    - 7.40946226e-05
+  current_noise_std: 0.029008974233986275
+  ecb_bandwidth_hz: 15
+  poke_period_sec: 2.0                    # Apply poke every 2 seconds
+  poke_force_mN:                          # Force in millinewtons, in world frame
+    - 0.0
+    - 0.0
+    - 0.0
+  poke_torque_mNm:                        # Torque in millinewton-meters, in world frame
+    - 0.0
+    - 0.0
+    - 0.0
+  poke_start_time_sec: 0.0                # Time after simulation start to begin poking
+  poke_duration_sec: 0.3                  # Duration for which the poke is applied
+
+free_body_sim_utils:
+  delay_time: 0.0                        # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
+  delay_repub_freq: 200

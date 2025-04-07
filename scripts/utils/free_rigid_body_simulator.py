@@ -88,25 +88,23 @@ class DynamicsSimulator:
                                                          calibration_file="mc3ao8s_md200_handp.yaml")
 
         ### Initial Conditions and Operation Parameters
-        gravity_on = rospy.get_param("free_body_sim/gravity_on", False)
-        self.p = np.array(rospy.get_param("free_body_sim/initial_position", [0.0, 0.0, 0.0])) # World frame
-        self.p_limit = np.abs(np.array(rospy.get_param("free_body_sim/position_limit", [0.02, 0.02, 0.02]))) # World frame
-        self.v = np.array(rospy.get_param("free_body_sim/initial_velocity", [0.0, 0.0, 0.0])) # World frame
+        gravity_on = rospy.get_param("free_body_sim/gravity_on")
+        self.p = np.array(rospy.get_param("free_body_sim/initial_position")) # World frame
+        self.p_limit = np.abs(np.array(rospy.get_param("free_body_sim/position_limit"))) # World frame
+        self.v = np.array(rospy.get_param("free_body_sim/initial_velocity")) # World frame
 
-        initial_rpy = np.array(rospy.get_param("free_body_sim/initial_rpy", [0.0, 0.0, 0.0])) # World frame
-        self.rpy_limit = np.abs(np.deg2rad(np.array(rospy.get_param("free_body_sim/rpy_limit", [30, 30, 180])))) # World frame
+        initial_rpy = np.array(rospy.get_param("free_body_sim/initial_rpy_deg")) # World frame
+        self.rpy_limit = np.abs(np.deg2rad(np.array(rospy.get_param("free_body_sim/rpy_limit_deg")))) # World frame
         self.R_lim = geometry.rotation_matrix_from_euler_xyz(self.rpy_limit)
         rospy.loginfo(f"[free_body_sim] initial_rpy: {initial_rpy}")
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.
-        self.omega = np.array(rospy.get_param("free_body_sim/initial_angular_velocity", [0.0, 0.0, 0.0])) # w.r.t world frame resolved in local frame.
+        self.omega = np.array(rospy.get_param("free_body_sim/initial_angular_velocity_deg")) # w.r.t world frame resolved in local frame.
         self.omega = np.deg2rad(self.omega)
         self.use_wrench = rospy.get_param("free_body_sim/use_wrench", False)
         self.publish_status = rospy.get_param("free_body_sim/pub_status", False)
         self.print_ft = rospy.get_param("free_body_sim/print_ft", False)
-        self.vicon_noise_covariance_exyz = np.diag(np.square(rospy.get_param("free_body_sim/vicon_noise_std_exyz", 
-                                                               [1.01646014e-05, 4.16398263e-06, 6.27907061e-06,
-                                                                2.37471348e-04, 8.75457449e-04, 7.40946226e-05]))) # World frame
+        self.vicon_noise_covariance_exyz = np.diag(np.square(rospy.get_param("free_body_sim/vicon_noise_std_exyz"))) # World frame
         self.current_noise_std = rospy.get_param("free_body_sim/current_noise_std", 0.029008974233986275)
         self.ecb_bandwidth = rospy.get_param("free_body_sim/ecb_bandwidth_hz", 15) * 2 * np.pi # Conservative ecb bandwidth in rad/s
         self.vicon_pub_freq = rospy.get_param("free_body_sim/vicon_pub_freq", 100)
