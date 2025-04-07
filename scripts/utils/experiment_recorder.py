@@ -18,7 +18,11 @@ rospkg = rospkg.RosPack()
 pkg_path = rospkg.get_path('oct_levitation')
 
 # Use the current date and time stamp of the experiment as the folder to store its data
-data_base_folder = os.path.join(pkg_path, 'data', 'experiment_data')
+data_base_folder = rospy.get_param('experiment_analysis/base_folder', None)
+if data_base_folder is None:
+    rospy.loginfo("[oct_levitation/experiment_analysis] No base folder specified. Using default: oct_levitation/data/experiment_data.")
+    data_base_folder = os.path.join(pkg_path, 'data', 'experiment_data')
+
 sim = rospy.get_param('~sim', False)
 if sim:
     rospy.loginfo("[oct_levitation/experiment_analysis] Running in simulation mode.")

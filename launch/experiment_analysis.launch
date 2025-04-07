@@ -1,0 +1,8 @@
+<launch>
+    <arg name="sim" />
+    <arg name="experiment_folder" default=""/>
+    <node pkg="oct_levitation" name="experiment_analysis_node" type="experiment_analysis.py" output="screen">
+        <param name="experiment_folder" default="$(arg experiment_folder)"/>
+        <param name="sim" default="$(arg sim)"/>
+    </node>
+</launch>

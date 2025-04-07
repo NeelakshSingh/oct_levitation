@@ -40,7 +40,7 @@ free_body_sim:
   current_noise_std: 0.029008974233986275
   ecb_bandwidth_hz: 15
   enable_poke_disturbance: true
-  poke_period_sec: 2.0                    # Apply poke every 2 seconds
+  poke_period_sec: 5.0                    # Apply poke every 2 seconds
   poke_position_change_mm:               
     - 5.0
     - 5.0
@@ -60,5 +60,5 @@ free_body_sim:
   poke_start_time_sec: 5.0                # Time after simulation start to begin poking
 
 free_body_sim_utils:
-  delay_time: 0.0         # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
+  delay_time: 0.001         # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
   delay_repub_freq: 500   # This is actually just the freq to check when to publish delayed currents. Should be comparatively higher than the control freq.

@@ -1,0 +1,17 @@
+experiment_analysis:
+  base_folder: null # Let it be null to use the default folder
+  inkscape_path: /usr/bin/inkscape
+  show_after_each_plot: false
+  display_plots_at_end: true
+  save_plots: true
+  save_plots_as_emf: true
+  time_varying_reference: true
+
+  const_pose_reference:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+  
