@@ -1,5 +1,6 @@
 <launch>
     <arg name="sim"/>
+    <arg name="record_data" default="true"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="false"/>
@@ -10,6 +11,7 @@
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
     <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">
         <arg name="sim" value="$(arg sim)"/>
+        <arg name="record_data" value="$(arg record_data)"/>
         <arg name="hardware_connected" value="$(arg hardware_connected)"/>
         <arg name="enable_reference_pose" value="$(arg enable_reference_pose)"/>
         <arg name="run_rviz" value="$(arg run_rviz)"/>

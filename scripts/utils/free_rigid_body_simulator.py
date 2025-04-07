@@ -110,11 +110,14 @@ class DynamicsSimulator:
         self.vicon_pub_freq = rospy.get_param("free_body_sim/vicon_pub_freq", 100)
 
         ### Periodic Poke Disturbance Parameters
+        self.enable_poke_disturbance = rospy.get_param("free_body_sim/enable_poke_disturbance", True)
         self.poke_period_ns = 1e9*rospy.get_param("free_body_sim/poke_period_sec", 2) # Give a force and torque poke to the object every poke_period_sec seconds.
-        self.poke_force = np.array(rospy.get_param("free_body_sim/poke_force_mN", [0.0, 0.0, 0.0]))*1e-3 # World frame
-        self.poke_torque = np.array(rospy.get_param("free_body_sim/poke_torque_mNm", [0.0, 0.0, 0.0]))*1e-3 # World frame
+        self.poke_position_change = np.array(rospy.get_param("free_body_sim/poke_position_change_mm", [0.0, 0.0, 0.0]))*1e-3 # World frame
+        self.post_poke_velocity = np.array(rospy.get_param("free_body_sim/post_poke_velocity_mmps", [0.0, 0.0, 0.0]))*1e-3 # World frame
+        poke_orientation_rpy_change = np.deg2rad(np.array(rospy.get_param("free_body_sim/poke_rpy_change_deg", [0.0, 0.0, 0.0]))) # World frame
+        self.poke_rotmat = geometry.rotation_matrix_from_euler_xyz(poke_orientation_rpy_change)
+        self.post_poke_angular_velocity = np.deg2rad(np.array(rospy.get_param("free_body_sim/post_poke_angular_velocity_degps", [0.0, 0.0, 0.0]))) # World frame
         self.poke_start_time_ns = 1e9*rospy.get_param("free_body_sim/poke_start_time_sec", 0.0) # The time elapsed since simulation start to start poking.
-        self.poke_duration_ns = 1e9*rospy.get_param("free_body_sim/poke_duration_sec", 0.3) # The time for which the poke is applied.
         
         self.vicon_pub_time_ns = 1e9/self.vicon_pub_freq
         # Closed form soln is known, I will still do it cause why not
@@ -130,6 +133,7 @@ class DynamicsSimulator:
             self.sim_status_pub = rospy.Publisher("oct_levitation/free_rigid_body_sim/status", Bool, queue_size=1) # This is just to measure the simulator run freq
         self.__last_vicon_pub_time_ns = -np.inf
         self.__last_poke_time_ns = None
+        self.__first_command_time_ns = None
         
         self.__tf_msg.header.frame_id = self.world_frame
         self.__tf_msg.child_frame_id = self.vicon_frame
@@ -181,20 +185,33 @@ class DynamicsSimulator:
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
         if self.print_ft:
             rospy.loginfo(f"Applying F: {F}, Tau: {Tau}")
-        if self.__first_command:
-            # t_comp_poke_ns = rospy.Time.now().to_nsec() - t_comp_start_ns
-            # if self.__last_poke_time_ns is not None and (rospy.Time.now().to_nsec() + t_comp_poke_ns - self.__last_poke_time_ns) >= self.poke_period_ns:
-            #     # Then we start the current poke cycle.
-            #     if (rospy.Time.now().to_nsec() + t_comp_poke_ns - self.__last_poke_time_ns - self.poke_period_ns) <= self.poke_duration_ns:
-            #         # Then we are in the poke cycle.
-            #         F = F + self.poke_force
-            #         Tau = Tau + self.poke_torque
-            #     else:
-            #         # Then we are done with the poke cycle.
-            #         self.__last_poke_time_ns = rospy.Time.now().to_nsec()
-            F = F + self.F_amb # Adding gravity and other constant forces, IF we have started receiving commands.
 
-        p_next, v_next = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
+        # Initialize to the previous values, because depending on first command and poking these go through different changes.
+        p_next = self.p
+        v_next = self.v
+        R_next = self.R
+        omega_next = self.omega
+
+        if self.__first_command:
+            F = F + self.F_amb # Adding gravity and other constant forces, IF we have started receiving commands.
+            time_now_ns = rospy.Time.now().to_nsec()
+            t_comp_poke_ns = time_now_ns - t_comp_start_ns
+            if self.__last_poke_time_ns is not None and (time_now_ns - self.__first_command_time_ns) > self.poke_start_time_ns \
+                and (time_now_ns + t_comp_poke_ns - self.__last_poke_time_ns) >= self.poke_period_ns:
+                # Apply a sudden perturbation to the object
+                # If the controller can regulate this then we can safely assume that the controller will be able to do so in the real world
+                # since this is an impulse disturbance.
+                p_next = self.p + self.poke_position_change
+                v_next = self.post_poke_velocity
+                R_next = self.R @ self.poke_rotmat
+                omega_next = self.post_poke_angular_velocity
+
+                self.__last_poke_time_ns = time_now_ns
+            else:
+                # Take a normal simulation step.
+                p_next, v_next = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
+                R_next, omega_next = numerical.integrate_R_omega_constant_torque(self.R, self.omega, Tau, self.I_bf, dt)
+
         # Clip the position and orientation to the limits.
         self.p, v_update_mask = vector_clip_update_mask(p_next, self.p_limit)
         self.v[v_update_mask] = v_next[v_update_mask]
@@ -204,21 +221,22 @@ class DynamicsSimulator:
 
         # Numerically integration the orientation through the lie group exponential map of angular velocity.
         # The angular velocity is resolved in the local frame.
-        R_next, omega_next = numerical.integrate_R_omega_constant_torque(self.R, self.omega, Tau, self.I_bf, dt)
         self.R, omega_update_mask = clip_R_from_rpy_lim(R_next, self.rpy_limit)
         self.omega[omega_update_mask] = omega_next[omega_update_mask]
         self.omega[np.logical_not(omega_update_mask)] = 0.0 # If we clipped the orientation, we set the angular velocity to zero.
         # self.R = R_next
-        # self.omega = omega_next        
-        pose_noise = np.random.multivariate_normal(mean=np.zeros(6), cov=self.vicon_noise_covariance_exyz)
-        self.p = self.p + pose_noise[:3]
-        self.R = self.R @ geometry.rotation_matrix_from_euler_xyz(pose_noise[3:])
+        # self.omega = omega_next
 
-        self.q = geometry.quaternion_from_rotation_matrix(self.R)
+        ## Adding Feedback Noise
+        pose_noise = np.random.multivariate_normal(mean=np.zeros(6), cov=self.vicon_noise_covariance_exyz)
+        p_vicon = self.p + pose_noise[:3]
+        R_vicon = self.R @ geometry.rotation_matrix_from_euler_xyz(pose_noise[3:])
+
+        q_vicon = geometry.quaternion_from_rotation_matrix(R_vicon)
 
         self.__tf_msg.header.stamp = rospy.Time.now()
-        self.__tf_msg.transform.translation = Vector3(*self.p)
-        self.__tf_msg.transform.rotation = Quaternion(*self.q / np.linalg.norm(self.q))
+        self.__tf_msg.transform.translation = Vector3(*p_vicon)
+        self.__tf_msg.transform.rotation = Quaternion(*q_vicon / np.linalg.norm(q_vicon))
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
 
         if self.publish_status:
@@ -253,10 +271,15 @@ class DynamicsSimulator:
         if not self.__first_command:
             # For the first time, bypass the bandwidth filter.
             self.__last_output_currents = currents
-            self.__last_poke_time_ns = rospy.Time.now().to_nsec() + self.poke_start_time_ns # After the first command, we start poking.
             self.__first_command = True
+            self.__first_command_time_ns = rospy.Time.now().to_nsec()
+            if self.enable_poke_disturbance:
+                self.__last_poke_time_ns = rospy.Time.now().to_nsec() + self.poke_start_time_ns # After the first command, we start poking.
         else:
             # Apply the first order filter on the currents.
+            # The reason this line is inside the else statement is that the currents for gravity compensation are quite large in value
+            # and they won't be immediately available leading to an immediate drop in z position the first few iterations. So the first command is immediately serviced.
+            # This assumption is not wrong because of stops in the real world. One will ideally use smooth start anyways.
             self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
         noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_std, size=(8,))
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents)

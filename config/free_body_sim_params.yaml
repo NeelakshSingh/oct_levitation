@@ -39,18 +39,26 @@ free_body_sim:
     - 7.40946226e-05
   current_noise_std: 0.029008974233986275
   ecb_bandwidth_hz: 15
+  enable_poke_disturbance: true
   poke_period_sec: 2.0                    # Apply poke every 2 seconds
-  poke_force_mN:                          # Force in millinewtons, in world frame
+  poke_position_change_mm:               
+    - 5.0
+    - 5.0
+    - 5.0
+  post_poke_velocity_mmps:                        # Torque in millinewton-meters, in world frame
     - 0.0
     - 0.0
     - 0.0
-  poke_torque_mNm:                        # Torque in millinewton-meters, in world frame
+  poke_rpy_change_deg:               
+    - 10.0
+    - 10.0
+    - 10.0
+  post_poke_angular_velocity_degps:
     - 0.0
     - 0.0
     - 0.0
-  poke_start_time_sec: 0.0                # Time after simulation start to begin poking
-  poke_duration_sec: 0.3                  # Duration for which the poke is applied
+  poke_start_time_sec: 5.0                # Time after simulation start to begin poking
 
 free_body_sim_utils:
-  delay_time: 0.0                        # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
-  delay_repub_freq: 200
+  delay_time: 0.0         # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
+  delay_repub_freq: 500   # This is actually just the freq to check when to publish delayed currents. Should be comparatively higher than the control freq.

@@ -8,14 +8,17 @@
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
     <arg name="run_rqt_multiplot" default="false"/>
+    <arg name="record_data" default="true"/>
 
     <!-- Simulation parameters -->
     <rosparam command="load" file="$(find oct_levitation)/config/controller_params.yaml"/>
     <rosparam if="$(arg sim)" command="load" file="$(find oct_levitation)/config/free_body_sim_params.yaml"/>
 
-    <node pkg="oct_levitation" name="experiment_data_recorder" type="experiment_recorder.py" output="screen">
-        <param name="sim" value="$(arg sim)"/>
-    </node>
+    <group if="$(arg record_data)">
+        <node pkg="oct_levitation" name="experiment_data_recorder" type="experiment_recorder.py" output="screen">
+            <param name="sim" value="$(arg sim)"/>
+        </node>
+    </group>
 
     <group if="$(arg enable_reference_pose)">
         <node pkg="oct_levitation" name="reference_pose_publisher" type="reference_pose_publisher.py" output="screen"/>
