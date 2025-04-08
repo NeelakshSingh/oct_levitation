@@ -159,6 +159,7 @@ if sim:
     tnb_mns_system_state_dict = {}
     tnb_mns_system_state_dict['time'] = data[time_sync_topic]['time'].to_numpy()
     for i in range(8):
+        tnb_mns_system_state_dict[f"dclink_voltages_{i}"] = np.zeros(len(time))
         tnb_mns_system_state_dict[f"currents_reg_{i}"] = np.zeros_like(data['_tnb_mns_driver_des_currents_reg'][f'des_currents_reg_{i}'].to_numpy())
 
     data['_tnb_mns_driver_system_state'] = pd.DataFrame(tnb_mns_system_state_dict)
@@ -172,6 +173,10 @@ if SAVE_PLOTS:
 plotting.plot_currents_with_reference(data['_tnb_mns_driver_system_state'], des_currents_df=data['_tnb_mns_driver_des_currents_reg'],
                                       save_as=current_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 
+dclink_voltages_plt_save = None
+if SAVE_PLOTS:
+    dclink_voltages_plt_save = os.path.join(plot_folder, "dclink_voltages.svg")
+plotting.plot_dclink_voltages(data['_tnb_mns_driver_system_state'], save_as=dclink_voltages_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 ### ECB RELATED PLOTS END
 #################################
 

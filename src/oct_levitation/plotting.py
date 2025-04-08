@@ -1651,6 +1651,41 @@ def plot_actual_currents(system_state_df: pd.DataFrame,
 
     return fig, axs
 
+def plot_dclink_voltages(system_state_df: pd.DataFrame,
+                         indices: List[int]=[0, 1, 2],
+                         figsize = None,
+                         save_as: str=None,
+                         save_as_emf: bool=False,
+                         inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
+    # Plot each current column in its respective subplot
+    # Create subplots in a 2x4 layout
+    if figsize is None:
+        figsize = (3*len(indices), 3)
+    fig, axs = plt.subplots(1, len(indices), figsize=figsize, sharex=True, sharey=True)
+    fig.suptitle("Actual DC Link Voltages vs Time", fontsize=16)  # Main title for the figure
+
+    # Flatten the 2D axes array for easier iteration
+    axs = axs.flatten()
+    for i in indices:
+        axs[i].plot(system_state_df['time'], system_state_df[f'dclink_voltages_{i}'], label=f'Actual DC Link Voltage {i+1}', color='tab:blue', **kwargs)
+        axs[i].set_title(f'DC Link Voltage in PCB {i+1}')
+        axs[i].set_xlabel("Time (s)")
+        axs[i].set_ylabel("Voltage (V)")
+        axs[i].grid(True)
+
+    # Adjust layout to prevent overlap
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+
+    return fig, axs
+
 def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df: pd.DataFrame,
                                 save_as: str=None,
                                 save_as_emf: bool=False,
