@@ -12,7 +12,6 @@
 
     <!-- Simulation parameters -->
     <rosparam command="load" file="$(find oct_levitation)/config/controller_params.yaml"/>
-    <rosparam command="load" file="$(find oct_levitation)/config/experiment_analysis_params.yaml"/>
     <rosparam if="$(arg sim)" command="load" file="$(find oct_levitation)/config/free_body_sim_params.yaml"/>
 
     <group if="$(arg record_data)">

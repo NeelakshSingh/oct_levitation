@@ -1,17 +1,28 @@
 experiment_analysis:
-  base_folder: null # Let it be null to use the default folder
-  inkscape_path: /usr/bin/inkscape
-  show_after_each_plot: false
-  display_plots_at_end: true
-  save_plots: true
-  save_plots_as_emf: true
+  # base_folder: null # Let it be null to use the default folder
+  inkscape_path: /usr/bin/inkscape # Path to inkscape executable, for saving plots to emf which is best for vector graphics in powerpoint.
+  octomag_calibration_file: "mc3ao8s_md200_handp.yaml"
+  enable_topic_extraction: true # If true, then bagpyext will be used to extract CSV data from topics if no CSV files are found in the experiment folder.
+  show_after_each_plot: false # Show the plot after each plot is generated.
+  display_plots_at_end: true # Show all plots at the end of the analysis instead of one by one. If true, show_after_each_plot is ignored. If both false, no plots are shown in interactive pane.
+  save_plots: true # Saves as svg
+  save_plots_as_emf: true # Needs save_plots to be true, and requires an inkscape installation.
   time_varying_reference: true
 
-  const_pose_reference:
-    x: 0.0
-    y: 0.0
-    z: 0.0
-    roll: 0.0
-    pitch: 0.0
-    yaw: 0.0
+  ## Plot enable flags, ECB specific are always enabled
+  # mandatory flags, always required
+  enable_pose_plots: true
+  enable_force_torque_plots: true
+
+  # optional flags, default to false
+  enable_z_specific_plots: false
+  enable_alpha_beta_plots: false
+
+  const_pose_reference_mm_deg:
+    x: 0.0 # mm
+    y: 0.0 # mm
+    z: 0.0 # mm
+    roll: 0.0 # deg
+    pitch: 0.0 # deg
+    yaw: 0.0 # deg
   

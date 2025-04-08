@@ -1,12 +1,42 @@
 import os
 import warnings
 import numpy as np
-import matplotlib.pyplot as plt
+import time
 import pandas as pd
+import oct_levitation.ext.bagreader as bagpy
 
 import scipy.fft as scifft
 
-from typing import Dict, Tuple, List, Union
+from typing import Dict, Tuple, List, Union, Callable, Any
+
+###############################################
+# bagpyext based topic data extraction function.
+###############################################
+
+def extract_topic_data_csv_bagpy(dwd: Union[str, os.PathLike], logfunc: Callable[[str], Any] = print):
+    """
+    Extracts topic data from a bag file using bagpyext and saves it as CSV files. Adapted
+    to work with bagpy's extraction code.
+    """
+    listOfBagFiles = [f for f in os.listdir(dwd) if f[-4:] == ".bag"]	#get list of only bag files in current dir.
+    numberOfFiles = len(listOfBagFiles)
+    if numberOfFiles > 1:
+        logfunc("More than one bag file found in the directory. Ensure that only one bag file is present.")
+        return None
+    elif numberOfFiles == 0:
+        logfunc("No bag files found in the directory. Ensure that the directory contains exactly one bag file.")
+        return None
+    else:
+        ts = time.time()
+        count = 0
+        for bagFile in listOfBagFiles:
+            count += 1
+            print("reading file " + str(count) + " of " + str(numberOfFiles) + ": " + bagFile)
+            bag = bagpy.bagreader(os.path.join(dwd, bagFile))
+            for t in bag.topics:
+                temp_csv = bag.message_by_topic(t)
+            print("finished reading CSVs saved" + bagFile + "\n")
+        print("total time: " + str(time.time()-ts) + " seconds")
 
 ###############################################
 # Legacy utility functions from Jasan's
