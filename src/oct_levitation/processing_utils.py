@@ -32,7 +32,7 @@ def extract_topic_data_csv_bagpy(dwd: Union[str, os.PathLike], logfunc: Callable
         for bagFile in listOfBagFiles:
             count += 1
             print("reading file " + str(count) + " of " + str(numberOfFiles) + ": " + bagFile)
-            bag = bagpy.bagreader(os.path.join(dwd, bagFile))
+            bag = bagpy.bagreader(dwd, bagFile)
             for t in bag.topics:
                 temp_csv = bag.message_by_topic(t)
             print("finished reading CSVs saved" + bagFile + "\n")
@@ -243,7 +243,7 @@ def read_data_pandas(dwd, topics, interpolate_topic):
 
     dfs = {}
     for topic in topics:
-        dfs[topic] = pd.read_csv(dwd + topic + '.csv', sep=',',header=0) # header = num. of rows to skip  
+        dfs[topic] = pd.read_csv(os.path.join(dwd, topic + '.csv'), sep=',',header=0) # header = num. of rows to skip  
         
     # shift no really necessary, but makes numbers easier to read in debugging
     offset = min([dfs[topic].time[0] for topic in topics])
@@ -290,9 +290,11 @@ def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: str, t
     def latched_exclusion(topic: str) -> bool:
         return np.any(np.array([topic.endswith(suffix) for suffix in latched_topic_suffixes]))
     csv_list = [f[:-4] for f in os.listdir(dwd) if f.endswith(".csv")]
-    latched_exclusion_topics = [f for f in csv_list if latched_exclusion(f)]
+    latched_exclusion_topics = []
+    if exclude_known_latched_topics:
+        latched_exclusion_topics = [f for f in csv_list if latched_exclusion(f)]
 
-    final_exclusion_list = latched_exclusion_topics + topic_exclude_list
+    final_exclusion_list = set(latched_exclusion_topics + topic_exclude_list) # set removes repetitions
 
     csv_list_filtered = [f for f in csv_list if f not in final_exclusion_list]
     print(f"Found {len(csv_list_filtered)} CSV files: {csv_list_filtered}")

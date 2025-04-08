@@ -37,7 +37,7 @@ __version__ = "0.0.0" # this is set to actual version later
 
 
 import sys
-import ntpath
+import os.path as ntpath
 import os
 import csv
 import inspect
@@ -163,8 +163,10 @@ class bagreader:
 
     '''
 
-    def __init__(self , bagfile , delimiter=",", verbose=True , tmp = False):
+    def __init__(self, dwd , bagfile , delimiter=",", verbose=True , tmp = False):
         self.bagfile = bagfile
+        self.datafolder = dwd
+        self.bagfile_full_path = os.path.join(self.datafolder, bagfile)
         self.delimiter = delimiter
         
         slashindices = find(bagfile, '/')
@@ -177,7 +179,7 @@ class bagreader:
             self.filename = bagfile
             self.dir = './'
 
-        self.reader = rosbag.Bag(self.bagfile)
+        self.reader = rosbag.Bag(self.bagfile_full_path)
 
         info = self.reader.get_type_and_topic_info() 
         self.topic_tuple = info.topics.values()
@@ -197,7 +199,6 @@ class bagreader:
         self.start_time = self.reader.get_start_time()
         self.end_time = self.reader.get_end_time()
 
-        self.datafolder = os.path.join(os.getcwd())
 
         if tmp:
             self.datafolder = '/tmp/' + bagfile.split('/')[-1][0:-4]

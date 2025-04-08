@@ -1,8 +1,8 @@
 import os
 import numpy as np
 import rospkg
-import sys
 import rospy
+import pandas as pd
 
 import oct_levitation.plotting as plotting
 import oct_levitation.processing_utils as utils
@@ -22,6 +22,22 @@ def node_loginfo(msg):
 
 def node_logerr(msg):
     rospy.logerr(f"[oct_levitation/experiment_analysis] {msg}")
+
+def node_logwarn(msg):
+    rospy.logwarn(f"[oct_levitation/experiment_analysis] {msg}")
+
+def topic_name_to_bagpyext_name(topic_name: str) -> str:
+    """
+    Convert a ROS topic name to a CSV file name.
+    """
+    # Remove leading and trailing slashes
+    if topic_name.startswith("/"):
+        topic_name = topic_name[1:]
+    if topic_name.endswith("/"):
+        topic_name = topic_name[:-1]
+    
+    # Replace slashes with underscores
+    return "_" + topic_name.replace("/", "_")
 
 rospkg = rospkg.RosPack()
 pkg_path = rospkg.get_path('oct_levitation')
@@ -81,8 +97,7 @@ os.makedirs(plot_folder, exist_ok=True)
 if rospy.get_param("experiment_analysis/enable_topic_extraction", default=False):
     csv_list = [f for f in os.listdir(expt_dir) if f.endswith('.csv')]
     if len(csv_list) > 0:
-        node_logerr("CSV files found in the experiment folder. Please remove them before running this script.")
-        sys.exit(1)
+        node_logwarn("Extraction requested but CSV files found in the experiment folder. If the script fails, consider removing them and re-running, check that the topics needed by the plots are extracted properly.")
     else:
         node_loginfo("Extraction requested. Proceeding to extract topics from bag files.")
         utils.extract_topic_data_csv_bagpy(expt_dir, node_loginfo)
@@ -114,9 +129,40 @@ if not time_varying_reference:
 else:
     node_loginfo(f"Using time varying reference pose.")
 
-time, data = utils.read_data_pandas_all(expt_dir, interpolate_topic="_z_rp_control_single_dipole_control_input")
+time_sync_topic = rospy.get_param("experiment_analysis/plot_time_sync_topic", default="tnb_mns_driver/des_currents_reg")
+time_sync_topic = topic_name_to_bagpyext_name(time_sync_topic)
 
-time, data = utils.filter_dataset_by_time_range(data, time, 8, 30, renormalize_time=True)
+exclude_known_latched_topics = rospy.get_param("experiment_analysis/exclude_known_latched_topics", default=True)
+topics_exclusion_list = rospy.get_param("experiment_analysis/topics_exclusion_list", default=[])
+if len(topics_exclusion_list) > 0:
+    for i, topic in enumerate(topics_exclusion_list):
+        topics_exclusion_list[i] = topic_name_to_bagpyext_name(topic)
+
+time, data = utils.read_data_pandas_all(expt_dir, interpolate_topic=time_sync_topic, 
+                                        topic_exclude_list=topics_exclusion_list, 
+                                        exclude_known_latched_topics=exclude_known_latched_topics)
+
+time_filter_enable = rospy.get_param("experiment_analysis/filter_time_range/enable", default=False)
+time_filter_start = rospy.get_param("experiment_analysis/filter_time_range/start", default=None)
+time_filter_end = rospy.get_param("experiment_analysis/filter_time_range/end", default=None)
+
+if time_filter_enable:
+    if time_filter_start is None or time_filter_end is None:
+        raise ValueError("Time filter start and end must be specified.")
+    if time_filter_start > time_filter_end:
+        raise ValueError(f"Start time {time_filter_start} is greater than end time {time_filter_end}.")
+
+    time, data = utils.filter_dataset_by_time_range(data, time, time_filter_start, time_filter_end, renormalize_time=True)
+
+if sim:
+    # We need to fake the dataset for a few quantities
+    tnb_mns_system_state_dict = {}
+    tnb_mns_system_state_dict['time'] = data[time_sync_topic]['time'].to_numpy()
+    for i in range(8):
+        tnb_mns_system_state_dict[f"currents_reg_{i}"] = np.zeros_like(data['_tnb_mns_driver_des_currents_reg'][f'des_currents_reg_{i}'].to_numpy())
+
+    data['_tnb_mns_driver_system_state'] = pd.DataFrame(tnb_mns_system_state_dict)
+    node_loginfo("\033[96m Sim mode detected. Actual currents and wrench will be shown as zero \033[0m")
 
 #################################
 ### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.

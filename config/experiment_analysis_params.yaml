@@ -2,12 +2,13 @@ experiment_analysis:
   # base_folder: null # Let it be null to use the default folder
   inkscape_path: /usr/bin/inkscape # Path to inkscape executable, for saving plots to emf which is best for vector graphics in powerpoint.
   octomag_calibration_file: "mc3ao8s_md200_handp.yaml"
+  plot_time_sync_topic: "/tnb_mns_driver/des_currents_reg" # For all time synced plots, this topic is used for time interpolation of other topics for proper comparison.
   enable_topic_extraction: true # If true, then bagpyext will be used to extract CSV data from topics if no CSV files are found in the experiment folder.
   show_after_each_plot: false # Show the plot after each plot is generated.
   display_plots_at_end: true # Show all plots at the end of the analysis instead of one by one. If true, show_after_each_plot is ignored. If both false, no plots are shown in interactive pane.
   save_plots: true # Saves as svg
   save_plots_as_emf: true # Needs save_plots to be true, and requires an inkscape installation.
-  time_varying_reference: true
+  time_varying_reference: false
 
   ## Plot enable flags, ECB specific are always enabled
   # mandatory flags, always required
@@ -18,6 +19,11 @@ experiment_analysis:
   enable_z_specific_plots: false
   enable_alpha_beta_plots: false
 
+  filter_time_range:
+    enable: false # If true then specify the start and end times properly.
+    start: 0.0 # s, set to null for -inf
+    end: 0.0 # s, set to null for +inf
+
   const_pose_reference_mm_deg:
     x: 0.0 # mm
     y: 0.0 # mm
@@ -25,4 +31,14 @@ experiment_analysis:
     roll: 0.0 # deg
     pitch: 0.0 # deg
     yaw: 0.0 # deg
+
+  exclude_known_latched_topics: true # If true, then known latched topics are excluded from the analysis. This is useful for topics that are not needed for the analysis and may lead to errors in the reader if they are not excluded.
+  # In case your own topic collides with the latched topic names (suffix matched) then set this to false and add erroring topics
+  # explicitly to the topics_exclusion_list.
   
+  topics_exclusion_list: # These topics are not needed and may lead to errors in the reader if they are not excluded. Some known latched topics are automatically excluded.
+    - "/clock"
+    - "/rosout"
+    - "/rosout_agg"
+    - "/tf"
+    - "/tf_static"
