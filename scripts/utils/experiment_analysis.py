@@ -41,8 +41,8 @@ def topic_name_to_bagpyext_name(topic_name: str) -> str:
 
 rospkg = rospkg.RosPack()
 pkg_path = rospkg.get_path('oct_levitation')
-data_base_folder = rospy.get_param('experiment_analysis/base_folder', None)
-if data_base_folder is None:
+data_base_folder = rospy.get_param('experiment_analysis/base_folder', "")
+if data_base_folder == "":
     node_loginfo("No base folder specified. Using default: oct_levitation/data/experiment_data.")
     data_base_folder = os.path.join(pkg_path, 'data', 'experiment_data')
 
@@ -224,7 +224,7 @@ if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
                                                                 calibration_model,
                                                                 dipole,
                                                                 use_local_frame_for_torques=True,
-                                                                dataset_torques_in_local_frame=False,
+                                                                dataset_torques_in_local_frame=True,
                                                                 save_as=act_des_wrench_save,
                                                                 save_as_emf=SAVE_PLOTS_AS_EMF)
 ### FORCE AND TORQUE RELATED PLOTS END

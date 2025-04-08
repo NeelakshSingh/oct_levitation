@@ -1,5 +1,5 @@
 experiment_analysis:
-  # base_folder: null # Let it be null to use the default folder
+  base_folder: "" # Let it be empty string to use the default folder.
   inkscape_path: /usr/bin/inkscape # Path to inkscape executable, for saving plots to emf which is best for vector graphics in powerpoint.
   octomag_calibration_file: "mc3ao8s_md200_handp.yaml"
   plot_time_sync_topic: "/tnb_mns_driver/des_currents_reg" # For all time synced plots, this topic is used for time interpolation of other topics for proper comparison.

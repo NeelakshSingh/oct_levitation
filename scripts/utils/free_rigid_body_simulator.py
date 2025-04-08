@@ -272,7 +272,7 @@ class DynamicsSimulator:
             self.__first_command = True
             self.__first_command_time_ns = rospy.Time.now().to_nsec()
             if self.enable_poke_disturbance:
-                self.__last_poke_time_ns = rospy.Time.now().to_nsec() + self.poke_start_time_ns # After the first command, we start poking.
+                self.__last_poke_time_ns = -np.inf # After the first command, we start poking. This will force the first poke to happen at the disturbance start time.
         else:
             # Apply the first order filter on the currents.
             # The reason this line is inside the else statement is that the currents for gravity compensation are quite large in value

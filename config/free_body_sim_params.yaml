@@ -38,9 +38,9 @@ free_body_sim:
     - 8.75457449e-04
     - 7.40946226e-05
   current_noise_std: 0.029008974233986275
-  ecb_bandwidth_hz: 15
+  ecb_bandwidth_hz: 15.0
   enable_poke_disturbance: true
-  poke_period_sec: 5.0                    # Apply poke every 2 seconds
+  poke_period_sec: 1000.0                    # Apply poke at this period
   poke_position_change_mm:               
     - 5.0
     - 5.0
@@ -50,14 +50,14 @@ free_body_sim:
     - 0.0
     - 0.0
   poke_rpy_change_deg:               
-    - 10.0
-    - 10.0
-    - 10.0
+    - 5.0
+    - 5.0
+    - 5.0
   post_poke_angular_velocity_degps:
     - 0.0
     - 0.0
     - 0.0
-  poke_start_time_sec: 5.0                # Time after simulation start to begin poking
+  poke_start_time_sec: 500.0                # Time after simulation start to begin poking
 
 free_body_sim_utils:
   delay_time: 0.001         # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"

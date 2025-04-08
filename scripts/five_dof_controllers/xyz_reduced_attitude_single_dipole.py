@@ -11,6 +11,7 @@ import oct_levitation.numerical as numerical
 from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
 from control_utils.msg import VectorStamped
+from std_msgs.msg import String
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
 
@@ -30,7 +31,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.publish_desired_dipole_wrenches = False
         
         self.control_input_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_input",
-                                                       VectorStamped, queue_size=1)
+                                                       VectorStamped, queue_size=1, latch=True)
         
         # Extra publishers which I wrote only in the post init and are not mandatory end with the shorthand pub.
         self.error_state_pub = rospy.Publisher("/xyz_rp_control_single_dipole/error_states",
@@ -40,7 +41,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                                                          VectorStamped, queue_size=1)
         
         self.control_gain_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_gains",
-                                                      VectorStamped, queue_size=1, latch=True)
+                                                      String, queue_size=1, latch=True)
         
         self.publish_jma_condition = True
         self.south_pole_up = True
@@ -121,8 +122,7 @@ Fz: {self.K_z},
 RA Kp: {self.k_ra_p}, 
 RA Kd: {self.K_ra_d}""")
 
-        self.control_gains_message = VectorStamped()
-        self.control_gains_message.header.stamp = rospy.Time.now()
+        self.control_gains_message : String = String()
 
         self.diff_alpha_RA = self.control_rate
         self.diff_beta_RA = 0
@@ -133,23 +133,19 @@ RA Kd: {self.K_ra_d}""")
         self.diff_alpha_y = self.control_rate
         self.diff_beta_y = 0
 
-        gains_arr = np.concatenate(
-            (self.K_x.flatten(), 
-             self.K_y.flatten(),
-             self.K_z.flatten(),
-             [self.k_ra_p], 
-             self.K_ra_d.flatten(), 
-             np.array([self.diff_alpha_x,
-                       self.diff_beta_x,
-                       self.diff_alpha_y,
-                       self.diff_beta_y,
-                       self.diff_alpha_z,
-                       self.diff_beta_z,
-                       self.diff_alpha_RA,
-                       self.diff_beta_RA]))
-        )
-
-        self.control_gains_message.vector = gains_arr
+        self.control_gains_message.data = f"""Control gains for Fx: {self.K_x}, 
+Fy: {self.K_y},
+Fz: {self.K_z}, 
+RA Kp: {self.k_ra_p}, 
+RA Kd: {self.K_ra_d},
+Diff alpha RA: {self.diff_alpha_RA},
+Diff beta RA: {self.diff_beta_RA},
+Diff alpha z: {self.diff_alpha_z},
+Diff beta z: {self.diff_beta_z},
+Diff alpha x: {self.diff_alpha_x},
+Diff beta x: {self.diff_beta_x},
+Diff alpha y: {self.diff_alpha_y},
+Diff beta y: {self.diff_beta_y}"""
 
         self.z_dot = 0.0
         self.x_dot = 0.0
@@ -167,7 +163,7 @@ RA Kd: {self.K_ra_d}""")
         Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
         Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
         Calibration file: {self.calibration_file}
-        Gains: {gains_arr}
+        Gains: {self.control_gains_message.data}
         Calibration type: Legacy yaml file
         """
 
