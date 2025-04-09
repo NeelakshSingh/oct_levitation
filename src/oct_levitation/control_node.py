@@ -29,6 +29,7 @@ class ControlSessionNodeBase:
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
         self.control_rate = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
         self.sim_mode = rospy.get_param("oct_levitation/sim_mode") # Mandatory param, wait for it to be set.
+        self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4 # Amps
         if self.sim_mode:
             self.__MAX_CURRENT = 12.0 # Amps
@@ -155,8 +156,8 @@ class ControlSessionNodeBase:
         M = block_diag(Mt_local, Mf)
 
         JMA = M @ A
-        des_currents = np.zeros(8)
-        des_currents[self.__ACTIVE_DRIVERS] = np.linalg.pinv(JMA) @ w_com
+        des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
+        des_currents[self.__ACTIVE_DRIVERS] = np.linalg.pinv(JMA) @ w_com # active coils are connected to these active drivers
 
         jma_condition = np.linalg.cond(JMA)
 
