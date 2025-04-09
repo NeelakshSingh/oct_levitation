@@ -274,14 +274,14 @@ class DynamicsSimulator:
             self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
         wrench = WrenchStamped()
         dipole_quat, dipole_pos = geometry.numpy_arrays_from_tf_msg(self.__tf_msg.transform)
-        # Mq = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quat,
-        #                                                           dipole_strength=self.rigid_body.dipole_list[0].strength,
-        #                                                           full_mat=True,
-        #                                                           torque_first=True,
-        #                                                           dipole_axis=self.rigid_body.dipole_list[0].axis)
-        Mq = geometry.get_full_magnetic_interaction_torque_first_jit(self.rigid_body.dipole_list[0].axis,
-                                                                     dipole_quat,
-                                                                     self.rigid_body.dipole_list[0].strength)
+        Mq = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quat,
+                                                                  dipole_strength=self.rigid_body.dipole_list[0].strength,
+                                                                  full_mat=True,
+                                                                  torque_first=True,
+                                                                  dipole_axis=self.rigid_body.dipole_list[0].axis)
+        # Mq = geometry.get_full_magnetic_interaction_torque_first_jit(self.rigid_body.dipole_list[0].axis,
+        #                                                              dipole_quat,
+        #                                                              self.rigid_body.dipole_list[0].strength)
         noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_std, size=(8,))
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents) # Already a compiled function
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.

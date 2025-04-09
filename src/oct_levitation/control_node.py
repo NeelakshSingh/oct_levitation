@@ -42,12 +42,12 @@ class ControlSessionNodeBase:
         self.compute_time_pub = None
         self.__ACTIVE_COILS = [0, 1, 2, 3, 5] # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
         self.__ACTIVE_DRIVERS = [0, 1, 2, 4, 5] # These are the exact driver numbers these coils are connected to.
-        if self.__ACTIVE_DRIVERS.shape != self.__ACTIVE_COILS.shape:
+        if len(self.__ACTIVE_DRIVERS) != len(self.__ACTIVE_COILS):
             msg = f"Active coils and drivers must be the same size. Active coils: {self.__ACTIVE_COILS}, Active drivers: {self.__ACTIVE_DRIVERS}"
             rospy.logerr(msg)
             raise ValueError(msg)
-        self.INITIAL_DESIRED_POSITION = np.array([0, 0, 0])
-        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0, 0, 0])
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0.0, 0.0, 0.0])
         self.warn_jma_condition = True
         self.publish_jma_condition = True
         if self.publish_jma_condition:
@@ -60,7 +60,7 @@ class ControlSessionNodeBase:
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = None # Set this in post init
         self.coils_to_enable = [True]*9
         self.coils_to_enable[6] = False # Coil 7 is not being used at the moment.
-        self.HARDWARE_CONNECTED = False
+        self.HARDWARE_CONNECTED = False # to force explicit enablement in post init.
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
@@ -85,7 +85,7 @@ class ControlSessionNodeBase:
         self.computation_time_sample = 0
         self.current_computation_time = 0
 
-        self.tracking_poses_on = True
+        self.tracking_poses_on = rospy.get_param("oct_levitation/pose_tracking")
 
         ######## POST INIT CALL ########
         self.post_init()
@@ -112,6 +112,9 @@ class ControlSessionNodeBase:
                                              for topic_name in self.rigid_body_dipole.dipole_wrench_topic_list]
         
         ######## HARDWARE ACTIVATION START ########
+        # if in simulation mode, override the hardware connected flag
+        if self.sim_mode:
+            self.HARDWARE_CONNECTED = False
         self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
         ######## HARDWARE ACTIVATION END ########
 
@@ -157,8 +160,14 @@ class ControlSessionNodeBase:
         M = block_diag(Mt_local, Mf)
 
         JMA = M @ A
-        des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
-        des_currents[self.__ACTIVE_DRIVERS] = np.linalg.pinv(JMA) @ w_com # active coils are connected to these active drivers
+        computed_currents = np.linalg.pinv(JMA) @ w_com
+        if self.sim_mode:
+            des_currents = np.zeros(8)
+            des_currents[self.__ACTIVE_COILS] = computed_currents
+        else:
+            # Due to real world coils being connected to a different limited set of drivers.
+            des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
+            des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
 
         jma_condition = np.linalg.cond(JMA)
 
@@ -224,9 +233,9 @@ class ControlSessionNodeBase:
         # the specifications.
         self.control_input_publisher.publish(self.control_input_message)
         des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
-        des_currents = np.clip(des_currents, -self.MAX_CURRENT, self.MAX_CURRENT)
-        if np.any(np.abs(des_currents) == self.MAX_CURRENT):
-            rospy.logwarn_once(f"CURRENT LIMIT OF {self.MAX_CURRENT}A HIT!")
+        des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
+        if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
+            rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")
         
         ### PUBLISH CURRENTS ACCORDING TO JASAN'S PROTOCOL ###
         self.publish_currents_impl(des_currents, self.desired_currents_msg, self.currents_publisher)

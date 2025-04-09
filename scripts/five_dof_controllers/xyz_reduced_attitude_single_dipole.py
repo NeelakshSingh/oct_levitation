@@ -240,7 +240,9 @@ Dipole object used: {self.rigid_body_dipole}
         y_com = tf_msg.transform.translation.y
 
         ### Reference for tracking
-        desired_quaternion = geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform)
+        # The following explicit type casting is required by numba jit versions. np.linalg.norm
+        # will fail for int arguments, in some cases this argument can be an int.
+        desired_quaternion = np.asarray(geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform), dtype=np.float64)
         ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
         ref_z = self.last_reference_tf_msg.transform.translation.z
         ref_x = self.last_reference_tf_msg.transform.translation.x
@@ -253,7 +255,6 @@ Dipole object used: {self.rigid_body_dipole}
         self.ref_actual_msg.vector = np.concatenate((np.array([x_com, ref_x, y_com, ref_y, z_com, ref_z]),
                                                      np.rad2deg(np.array([phi, phi_ref, theta, theta_ref]))))
         self.ref_actual_pub.publish(self.ref_actual_msg)
-
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
         R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
 
