@@ -9,20 +9,22 @@ from geometry_msgs.msg import TransformStamped, Transform
 
 EPSILON_TOLERANCE = 1e-15 # for numerical stability
 CLOSE_CHECK_TOLERANCE = 1e-3
-IDENTITY_QUATERNION = np.array([0, 0, 0, 1]) # Identity quaternion
+IDENTITY_QUATERNION = np.array([0.0, 0.0, 0.0, 1.0]) # Identity quaternion
 
+@numba.njit
 def check_if_unit_quaternion(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
-    return np.isclose(np.linalg.norm(q), 1.0, rtol=CLOSE_CHECK_TOLERANCE)
+    return (np.abs(np.linalg.norm(q) - 1.0) <= CLOSE_CHECK_TOLERANCE)
 
+@numba.njit
 def check_if_unit_quaternion_raise_error(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
     if not check_if_unit_quaternion(q):
-        raise ValueError(f"Quaternion must be a unit quaternion. Received: {q}")
+        raise ValueError(f"Quaternion must be a unit quaternion.") # Constant message in order to support jit
 
 def numpy_quaternion_from_tf_msg(tf_msg: Transform):
     rotation = np.array([
@@ -51,6 +53,7 @@ def numpy_arrays_from_tf_msg(tf_msg: Transform):
 
     return rotation, translation
 
+@numba.njit
 def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -58,10 +61,11 @@ def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
         v (np.ndarray) : 3x1 array
     """
     assert v.size == 3, "Input vector must have 3 elements."
-    v = v.flatten()
     return np.array([[0, -v[2], v[1]],
                      [v[2], 0, -v[0]],
                      [-v[1], v[0], 0]])
+
+get_skew_symmetric_matrix(np.zeros(3)) # Force compilation on import
 
 def get_homogeneous_vector(v: np.ndarray) -> np.ndarray:
     """
@@ -237,6 +241,7 @@ def transformation_matrix_from_compose_transforms(*transforms: Transform) -> Tra
     
     return T
 
+@numba.njit
 def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -245,9 +250,31 @@ def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
     check_if_unit_quaternion_raise_error(q)
     q = q/(np.linalg.norm(q) + EPSILON_TOLERANCE)
-    return np.block([[q[3], -q[:3].reshape(1, 3)],
-                     [q[:3].reshape(3, 1), q[3]*np.eye(3) + get_skew_symmetric_matrix(q[:3])]])
+    q_left = np.zeros((4, 4))
+    q_left[0, 0] = q[3]
+    q_left[0, 1] = -q[0]
+    q_left[0, 2] = -q[1]
+    q_left[0, 3] = -q[2]
+    q_left[1, 0] = q[0]
+    q_left[2, 0] = q[1]
+    q_left[3, 0] = q[2]
+    q_left[1, 1] = q[3]
+    q_left[1, 2] = -q[2]
+    q_left[1, 3] = q[1]
+    q_left[2, 1] = q[2]
+    q_left[2, 2] = q[3]
+    q_left[2, 3] = -q[0]
+    q_left[3, 1] = -q[1]
+    q_left[3, 2] = q[0]
+    q_left[3, 3] = q[3]
+    return q_left
 
+    # return np.block([[q[3], -q[:3].reshape(1, 3)],
+                    #  [q[:3].reshape(3, 1), q[3]*np.eye(3) + get_skew_symmetric_matrix(q[:3])]])
+
+get_left_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation on import
+
+@numba.njit
 def get_right_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -256,9 +283,31 @@ def get_right_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
     check_if_unit_quaternion_raise_error(q)
     q = q/(np.linalg.norm(q) + EPSILON_TOLERANCE)
-    return np.block([[q[3], -q[:3].reshape(1, 3)],
-                     [q[:3].reshape(3, 1), q[3]*np.eye(3) - get_skew_symmetric_matrix(q[:3])]])
+    q_right = np.zeros((4, 4))
+    q_right[0, 0] = q[3]
+    q_right[0, 1] = -q[0]
+    q_right[0, 2] = -q[1]
+    q_right[0, 3] = -q[2]
+    q_right[1, 0] = q[0]
+    q_right[2, 0] = q[1]
+    q_right[3, 0] = q[2]
 
+    q_right[1, 1] = q[3]
+    q_right[1, 2] = q[2]
+    q_right[1, 3] = -q[1]
+    q_right[2, 1] = -q[2]
+    q_right[2, 2] = q[3]
+    q_right[2, 3] = q[0]
+    q_right[3, 1] = q[1]
+    q_right[3, 2] = -q[0]
+    q_right[3, 3] = q[3]
+    return q_right
+    # return np.block([[q[3], -q[:3].reshape(1, 3)],
+    #                  [q[:3].reshape(3, 1), q[3]*np.eye(3) - get_skew_symmetric_matrix(q[:3])]])
+
+get_right_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation on import
+
+@numba.njit
 def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -274,12 +323,14 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     check_if_unit_quaternion(q)
     v_mag = np.linalg.norm(v)
     v = v/(v_mag + EPSILON_TOLERANCE) # normalizing
-    v_aug = np.vstack((0, v.reshape(3, 1)))
+    v_aug = np.vstack((np.array([[0]]), v.reshape(3, 1))) # Tuple of arrays needed for numba
     Ml = get_left_quaternion_matrix(q)
     q_T = np.array([-q[0], -q[1], -q[2], q[3]])
     Mr = get_right_quaternion_matrix(q_T)
     v_rot = (Ml @ Mr @ v_aug).flatten()
     return v_rot[1:]*v_mag
+
+rotate_vector_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation on import
 
 def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
@@ -584,6 +635,7 @@ def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray)
 # Magnetic Interaction Matrix Calculations
 #############################################
 
+@numba.njit
 def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray:
     M_F = np.array([
                 [ dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
@@ -592,8 +644,13 @@ def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray
             ])
     return M_F
 
+magnetic_interaction_grad5_to_force(np.array([1.0, 0.0, 0.0])) # Force compilation on import
+
+@numba.njit
 def magnetic_interaction_field_to_torque(dipole_moment: np.ndarray) -> np.ndarray:
     return get_skew_symmetric_matrix(dipole_moment)
+
+magnetic_interaction_field_to_torque(np.array([1.0, 0.0, 0.0])) # Force compilation on import
 
 def magnetic_interaction_field_to_local_torque(dipole_strength: float,
                                                dipole_axis: np.ndarray,
@@ -709,3 +766,26 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                                        full_mat=full_mat,
                                                        torque_first=torque_first,
                                                        dipole_axis=dipole_axis)
+
+@numba.njit
+def get_full_magnetic_interaction_torque_first_jit(dipole_axis: np.ndarray,
+                                                   dipole_quaternion: np.ndarray,
+                                                   dipole_strength: np.float64) -> np.ndarray:
+    """
+    This function is a faster jit version to get the magnetic interaction matrix for the world frame forces and torques.
+    """
+    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
+    dipole_moment = dipole_strength * rotate_vector_from_quaternion(dipole_quaternion, dipole_axis)
+    M_Tau = magnetic_interaction_field_to_torque(dipole_moment)
+
+    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
+    M = np.zeros((6, 8))
+
+    M[:3, :3] = M_Tau
+    M[3:, 3:] = M_F
+
+    return M
+
+get_full_magnetic_interaction_torque_first_jit(np.array([0.0, 0.0, 1.0]),
+                                                np.array([0.0, 0.0, 0.0, 1.0]),
+                                                1.0) # Force compilation on import

@@ -27,9 +27,11 @@ class ControlSessionNodeBase:
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
-        self.MAX_CURRENT = 4 # Amps
-
-        self.control_rate = rospy.get_param("~control_rate", 100)
+        self.control_rate = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
+        self.sim_mode = rospy.get_param("oct_levitation/sim_mode") # Mandatory param, wait for it to be set.
+        self.__MAX_CURRENT = 4 # Amps
+        if self.sim_mode:
+            self.__MAX_CURRENT = 12.0 # Amps
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
@@ -37,9 +39,14 @@ class ControlSessionNodeBase:
         self.computation_time_avg_samples = rospy.get_param("~computation_time_avg_samples", 100)
         self.computation_time_topic = rospy.get_param("~computation_time_topic", "control_session/computation_time")
         self.compute_time_pub = None
-        self.ACTIVE_COILS = np.array([0, 1, 2, 3, 4, 5, 6, 7])
-        self.INITIAL_POSITION = np.array([0, 0, 0])
-        self.INITIAL_ORIENTATION_EXYZ = np.array([0, 0, 0])
+        self.__ACTIVE_COILS = np.array([0, 1, 2, 3, 5]) # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
+        self.__ACTIVE_DRIVERS = np.array([0, 1, 2, 4, 5])
+        if self.__ACTIVE_DRIVERS.shape != self.__ACTIVE_COILS.shape:
+            msg = f"Active coils and drivers must be the same size. Active coils: {self.__ACTIVE_COILS}, Active drivers: {self.__ACTIVE_DRIVERS}"
+            rospy.logerr(msg)
+            raise ValueError(msg)
+        self.INITIAL_DESIRED_POSITION = np.array([0, 0, 0])
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0, 0, 0])
         self.warn_jma_condition = True
         self.publish_jma_condition = True
         if self.publish_jma_condition:
@@ -83,7 +90,8 @@ class ControlSessionNodeBase:
         self.post_init()
 
         rospy.logwarn(f"[Control Node] HARDWARE_CONNECTED: {self.HARDWARE_CONNECTED}")
-        rospy.logwarn(f"[Control Node] Active Coils: {self.ACTIVE_COILS}")
+        rospy.logwarn(f"[Control Node] Active Coils: {self.__ACTIVE_COILS}")
+        rospy.logwarn(f"[Control Node] Active Driver Coils: {self.__ACTIVE_DRIVERS}")
         
         self.mpem_model = mag_manip.ForwardModelMPEM()
         self.mpem_model.setCalibrationFile(os.path.join(self.calfile_base_path, self.calibration_file))
@@ -117,8 +125,8 @@ class ControlSessionNodeBase:
         
         self.tf_reference_sub = None
         self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
-        self.last_reference_tf_msg.transform.translation = Vector3(*self.INITIAL_POSITION)
-        self.last_reference_tf_msg.transform.rotation = Quaternion(*geometry.quaternion_from_euler_xyz(self.INITIAL_ORIENTATION_EXYZ))
+        self.last_reference_tf_msg.transform.translation = Vector3(*self.INITIAL_DESIRED_POSITION)
+        self.last_reference_tf_msg.transform.rotation = Quaternion(*geometry.quaternion_from_euler_xyz(self.INITIAL_DESIRED_ORIENTATION_EXYZ))
         self.last_reference_tf_msg.transform.rotation = Quaternion(0, 0, 0, 1)
         if self.tracking_poses_on:
             self.tf_reference_sub = rospy.Subscriber(self.tf_reference_sub_topic, TransformStamped,
@@ -143,12 +151,12 @@ class ControlSessionNodeBase:
                                                                        dipole.axis,
                                                                        dipole_quaternion)[:2] # Only first two rows will be nonzero
         A = self.mpem_model.getActuationMatrix(dipole_position)
-        A = A[:, self.ACTIVE_COILS] # only use active coils to compute currents.
+        A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
         M = block_diag(Mt_local, Mf)
 
         JMA = M @ A
         des_currents = np.zeros(8)
-        des_currents[self.ACTIVE_COILS] = np.linalg.pinv(JMA) @ w_com
+        des_currents[self.__ACTIVE_DRIVERS] = np.linalg.pinv(JMA) @ w_com
 
         jma_condition = np.linalg.cond(JMA)
 

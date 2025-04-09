@@ -19,12 +19,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.HARDWARE_CONNECTED = False
-        self.ACTIVE_COILS = np.array([2, 3, 4, 5, 7])
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_POSITION = np.array([0.0, 0.0, 0.0])
-        self.MAX_CURRENT = 15.0
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
 
-        self.control_rate = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
         self.dt = 1/self.control_rate
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.publish_desired_com_wrenches = True
@@ -86,7 +83,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
         # Denormalize the control gains.
-        self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
+        # self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
+        # self.K_z = np.array([[19.45306157, 2.5]])
+        self.K_z = np.array([[19.45306157, 3]])
         # self.K_z = np.asarray(Kz_norm)
 
         # Since X and Y have the same dynamics, we use the same gains.
@@ -145,7 +144,13 @@ Diff beta z: {self.diff_beta_z},
 Diff alpha x: {self.diff_alpha_x},
 Diff beta x: {self.diff_beta_x},
 Diff alpha y: {self.diff_alpha_y},
-Diff beta y: {self.diff_beta_y}"""
+Diff beta y: {self.diff_beta_y},
+LQR Parameters:
+Qz: {Qz},
+Rz: {Rz},
+Tzx: {Tzx},
+Tzu: {Tzu},
+Tzy: {Tzy}"""
 
         self.z_dot = 0.0
         self.x_dot = 0.0
@@ -159,13 +164,14 @@ Diff beta y: {self.diff_beta_y}"""
 
         self.__first_reading = True
         self.metadata_msg.data = f"""
-        Experiment metadata.
-        Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
-        Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
-        Calibration file: {self.calibration_file}
-        Gains: {self.control_gains_message.data}
-        Calibration type: Legacy yaml file
-        """
+Experiment metadata.
+Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
+Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
+Calibration file: {self.calibration_file}
+Gains: {self.control_gains_message.data}
+Calibration type: Legacy yaml file
+Dipole object used: {self.rigid_body_dipole}
+"""
 
     def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
