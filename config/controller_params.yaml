@@ -1,3 +1,4 @@
 oct_levitation:
   control_freq: 100
   sim_mode: true
+  publish_computation_time: true

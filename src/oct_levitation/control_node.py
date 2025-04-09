@@ -14,7 +14,7 @@ from mag_manip import mag_manip
 from typing import List
 from scipy.linalg import block_diag
 
-from control_utils.general.utilities_jecb import init_hardware_and_shutdown_handler
+from control_utils.general.utilities import init_system
 
 class ControlSessionNodeBase:
     """
@@ -36,12 +36,12 @@ class ControlSessionNodeBase:
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
-        self.publish_computation_time = rospy.get_param("~log_computation_time", True)
+        self.publish_computation_time = rospy.get_param("oct_levitation/publish_computation_time")
         self.computation_time_avg_samples = rospy.get_param("~computation_time_avg_samples", 100)
         self.computation_time_topic = rospy.get_param("~computation_time_topic", "control_session/computation_time")
         self.compute_time_pub = None
-        self.__ACTIVE_COILS = np.array([0, 1, 2, 3, 5]) # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
-        self.__ACTIVE_DRIVERS = np.array([0, 1, 2, 4, 5])
+        self.__ACTIVE_COILS = [0, 1, 2, 3, 5] # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
+        self.__ACTIVE_DRIVERS = [0, 1, 2, 4, 5] # These are the exact driver numbers these coils are connected to.
         if self.__ACTIVE_DRIVERS.shape != self.__ACTIVE_COILS.shape:
             msg = f"Active coils and drivers must be the same size. Active coils: {self.__ACTIVE_COILS}, Active drivers: {self.__ACTIVE_DRIVERS}"
             rospy.logerr(msg)
@@ -77,7 +77,6 @@ class ControlSessionNodeBase:
         self.tfsub_callback_style_control_loop = True
         
         # Set empty messages to be set in the main control logic.
-        self.desired_currents_msg : DesCurrentsReg = None
         self.com_wrench_msg : WrenchStamped = None
         self.dipole_wrench_messages: List[WrenchStamped] = None
         self.control_input_message: VectorStamped = None
@@ -88,7 +87,9 @@ class ControlSessionNodeBase:
 
         self.tracking_poses_on = True
 
+        ######## POST INIT CALL ########
         self.post_init()
+        ######## POST INIT CALL ########
 
         rospy.logwarn(f"[Control Node] HARDWARE_CONNECTED: {self.HARDWARE_CONNECTED}")
         rospy.logwarn(f"[Control Node] Active Coils: {self.__ACTIVE_COILS}")
@@ -99,9 +100,7 @@ class ControlSessionNodeBase:
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
-        self.tf_reference_sub_topic = self.tf_sub_topic + "_reference"
-
-        init_hardware_and_shutdown_handler(self.HARDWARE_CONNECTED, coils_to_enable=self.coils_to_enable)
+        self.tf_reference_sub_topic = self.tf_sub_topic + "_reference"        
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher = rospy.Publisher(self.rigid_body_dipole.com_wrench_topic,
@@ -112,7 +111,9 @@ class ControlSessionNodeBase:
             self.dipole_wrench_publishers = [rospy.Publisher(topic_name, WrenchStamped, queue_size= 1)
                                              for topic_name in self.rigid_body_dipole.dipole_wrench_topic_list]
         
-        self.currents_publisher = rospy.Publisher("tnb_mns_driver/des_currents_reg", DesCurrentsReg, queue_size=1)
+        ######## HARDWARE ACTIVATION START ########
+        self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
+        ######## HARDWARE ACTIVATION END ########
 
         # Start the timer
         timer_start_delay = rospy.get_param("~timer_start_delay", 1) # seconds
@@ -227,8 +228,8 @@ class ControlSessionNodeBase:
         if np.any(np.abs(des_currents) == self.MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.MAX_CURRENT}A HIT!")
         
-        self.desired_currents_msg.des_currents_reg = des_currents
-        self.currents_publisher.publish(self.desired_currents_msg)
+        ### PUBLISH CURRENTS ACCORDING TO JASAN'S PROTOCOL ###
+        self.publish_currents_impl(des_currents, self.desired_currents_msg, self.currents_publisher)
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher.publish(self.com_wrench_msg)
