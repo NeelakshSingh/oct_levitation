@@ -20,8 +20,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
     def post_init(self):
         ## EXPERIMENT FLAGS
         self.HARDWARE_CONNECTED = False
-        self.ORIENTATION_VARYING_Mf = False
-        self.POSITION_VARYING_Af = True
+        self.INITIAL_DESIRED_POSITION = np.array([0.005, 0.0, 0.0])
 
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
@@ -203,11 +202,13 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
         F_x = u[0, 0]
         com_wrench_des = np.array([0, 0, 0, F_x, 0, 0])
+        com_wrench_5dof = np.array([0, 0, F_x, 0, 0])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
         
         # Performing simplified allocation to get the currents
-        des_currents = self.local_frame_torque_global_force_allocation(tf_msg, F_x)
+        # des_currents = self.local_frame_torque_global_force_allocation(tf_msg, F_x)
+        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, com_wrench_5dof)
         # self.desired_currents_msg.des_currents_reg = des_currents.flatten() * self.SoftStarter(self.dt)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
