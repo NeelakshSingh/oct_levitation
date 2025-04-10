@@ -130,9 +130,11 @@ class ControlSessionNodeBase:
         
         self.tf_reference_sub = None
         self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
+        # Type casting to float to make sure JIT functions work with initial values.
+        self.INITIAL_DESIRED_POSITION = np.asarray(self.INITIAL_DESIRED_POSITION, dtype=np.float64)
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.asarray(self.INITIAL_DESIRED_ORIENTATION_EXYZ, dtype=np.float64)
         self.last_reference_tf_msg.transform.translation = Vector3(*self.INITIAL_DESIRED_POSITION)
         self.last_reference_tf_msg.transform.rotation = Quaternion(*geometry.quaternion_from_euler_xyz(self.INITIAL_DESIRED_ORIENTATION_EXYZ))
-        self.last_reference_tf_msg.transform.rotation = Quaternion(0, 0, 0, 1)
         if self.tracking_poses_on:
             self.tf_reference_sub = rospy.Subscriber(self.tf_reference_sub_topic, TransformStamped,
                                                      self.tf_reference_sub_callback, queue_size=1)

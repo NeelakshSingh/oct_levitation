@@ -17,8 +17,6 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
     def post_init(self):
         self.HARDWARE_CONNECTED = False
-        # self.ACTIVE_COILS = np.array([0, 1, 2, 3, 4, 5, 6, 7])
-        self.ACTIVE_COILS = np.array([2, 3, 4, 5, 7])
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -48,8 +46,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
             
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
 
-        self.kp = 4.5
-        self.Kd = np.diag([1.0, 1.0])*3.0
+        self.kp = 50
+        self.Kd = np.diag([1.0, 1.0])*30
 
         # self.kp = 50
         # self.Kd = np.diag([1.0, 1.0])*30
