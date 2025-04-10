@@ -30,8 +30,10 @@ class ControlSessionNodeBase:
         self.control_rate = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
         self.sim_mode = rospy.get_param("oct_levitation/sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
-        self.__MAX_CURRENT = 4 # Amps
+        self.__MAX_CURRENT = 4.0 # Amps
+        self.HARDWARE_CONNECTED = True # to force explicit enablement in post init.
         if self.sim_mode:
+            self.HARDWARE_CONNECTED = False
             self.__MAX_CURRENT = 12.0 # Amps
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
@@ -60,7 +62,6 @@ class ControlSessionNodeBase:
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = None # Set this in post init
         self.coils_to_enable = [True]*9
         self.coils_to_enable[6] = False # Coil 7 is not being used at the moment.
-        self.HARDWARE_CONNECTED = False # to force explicit enablement in post init.
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)

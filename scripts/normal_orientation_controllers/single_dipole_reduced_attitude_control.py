@@ -16,7 +16,6 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
