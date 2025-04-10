@@ -518,3 +518,41 @@ def get_signal_variance(signal: np.ndarray):
 
 def get_signal_std_deviation(signal: np.ndarray):
     return np.sqrt(get_signal_variance(signal))
+
+###############################################
+# Extracted Dataset Specific Functions
+###############################################
+
+def adjust_current_datasets_for_coil_subset(des_currents_reg_df: pd.DataFrame,
+                                            system_state_df: pd.DataFrame,
+                                            active_coils: List[int],
+                                            active_drivers: List[int]):
+    """
+    Adjusts the des_currents_reg_df and system_state_df DataFrames which are
+    obtained from a specific set of active physical coils connected to a set of 
+    active drivers so that they work with the plotting functions.
+    """
+    full_des_currents_idx = [f"des_currents_reg_{i}" for i in range(8)]
+    full_actual_currents_idx = [f"currents_reg_{i}" for i in range(8)]
+
+    active_coil_cols_des = [full_des_currents_idx[i] for i in active_coils]
+    active_driver_cols_des = [full_des_currents_idx[i] for i in active_drivers]
+    active_coil_cols_actual = [full_actual_currents_idx[i] for i in active_coils]
+    active_driver_cols_actual = [full_actual_currents_idx[i] for i in active_drivers]
+    
+    for des_col, act_col in zip(full_des_currents_idx, full_actual_currents_idx):
+        if des_col not in active_driver_cols_des:
+            des_currents_reg_df[des_col] = np.zeros(len(des_currents_reg_df))
+        if act_col not in active_driver_cols_actual:
+            system_state_df[act_col] = np.zeros(len(system_state_df))
+    
+    des_currents_reg_df[active_coil_cols_des] = des_currents_reg_df[active_driver_cols_des]
+    system_state_df[active_coil_cols_actual] = system_state_df[active_driver_cols_actual]
+
+    for des_col, act_col in zip(active_driver_cols_des, active_driver_cols_actual):
+        if des_col not in active_coil_cols_des:
+            des_currents_reg_df[des_col] = np.zeros(len(des_currents_reg_df))
+        if act_col not in active_coil_cols_actual:
+            system_state_df[act_col] = np.zeros(len(system_state_df))
+
+    return des_currents_reg_df, system_state_df

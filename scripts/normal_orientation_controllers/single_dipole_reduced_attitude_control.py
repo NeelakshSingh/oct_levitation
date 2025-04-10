@@ -45,7 +45,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
             
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
 
-        self.kp = 50
+        self.kp = 70
         self.Kd = np.diag([1.0, 1.0])*30
 
         # self.kp = 50

@@ -8,11 +8,15 @@
     <arg name="body_fixed"/>
 
     <group unless="$(arg body_fixed)">
-        <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen"/>
+        <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen">
+            <param name="sim_mode" value="$(arg sim)"/>
+        </node>
     </group>
 
     <group if="$(arg body_fixed)">
-        <node pkg="oct_levitation" name="single_dipole_body_fixed_reduced_attitude_control" type="single_dipole_body_fixed_reduced_attitude_control.py" output="screen"/>
+        <node pkg="oct_levitation" name="single_dipole_body_fixed_reduced_attitude_control" type="single_dipole_body_fixed_reduced_attitude_control.py" output="screen">
+            <param name="sim_mode" value="$(arg sim)"/>
+        </node>
     </group>
 
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->

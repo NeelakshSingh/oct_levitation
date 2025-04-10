@@ -28,7 +28,7 @@ class ControlSessionNodeBase:
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
         self.control_rate = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
-        self.sim_mode = rospy.get_param("oct_levitation/sim_mode") # Mandatory param, wait for it to be set.
+        self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
         self.HARDWARE_CONNECTED = True # to force explicit enablement in post init.

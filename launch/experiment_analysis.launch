@@ -1,5 +1,5 @@
 <launch>
-    <arg name="sim" default="true" />
+    <arg name="sim" default="false" />
     <arg name="experiment_folder" default=""/>
     <rosparam command="load" file="$(find oct_levitation)/config/experiment_analysis_params.yaml"/>
     <node pkg="oct_levitation" name="experiment_analysis_node" type="experiment_analysis.py" output="screen">

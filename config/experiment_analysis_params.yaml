@@ -1,4 +1,17 @@
 experiment_analysis:
+  n_coils: 6 # Number of coils in the experiment. This is used to determine the number of plots to be generated.
+  active_coils:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 5
+  active_drivers:
+    - 0
+    - 1
+    - 2
+    - 4
+    - 5
   base_folder: "" # Let it be empty string to use the default folder.
   inkscape_path: /usr/bin/inkscape # Path to inkscape executable, for saving plots to emf which is best for vector graphics in powerpoint.
   octomag_calibration_file: "mc3ao8s_md200_handp.yaml"

@@ -112,6 +112,16 @@ INKSCAPE_PATH = rospy.get_param("experiment_analysis/inkscape_path", default="/u
 SAVE_PLOTS = rospy.get_param("experiment_analysis/save_plots", default=True)
 SAVE_PLOTS_AS_EMF = rospy.get_param("experiment_analysis/save_plots_as_emf", default=True)
 
+ACTIVE_COILS = rospy.get_param("experiment_analysis/active_coils", default=[0, 1, 2, 3, 4, 5, 6, 7])
+ACTIVE_DRIVERS = rospy.get_param("experiment_analysis/active_drivers", default=[0, 1, 2, 3, 4, 5, 6, 7])
+if len(ACTIVE_DRIVERS) != len(ACTIVE_COILS):
+    raise ValueError(f"Active drivers list: {ACTIVE_DRIVERS} does not match active coils list: {ACTIVE_COILS}")
+
+if len(ACTIVE_COILS) != 8:
+    rospy.loginfo(f"Subset of coils active. Active coils list: {ACTIVE_COILS}")
+    rospy.loginfo(f"Subset connected to drivers: {ACTIVE_DRIVERS}")
+
+
 time_varying_reference = rospy.get_param("experiment_analysis/time_varying_reference", default=False)
 
 const_reference_pose = np.zeros(7)
@@ -164,6 +174,12 @@ if sim:
 
     data['_tnb_mns_driver_system_state'] = pd.DataFrame(tnb_mns_system_state_dict)
     node_loginfo("\033[96m Sim mode detected. Actual currents and wrench will be shown as zero \033[0m")
+
+#################################
+# Dataset pre-processing
+data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'] = utils.adjust_current_datasets_for_coil_subset(
+    data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS
+)
 
 #################################
 ### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.
