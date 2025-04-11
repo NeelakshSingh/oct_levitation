@@ -3,6 +3,7 @@ import numpy as np
 import rospkg
 import rospy
 import pandas as pd
+import subprocess
 
 import oct_levitation.plotting as plotting
 import oct_levitation.processing_utils as utils
@@ -305,6 +306,49 @@ if rospy.get_param("experiment_analysis/enable_alpha_beta_plots", default=False)
                                                     save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 
 ### NORMAL SPECIFIC PLOTS END
+#################################
+
+#################################
+### UTILITY CALLS - Note taking, and other features to come
+observations_editor = rospy.get_param("experiment_analysis/observations_editor", default="nano")
+def open_editor_for_notes(directory=".", filename_prefix="observation"):
+    # Create the observations directory if needed
+    os.makedirs(directory, exist_ok=True)
+
+    # Create a timestamped filename, if no file with prefix specific exists
+    list = os.listdir(directory)
+    filename = None
+    exists = False
+    for file in list:
+        if file.startswith(filename_prefix):
+            filename = file
+            exists = True
+            break
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{filename_prefix}_{timestamp}.txt"
+    filepath = os.path.join(directory, filename)
+
+    # Create the file if it doesn't exist
+    if not exists:
+        with open(filepath, 'w') as f:
+            f.write("# Enter your observations below. Timestamp in the name refers to the creation of the file when the analysis script was run.\n")
+            f.write(f"# FIRST Experiment analysis script run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    else:
+        with open(filepath, 'a') as f:
+            f.write(f"\n# Experiment analysis script run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+    # Open the file in a text editor
+    subprocess.Popen(f"{observations_editor} {filepath}", shell=True)
+
+    print(f"Editor launched asynchronously. You can write notes at: {filepath}")
+
+    return filepath
+
+if rospy.get_param("~note_observations", default=False):
+    open_editor_for_notes(os.path.join(expt_dir, "notes"), filename_prefix="observations")
+
+### UTILITY CALLS END
 #################################
 
 if display_plots:

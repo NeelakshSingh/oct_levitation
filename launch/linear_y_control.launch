@@ -11,6 +11,7 @@
 
     <node pkg="oct_levitation" name="single_dipole_y_control" type="y_control_single_dipole_full_alloc.py" output="screen">
         <param name="sim_mode" value="$(arg sim)"/>
+        <param name="hardware_connected" value="$(arg hardware_connected)"/>
         <param name="data_subfolder" value="$(arg data_subfolder)"/>
         <param name="experiment_description" value="$(arg description)"/>
     </node>

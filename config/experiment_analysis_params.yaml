@@ -22,6 +22,7 @@ experiment_analysis:
   save_plots: true # Saves as svg
   save_plots_as_emf: true # Needs save_plots to be true, and requires an inkscape installation.
   time_varying_reference: false
+  observations_editor: "xterm -e nano" # Should be a shell command callable from terminal. This will be used to open up the editor for noting down observations.
 
   ## Plot enable flags, ECB specific are always enabled
   # mandatory flags, always required

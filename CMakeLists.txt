@@ -164,6 +164,7 @@ catkin_install_python(PROGRAMS
 
   # XY Control Nodes
   scripts/xy_controllers/x_control_single_dipole_full_alloc.py
+  scripts/xy_controllers/y_control_single_dipole_full_alloc.py
 
   # Yaw Control Nodes
   scripts/yaw_controllers/yaw_control_com_wrench.py

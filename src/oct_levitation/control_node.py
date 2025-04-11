@@ -28,14 +28,14 @@ class ControlSessionNodeBase:
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
-        self.control_rate = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
+        self.CONTROL_RATE = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
         self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
-        self.HARDWARE_CONNECTED = True # to force explicit enablement in post init.
-        if self.sim_mode:
+        self.HARDWARE_CONNECTED = rospy.get_param("~hardware_connected", default=False) # to force explicit enablement in post init.
+        if self.sim_mode and self.HARDWARE_CONNECTED:
             self.HARDWARE_CONNECTED = False
-            self.__MAX_CURRENT = 12.0 # Amps
+            rospy.logwarn("Simulation mode is on, hardware connected flag is set to False.")
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
@@ -117,6 +117,7 @@ class ControlSessionNodeBase:
         # if in simulation mode, override the hardware connected flag
         if self.sim_mode:
             self.HARDWARE_CONNECTED = False
+            self.__MAX_CURRENT = 12.0 # Amps
         self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
         ######## HARDWARE ACTIVATION END ########
 
