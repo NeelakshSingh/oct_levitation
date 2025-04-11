@@ -4,6 +4,7 @@
     Therefore, one should include this file in all the controller launch files. -->
 
     <arg name="sim"/>
+    <arg name="data_subfolder"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
@@ -17,6 +18,7 @@
     <group if="$(arg record_data)">
         <node pkg="oct_levitation" name="experiment_data_recorder" type="experiment_recorder.py" output="screen">
             <param name="sim" value="$(arg sim)"/>
+            <param name="data_subfolder" value="$(arg data_subfolder)"/>
         </node>
     </group>
 

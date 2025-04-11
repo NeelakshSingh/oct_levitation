@@ -1,0 +1,7 @@
+std_msgs/Header header
+std_msgs/String controller_name
+std_msgs/String controller_path
+std_msgs/String data_recording_sub_folder
+std_msgs/String experiment_description
+std_msgs/String metadata
+std_msgs/String full_controller_class_state

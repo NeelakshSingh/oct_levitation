@@ -2,6 +2,7 @@ import rospy
 import numpy as np
 import scipy.signal as signal
 import control as ct
+import os
 
 import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
@@ -74,7 +75,9 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.R_dot = np.zeros((3,3))
 
         self.__first_reading = True
-        self.metadata_msg.data = f"""
+        
+        ## File specific
+        self.metadata_msg.metadata.data = f"""
         Experiment metadata.
         Experiment type: Reduced attitude stabilization experiment with a single dipole.
         Dipole: {self.rigid_body_dipole.name}
@@ -83,6 +86,9 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Gains: kp: {self.kp}, Kd: {self.Kd}
         Calibration type: Legacy yaml file
         """
+
+        # Mandatory to call this function
+        self.set_path_metadata(__file__)
 
     def simplified_Tauxy_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float) -> np.ndarray:
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg)
@@ -308,4 +314,5 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
 
 if __name__ == "__main__":
     controller = SingleDipoleNormalOrientationController()
+    # Servicing topics and services will actually only happen at this call.
     rospy.spin()

@@ -19,9 +19,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         ## EXPERIMENT FLAGS
-        self.HARDWARE_CONNECTED = False
         self.INITIAL_DESIRED_POSITION = np.array([0.005, 0.0, 0.0])
-
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
@@ -112,8 +110,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
         # self.calibration_file = "octomag_5point.yaml"
         self.control_gains_message.vector = np.concatenate((self.K.flatten(), np.array([self.diff_alpha, self.diff_beta])))
-        self.metadata_msg = String()
-        self.metadata_msg.data = f"""
+        self.metadata_msg.metadata.data = f"""
         Experiment metadata.
         Experiment type: X axis control experiment with allocation while reqesting 0 fields.
         Calibration file: {self.calibration_file}
@@ -121,6 +118,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         Gains: {self.K.flatten()}
         Calibration type: Legacy yaml file
         """
+        self.set_path_metadata(__file__)
 
     def local_frame_torque_global_force_allocation(self, tf_msg: TransformStamped, F_x: float):
         quaternion = np.array([

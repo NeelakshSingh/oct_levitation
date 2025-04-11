@@ -15,6 +15,7 @@ from typing import List
 from scipy.linalg import block_diag
 
 from control_utils.general.utilities import init_system
+from oct_levitation.msg import ControllerDetails
 
 class ControlSessionNodeBase:
     """
@@ -67,8 +68,8 @@ class ControlSessionNodeBase:
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
         self.metadata_topic = rospy.get_param("~metadata_pub_topic", "control_session/metadata")
 
-        self.metadata_pub = rospy.Publisher(self.metadata_topic, String, latch=True, queue_size=1)
-        self.metadata_msg : String = String()
+        self.metadata_pub = rospy.Publisher(self.metadata_topic, ControllerDetails, latch=True, queue_size=1)
+        self.metadata_msg : ControllerDetails = ControllerDetails()
 
         self.control_gain_publisher: rospy.Publisher = None
 
@@ -141,7 +142,25 @@ class ControlSessionNodeBase:
                                                      self.tf_reference_sub_callback, queue_size=1)
         
         self.control_gain_publisher.publish(self.control_gains_message)
+
+        ###### Metadata message filling ######
+
+        # Check if path metadata was set
+        if self.metadata_msg.controller_path.data == "" or self.metadata_msg.controller_name.data == "":
+            rospy.logerr("set_path_metadata() was not called in post_init() of derived class. Please add the call for proper logging. Aborting.")
+            raise ValueError("set_path_metadata() was not called in post_init() of derived class. Please add the call for proper logging. Aborting.")
+
+        self.metadata_msg.header.stamp = rospy.Time.now()
+        self.metadata_msg.data_recording_sub_folder.data = rospy.get_param("~data_subfolder")
+        self.metadata_msg.experiment_description.data = rospy.get_param("~experiment_description")
+        self.metadata_msg.full_controller_class_state.data = str(self.__dict__)
+
         self.metadata_pub.publish(self.metadata_msg)
+
+    def set_path_metadata(self, file):
+        file_path = os.path.abspath(file)
+        self.metadata_msg.controller_name.data = os.path.basename(file_path)
+        self.metadata_msg.controller_path.data = file_path
 
     def five_dof_wrench_allocation_single_dipole(self, tf_msg: TransformStamped, w_com: np.ndarray):
         """

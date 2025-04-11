@@ -1,8 +1,10 @@
 <launch>
-    <arg name="sim" default="false" />
+    <arg name="data_subfolder"/>
+    <arg name="sim"/>
     <arg name="experiment_folder" default=""/>
     <rosparam command="load" file="$(find oct_levitation)/config/experiment_analysis_params.yaml"/>
     <node pkg="oct_levitation" name="experiment_analysis_node" type="experiment_analysis.py" output="screen">
+        <param name="data_subfolder" value="$(arg data_subfolder)"/>
         <param name="experiment_folder" value="$(arg experiment_folder)"/>
         <param name="sim" value="$(arg sim)"/>
     </node>

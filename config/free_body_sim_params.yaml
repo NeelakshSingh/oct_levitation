@@ -29,7 +29,7 @@ free_body_sim:
   print_ft: false
   frequency: 500
   publish_status: false
-  vicon_pub_freq: 100
+  vicon_pub_freq: 200
   vicon_noise_std_exyz:
     - 1.01646014e-05
     - 4.16398263e-06

@@ -1,27 +1,27 @@
 <launch>
+    <!-- The following parameters are mandatory to specify when running the launchfile for the real world expt. -->
     <arg name="sim"/>
-    <arg name="record_data" default="true"/>
+        <!-- This message parameter just specifies a description for the experiment, the intention one has behind each run
+        It is an essential part of logging the details of each run to use it for later analysis. -->
+    <arg name="description" />
     <arg name="hardware_connected" default="false"/>
+
+    <arg name="record_data" default="true"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="false"/>
     <arg name="run_rqt_multiplot" default="false"/>
-    <arg name="body_fixed"/>
+    <arg name="data_subfolder" default="reduced_attitude_control"/>
 
-    <group unless="$(arg body_fixed)">
-        <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen">
-            <param name="sim_mode" value="$(arg sim)"/>
-        </node>
-    </group>
-
-    <group if="$(arg body_fixed)">
-        <node pkg="oct_levitation" name="single_dipole_body_fixed_reduced_attitude_control" type="single_dipole_body_fixed_reduced_attitude_control.py" output="screen">
-            <param name="sim_mode" value="$(arg sim)"/>
-        </node>
-    </group>
+    <node pkg="oct_levitation" name="single_dipole_reduced_attitude_control" type="single_dipole_reduced_attitude_control.py" output="screen">
+        <param name="sim_mode" value="$(arg sim)"/>
+        <param name="data_subfolder" value="$(arg data_subfolder)"/>
+        <param name="experiment_description" value="$(arg description)"/>
+    </node>
 
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
     <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">
         <arg name="sim" value="$(arg sim)"/>
+        <arg name="data_subfolder" value="$(arg data_subfolder)"/>
         <arg name="record_data" value="$(arg record_data)"/>
         <arg name="hardware_connected" value="$(arg hardware_connected)"/>
         <arg name="enable_reference_pose" value="$(arg enable_reference_pose)"/>

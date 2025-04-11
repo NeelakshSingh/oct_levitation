@@ -53,6 +53,7 @@ find_package(catkin REQUIRED
 ## Generate messages in the 'msg' folder
 add_message_files(
   FILES
+  ControllerDetails.msg
   PID1DState.msg
   Float64MultiArrayStamped.msg
 )
@@ -60,8 +61,7 @@ add_message_files(
 ## Generate services in the 'srv' folder
 # add_service_files(
 #   FILES
-#   Service1.srv
-#   Service2.srv
+#   ControllerDetails.srv
 # )
 
 ## Generate actions in the 'action' folder

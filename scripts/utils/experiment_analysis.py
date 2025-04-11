@@ -46,11 +46,14 @@ if data_base_folder == "":
     node_loginfo("No base folder specified. Using default: oct_levitation/data/experiment_data.")
     data_base_folder = os.path.join(pkg_path, 'data', 'experiment_data')
 
-experiment_folder = rospy.get_param('~experiment_folder', '')
+
 sim = rospy.get_param('~sim') # Mandatory parameter to specify the correct folder according to experiment_recorder.py
 
 if sim:
     data_base_folder = os.path.join(data_base_folder, 'sim')
+
+experiment_subfolder = rospy.get_param('~data_subfolder') # mandatory parameter
+data_base_folder = os.path.join(data_base_folder, experiment_subfolder)
 
 node_loginfo(f"Using data base folder: {data_base_folder}")
 
@@ -76,6 +79,7 @@ def get_latest_dated_folder(base_folder):
     latest_folder = max(valid_folders, key=lambda x: x[0])[1]
     return latest_folder
 
+experiment_folder = rospy.get_param('~experiment_folder', '')
 expt_dir = None
 if experiment_folder != "": # Hope no one is insane enough to name a folder '' *tests using mkdir after writing this*
     expt_dir = os.path.join(data_base_folder, experiment_folder)
@@ -176,10 +180,11 @@ if sim:
     node_loginfo("\033[96m Sim mode detected. Actual currents and wrench will be shown as zero \033[0m")
 
 #################################
-# Dataset pre-processing
-data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'] = utils.adjust_current_datasets_for_coil_subset(
-    data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS
-)
+# Dataset pre-processing for real world experiments
+if not sim:
+    data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'] = utils.adjust_current_datasets_for_coil_subset(
+        data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS
+    )
 
 #################################
 ### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.
