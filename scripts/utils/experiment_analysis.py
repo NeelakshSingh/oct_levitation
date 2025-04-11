@@ -190,15 +190,28 @@ if not sim:
 #################################
 ### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.
 current_plt_save = None
+system_state_df = data['_tnb_mns_driver_system_state']
+des_currents_df = data['_tnb_mns_driver_des_currents_reg']
+if rospy.get_param("experiment_analysis/plot_raw_ecb_data", default=False):
+    system_state_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_system_state.csv"))
+    des_currents_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_des_currents_reg.csv"))
+    t0 = system_state_df['time'].to_numpy()[0]
+    system_state_df['time'] = system_state_df['time'].to_numpy() - t0
+    des_currents_df['time'] = des_currents_df['time'].to_numpy() - t0
+    des_currents_df, system_state_df = utils.adjust_current_datasets_for_coil_subset(
+        des_currents_df, system_state_df, ACTIVE_COILS, ACTIVE_DRIVERS
+    )
+
+    
 if SAVE_PLOTS:
     current_plt_save = os.path.join(plot_folder, "des_actual_currents.svg")
-plotting.plot_currents_with_reference(data['_tnb_mns_driver_system_state'], des_currents_df=data['_tnb_mns_driver_des_currents_reg'],
+plotting.plot_currents_with_reference(system_state_df, des_currents_df=des_currents_df,
                                       save_as=current_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 
 dclink_voltages_plt_save = None
 if SAVE_PLOTS:
     dclink_voltages_plt_save = os.path.join(plot_folder, "dclink_voltages.svg")
-plotting.plot_dclink_voltages(data['_tnb_mns_driver_system_state'], save_as=dclink_voltages_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+plotting.plot_dclink_voltages(system_state_df, save_as=dclink_voltages_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 ### ECB RELATED PLOTS END
 #################################
 
@@ -332,7 +345,7 @@ def open_editor_for_notes(directory=".", filename_prefix="observation"):
     # Create the file if it doesn't exist
     if not exists:
         with open(filepath, 'w') as f:
-            f.write("# Enter your observations below. Timestamp in the name refers to the creation of the file when the analysis script was run.\n")
+            f.write("# Enter your observations below. Timestamp in the file name refers to the time of the file's creation.\n")
             f.write(f"# FIRST Experiment analysis script run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     else:
         with open(filepath, 'a') as f:

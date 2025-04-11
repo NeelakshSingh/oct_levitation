@@ -16,6 +16,7 @@ experiment_analysis:
   inkscape_path: /usr/bin/inkscape # Path to inkscape executable, for saving plots to emf which is best for vector graphics in powerpoint.
   octomag_calibration_file: "mc3ao8s_md200_handp.yaml"
   plot_time_sync_topic: "/tnb_mns_driver/des_currents_reg" # For all time synced plots, this topic is used for time interpolation of other topics for proper comparison.
+  plot_raw_ecb_data: true # If true then no interpolation is done and the raw ECB data is used for plotting. This is useful for catching immediate overvoltage errors on controller start which may get lost in interpolation.
   enable_topic_extraction: true # If true, then bagpyext will be used to extract CSV data from topics if no CSV files are found in the experiment folder.
   show_after_each_plot: false # Show the plot after each plot is generated.
   display_plots_at_end: true # Show all plots at the end of the analysis instead of one by one. If true, show_after_each_plot is ignored. If both false, no plots are shown in interactive pane.

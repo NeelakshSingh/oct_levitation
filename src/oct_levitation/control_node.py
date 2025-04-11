@@ -2,6 +2,7 @@ import os
 import rospy
 import oct_levitation.mechanical as mechanical
 import oct_levitation.geometry as geometry
+import oct_levitation.numerical as numerical
 import tf2_ros
 import numpy as np
 import time
@@ -32,6 +33,10 @@ class ControlSessionNodeBase:
         self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
+        self.__SOFT_START = rospy.get_param("~oct_levitation/soft_start", True)
+        self.soft_starter = None
+        if self.__SOFT_START:
+            self.soft_starter = numerical.LinearSoftStarter(0.5, 1.0)
         self.HARDWARE_CONNECTED = rospy.get_param("~hardware_connected", default=False) # to force explicit enablement in post init.
         if self.sim_mode and self.HARDWARE_CONNECTED:
             self.HARDWARE_CONNECTED = False
@@ -257,6 +262,10 @@ class ControlSessionNodeBase:
         self.control_input_publisher.publish(self.control_input_message)
         des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
+        coeff = 1
+        if self.__SOFT_START:
+            coeff = self.soft_starter(1/self.CONTROL_RATE)
+        des_currents *= coeff
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")
         

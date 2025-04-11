@@ -1,4 +1,5 @@
 oct_levitation:
   control_freq: 200
   publish_computation_time: true
+  soft_start: true # Required because gravity compensation will request very high currents immediately.
   pose_tracking: true # will require reference pose to be published. Check node for more details.

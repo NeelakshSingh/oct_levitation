@@ -137,6 +137,19 @@ class SigmoidSoftStarter:
     
     def __call__(self, dt: float):
         return self.update(dt)
+    
+class LinearSoftStarter:
+
+    def __init__(self, t_start, duration):
+        max_coeff = 1.0
+        self.m = max_coeff/duration
+        self.t_start = t_start
+        self.max_coeff = max_coeff
+        self.t = 0.0
+    
+    def __call__(self, dt: float):
+        self.t += dt
+        return min(max((self.t - self.t_start) * self.m, 0.0), self.max_coeff)
 
 
 class FirstOrderDifferentiator:
