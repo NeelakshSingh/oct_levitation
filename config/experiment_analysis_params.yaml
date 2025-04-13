@@ -57,3 +57,7 @@ experiment_analysis:
     - "/rosout_agg"
     - "/tf"
     - "/tf_static"
+
+  summarizer:
+    include_description: true # If true, then the description of the experiment is included in the summary.
+    notes_folder: "notes"

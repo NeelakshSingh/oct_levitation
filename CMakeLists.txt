@@ -196,6 +196,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/coil_subset_condition_calculator.py
   scripts/utils/experiment_recorder.py
   scripts/utils/experiment_analysis.py
+  scripts/utils/experiment_data_summarizer.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
