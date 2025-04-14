@@ -19,16 +19,8 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         ## EXPERIMENT FLAGS
-        self.HARDWARE_CONNECTED = False
-        self.ACTIVE_COILS = np.array([2,3,4,5,7]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
-        # self.ACTIVE_COILS = np.array([1, 3, 4, 5, 6]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
-        # self.ACTIVE_COILS = np.array([0, 1, 3, 5, 6]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
-        # self.ACTIVE_COILS = np.array([0, 3, 5, 6, 7]) # Only use this set of coils for actuation and field allocation. Defaults to all 8 coils.
-        self.INITIAL_POSITION = np.array([0.0, 0.0, 0.0])
-        self.MAX_CURRENT = 8.0 # Amps
-
         self.tfsub_callback_style_control_loop = True
-        self.control_rate = 100 # Set it to the vicon frequency
+        self.control_rate = self.CONTROL_RATE # Set it to the vicon frequency
         self.publish_desired_com_wrenches = True
         self.control_input_publisher = rospy.Publisher("/com_wrench_z_control/control_input",
                                                        VectorStamped, queue_size=1)
@@ -48,7 +40,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         # So I remove a few grams from the estimate.
         mass_offset = 0
         self.mass = self.rigid_body_dipole.mass_properties.m + mass_offset # Subtracting 10 grams from the mass.
-        self.k_lin_z = 1 # Friction damping parameter, to be tuned. Originally because of the rod.
+        self.k_lin_z = 2 # Friction damping parameter, to be tuned. Originally because of the rod.
 
         self.south_pole_up = True
         
@@ -57,7 +49,7 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         B = np.array([[0, 1/self.mass]]).T
         C = np.array([[1, 0]])
 
-        z_max = 4e-2 # 4 cm maximum z displacement.
+        z_max = 1.2e-2 # 1.2 cm maximum z displacement. Shortened for 5 coils.
         z_dot_max = 5*z_max
         u_max = 5*self.mass*z_dot_max # Assume very small maximum torque.
 
@@ -93,11 +85,6 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.control_gains_message.header.stamp = rospy.Time.now()
         # self.K = K_norm
         rospy.loginfo(f"[Z Control Single Dipole Simplified], Control gain K:{self.K}")
-
-        self.T_pos_x = geometry.transformation_matrix_from_quaternion(geometry.IDENTITY_QUATERNION,
-                                                                 np.array([30e-3, 0, 0]))
-        self.T_neg_x = geometry.transformation_matrix_from_quaternion(geometry.IDENTITY_QUATERNION,
-                                                                 np.array([-30e-3, 0, 0]))
         
         self.last_z = 0.0
         self.dt = 1/self.control_rate
@@ -120,43 +107,13 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
 
         # self.calibration_file = "octomag_5point.yaml"
         self.control_gains_message.vector = np.concatenate((self.K.flatten(), np.array([self.diff_alpha, self.diff_beta])))
-        self.metadata_msg = String()
-        self.metadata_msg.data = f"""
-        Experiment metadata.
-        Experiment type: Vicon at 800Hz, 2Hz Sinusoidal Reference with DLQR Gains. Using Tustin's filtered differentiator with 100Hz cutoff.
+        self.metadata_msg.metadata.data = f"""
+        Experiment type: Z axis control with single dipole and requesting 0 torques.
         Calibration file: {self.calibration_file}
-        Hardware Connected: {self.HARDWARE_CONNECTED}
         Gains: {self.K.flatten()}
         Calibration type: Legacy yaml file
         """
-
-    def simplified_Fz_allocation(self, tf_msg: TransformStamped, Fz_des: float):
-        quaternion = np.array([
-            tf_msg.transform.rotation.x, tf_msg.transform.rotation.y, tf_msg.transform.rotation.z, tf_msg.transform.rotation.w
-        ])
-        normal = -geometry.get_normal_vector_from_quaternion(quaternion) # -ve because south pole up
-        dipole = self.rigid_body_dipole.dipole_list[0]
-        dipole_vector = dipole.strength * normal
-        dipole_position = np.array([
-            tf_msg.transform.translation.x, tf_msg.transform.translation.y, tf_msg.transform.translation.z
-        ])
-        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
-        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
-                                                                       dipole.axis,
-                                                                       quaternion)[:2] # Only first two rows will be nonzero
-        w_des = np.array([0.0, 0.0, 0.0, 0.0, Fz_des]) # Tau_local_xy, F_v
-        M = block_diag(Mt_local, Mf)
-        A = self.mpem_model.getActuationMatrix(dipole_position)
-        des_currents = np.linalg.pinv(M @ A) @ w_des
-
-        if self.publish_jma_condition:
-            jma_condition_msg = VectorStamped()
-            jma_condition_msg.header.stamp = rospy.Time.now()
-            jma_condition = np.linalg.cond(M @ A)
-            jma_condition_msg.vector = [jma_condition]
-            self.jma_condition_pub.publish(jma_condition_msg)
-
-        return des_currents
+        self.set_path_metadata(__file__) # Mandatory since it helps to take a backup of the file for an experiment.
 
     
     def callback_control_logic(self, tf_msg: TransformStamped):
@@ -198,7 +155,6 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         w_des = np.array([0, 0, 0, 0, F_z])
         # des_currents = self.simplified_Fz_allocation(tf_msg, F_z)
         des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
-        # self.desired_currents_msg.des_currents_reg = des_currents.flatten() * self.SoftStarter(self.dt)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":

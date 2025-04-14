@@ -40,9 +40,9 @@ class ControlSessionNodeBase:
         self.soft_starter = None
         if self.__SOFT_START:
             self.soft_starter = numerical.LinearSoftStarter(0.5, 1.0)
-        self.HARDWARE_CONNECTED = rospy.get_param("~hardware_connected", default=False) # to force explicit enablement in post init.
-        if self.sim_mode and self.HARDWARE_CONNECTED:
-            self.HARDWARE_CONNECTED = False
+        self.__HARDWARE_CONNECTED = rospy.get_param("~hardware_connected", default=False) # to force explicit enablement in post init.
+        if self.sim_mode and self.__HARDWARE_CONNECTED:
+            self.__HARDWARE_CONNECTED = False
             rospy.logwarn("Simulation mode is on, hardware connected flag is set to False.")
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
@@ -98,7 +98,7 @@ class ControlSessionNodeBase:
         self.post_init()
         ######## POST INIT CALL ########
 
-        rospy.logwarn(f"[Control Node] HARDWARE_CONNECTED: {self.HARDWARE_CONNECTED}")
+        rospy.logwarn(f"[Control Node] HARDWARE_CONNECTED: {self.__HARDWARE_CONNECTED}")
         rospy.logwarn(f"[Control Node] Active Coils: {self.__ACTIVE_COILS}")
         rospy.logwarn(f"[Control Node] Active Driver Coils: {self.__ACTIVE_DRIVERS}")
         
@@ -121,9 +121,9 @@ class ControlSessionNodeBase:
         ######## HARDWARE ACTIVATION START ########
         # if in simulation mode, override the hardware connected flag
         if self.sim_mode:
-            self.HARDWARE_CONNECTED = False
+            self.__HARDWARE_CONNECTED = False
             self.__MAX_CURRENT = 12.0 # Amps
-        self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
+        self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.__HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
         ######## HARDWARE ACTIVATION END ########
 
         # Start the timer
@@ -160,6 +160,7 @@ class ControlSessionNodeBase:
         self.metadata_msg.data_recording_sub_folder.data = rospy.get_param("~data_subfolder")
         self.metadata_msg.experiment_description.data = rospy.get_param("~experiment_description")
         self.metadata_msg.full_controller_class_state.data = str(self.__dict__)
+        self.metadata_msg.metadata.data += f"\n HARDWARE_CONNECTED: {self.__HARDWARE_CONNECTED} \n"
 
         self.metadata_pub.publish(self.metadata_msg)
 

@@ -192,6 +192,10 @@ if not sim:
         data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS
     )
 
+pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
+reference_pose_topic = pose_topic + "_reference"
+com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
+
 #################################
 ### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.
 current_plt_save = None
@@ -228,13 +232,13 @@ if rospy.get_param("experiment_analysis/enable_pose_plots"):
     if SAVE_PLOTS:
         pose_save = os.path.join(plot_folder, "des_actual_pose.svg")
     if time_varying_reference:
-        plotting.plot_poses_variable_reference(data['_vicon_onyx_disc_80x22_Origin'],
-                                            data['_vicon_onyx_disc_80x22_Origin_reference'],
+        plotting.plot_poses_variable_reference(data[pose_topic],
+                                            data[reference_pose_topic],
                                             save_as=pose_save,
                                             save_as_emf=SAVE_PLOTS_AS_EMF,
                                             inkscape_path=INKSCAPE_PATH)
     else:
-        plotting.plot_poses_constant_reference(data['_vicon_onyx_disc_80x22_Origin'],
+        plotting.plot_poses_constant_reference(data[pose_topic],
                                             const_reference_pose,
                                             save_as=pose_save,
                                             save_as_emf=SAVE_PLOTS_AS_EMF,
@@ -259,9 +263,9 @@ if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
         act_des_wrench_save = os.path.join(plot_folder, "act_des_wrench.svg")
     
     ft_plot_params = rospy.get_param("experiment_analysis/ft_plot_params")
-    plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data['_vicon_onyx_disc_80x22_Origin'],
+    plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data[pose_topic],
                                                                 data['_tnb_mns_driver_system_state'],
-                                                                data['_onyx_disc_80x22_com_wrench'],
+                                                                data[com_wrench_topic],
                                                                 calibration_model,
                                                                 dipole,
                                                                 use_local_frame_for_torques=ft_plot_params['use_local_frame_for_torques'],
@@ -282,28 +286,28 @@ if rospy.get_param("experiment_analysis/enable_z_specific_plots", default=False)
 
     if time_varying_reference:
         plotting.plot_z_position_Fz_variable_reference(
-            data['_vicon_onyx_disc_80x22_Origin'],
-            data['_vicon_onyx_disc_80x22_Origin_reference'],
-            plotting.wrench_stamped_df_to_array_df(data['_onyx_disc_80x22_com_wrench']),
+            data[pose_topic],
+            data[reference_pose_topic],
+            plotting.wrench_stamped_df_to_array_df(data[com_wrench_topic]),
             save_as=z_fz_plot_save,
             save_as_emf=SAVE_PLOTS_AS_EMF
         )
     else:
         plotting.plot_z_position_Fz_constant_reference(
-            data['_vicon_onyx_disc_80x22_Origin'],
+            data[pose_topic],
             const_reference_pose[2],
-            plotting.wrench_stamped_df_to_array_df(data['_onyx_disc_80x22_com_wrench']),
+            plotting.wrench_stamped_df_to_array_df(data[com_wrench_topic]),
             save_as=z_fz_plot_save,
             save_as_emf=SAVE_PLOTS_AS_EMF
         )
 
     z_plot_save = os.path.join(plot_folder, "z_position.svg")
     if time_varying_reference:
-        fig, z_axes = plotting.plot_z_position_variable_reference(data['_vicon_onyx_disc_80x22_Origin'],
-                                                    data['_vicon_onyx_disc_80x22_Origin_reference'],
+        fig, z_axes = plotting.plot_z_position_variable_reference(data[pose_topic],
+                                                    data[reference_pose_topic],
                                                     save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
     else:
-        fig, z_axes = plotting.plot_z_position_constant_reference(data['_vicon_onyx_disc_80x22_Origin'], const_reference_pose[2], save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+        fig, z_axes = plotting.plot_z_position_constant_reference(data[pose_topic], const_reference_pose[2], save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 
 ### Z CONTROL SPECIFIC PLOTS END
 #################################
@@ -316,14 +320,14 @@ if rospy.get_param("experiment_analysis/enable_alpha_beta_plots", default=False)
         alpha_beta_save = os.path.join(plot_folder, "alpha_beta.svg")
 
     if time_varying_reference:
-        fig, ab_axes = plotting.plot_alpha_beta_torques_variable_reference(data['_vicon_onyx_disc_80x22_Origin'], 
-                                                    data['_vicon_onyx_disc_80x22_Origin_reference'],
-                                                    data['_onyx_disc_80x22_com_wrench'],
+        fig, ab_axes = plotting.plot_alpha_beta_torques_variable_reference(data[pose_topic], 
+                                                    data[reference_pose_topic],
+                                                    data[com_wrench_topic],
                                                     save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
     else:
-        fig, ab_axes = plotting.plot_alpha_beta_torques_constant_reference(data['_vicon_onyx_disc_80x22_Origin'], 
+        fig, ab_axes = plotting.plot_alpha_beta_torques_constant_reference(data[pose_topic], 
                                                     const_reference_rpy[:2],
-                                                    data['_onyx_disc_80x22_com_wrench'],
+                                                    data[com_wrench_topic],
                                                     save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 
 ### NORMAL SPECIFIC PLOTS END

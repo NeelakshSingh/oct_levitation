@@ -6,7 +6,7 @@ from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaterni
 from visualization_msgs.msg import Marker
 from std_msgs.msg import ColorRGBA
 
-import oct_levitation.rigid_bodies as rigid_bodies
+from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import oct_levitation.geometry as geometry
 
 
@@ -15,7 +15,7 @@ class OctLevitationRvizVisualizations:
     def __init__(self) -> None:
         rospy.init_node('oct_levitation_rviz_visualizations', anonymous=True)
         # Parameters
-        self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
+        self.rigid_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
         self.reduced_attitude_params = {
             "fixed_vector": np.array(rospy.get_param("~reduced_attitude_fixed_vector", [0.0, 0.0, 1.0])),

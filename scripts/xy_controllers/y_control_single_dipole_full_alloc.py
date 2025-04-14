@@ -42,7 +42,7 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
         # So I remove a few grams from the estimate.
         mass_offset = 0
         self.mass = self.rigid_body_dipole.mass_properties.m + mass_offset # Subtracting 10 grams from the mass.
-        self.k_lin_y = 25 # Friction damping parameter, to be tuned. Originally because of the rod.
+        self.k_lin_y = 15 # Friction damping parameter, to be tuned. Originally because of the rod.
 
         self.south_pole_up = True
         
@@ -110,10 +110,8 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
         # self.calibration_file = "octomag_5point.yaml"
         self.control_gains_message.vector = np.concatenate((self.K.flatten(), np.array([self.diff_alpha, self.diff_beta])))
         self.metadata_msg.metadata.data = f"""
-        Experiment metadata.
         Experiment type: Y axis control experiment with full allocation while requesting 0 fields.
         Calibration file: {self.calibration_file}
-        Hardware Connected: {self.HARDWARE_CONNECTED}
         Gains: {self.K.flatten()}
         Calibration type: Legacy yaml file
         """
@@ -199,8 +197,8 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
 
         F_y = u[0, 0]
         # Adding a little bit of gravity compensation in order to reduce normal forces and friction a little bit.
-        F_z = 0.35*self.mass*common.Constants.g
-        # F_z = 0.0
+        # F_z = 0.55*self.mass*common.Constants.g
+        F_z = 0.0
         com_wrench_des = np.array([0, 0, 0, 0, F_y, F_z])
         com_wrench_5dof = np.array([0, 0, 0, F_y, F_z])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
