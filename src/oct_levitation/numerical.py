@@ -141,10 +141,9 @@ class SigmoidSoftStarter:
 class LinearSoftStarter:
 
     def __init__(self, t_start, duration):
-        max_coeff = 1.0
-        self.m = max_coeff/duration
         self.t_start = t_start
-        self.max_coeff = max_coeff
+        self.max_coeff = 1.0
+        self.m = self.max_coeff/duration
         self.t = 0.0
     
     def __call__(self, dt: float):

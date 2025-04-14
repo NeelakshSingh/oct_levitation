@@ -265,6 +265,9 @@ class ControlSessionNodeBase:
         coeff = 1
         if self.__SOFT_START:
             coeff = self.soft_starter(1/self.CONTROL_RATE)
+            if np.allclose(coeff, 1.0):
+                coeff = 1.0
+                self.__SOFT_START = False # Disable it from this point onwards
         des_currents *= coeff
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")

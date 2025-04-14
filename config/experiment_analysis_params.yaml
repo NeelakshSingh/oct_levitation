@@ -28,8 +28,8 @@ experiment_analysis:
   ft_plot_params:
     use_local_frame_for_torques: true
     dataset_torques_in_local_frame: true
-    plot_overall_magnet_torque_component: false
-    plot_torque_components_separately: true
+    plot_overall_magnet_torque_component: true
+    plot_torque_components_separately: false
 
   ## Plot enable flags, ECB specific are always enabled
   # mandatory flags, always required

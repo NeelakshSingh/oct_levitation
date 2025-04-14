@@ -199,7 +199,7 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
 
         F_y = u[0, 0]
         # Adding a little bit of gravity compensation in order to reduce normal forces and friction a little bit.
-        F_z = 0.55*self.mass*common.Constants.g
+        F_z = 0.35*self.mass*common.Constants.g
         # F_z = 0.0
         com_wrench_des = np.array([0, 0, 0, 0, F_y, F_z])
         com_wrench_5dof = np.array([0, 0, 0, F_y, F_z])
