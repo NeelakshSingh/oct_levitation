@@ -16,7 +16,6 @@ class DirectCOMWrenchZController(ControlSessionNodeBase):
 
     def post_init(self):
         self.control_rate = 100
-        self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
         self.publish_desired_com_wrenches = True
         self.control_input_publisher = rospy.Publisher("/com_wrench_z_control/control_input",
                                                        VectorStamped, queue_size=1)

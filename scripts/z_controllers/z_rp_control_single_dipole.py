@@ -21,7 +21,6 @@ class ZRPSingleDipoleController(ControlSessionNodeBase):
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency
         self.dt = 1/self.control_rate
-        self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.publish_desired_com_wrenches = True
         self.publish_desired_dipole_wrenches = False
         

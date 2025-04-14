@@ -23,7 +23,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
 
         self.dt = 1/self.control_rate
-        self.rigid_body_dipole = rigid_bodies.Onyx80x22DiscCenterRingDipole
         self.publish_desired_com_wrenches = True
         self.publish_desired_dipole_wrenches = False
         

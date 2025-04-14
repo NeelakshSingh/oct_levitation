@@ -12,6 +12,7 @@
     <arg name="record_data" default="true"/>
 
     <!-- Simulation parameters -->
+    <rosparam command="load" file="$(find oct_levitation)/config/general_params.yaml"/>
     <rosparam command="load" file="$(find oct_levitation)/config/controller_params.yaml"/>
     <rosparam if="$(arg sim)" command="load" file="$(find oct_levitation)/config/free_body_sim_params.yaml"/>
 

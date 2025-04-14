@@ -9,7 +9,8 @@ import oct_levitation.plotting as plotting
 import oct_levitation.processing_utils as utils
 import oct_levitation.common as common
 import oct_levitation.geometry as geometry
-import oct_levitation.rigid_bodies as rigid_bodies
+
+from oct_levitation.rigid_bodies import REGISTERED_BODIES
 
 import matplotlib.pyplot as plt
 
@@ -56,7 +57,11 @@ if sim:
 experiment_subfolder = rospy.get_param('~data_subfolder') # mandatory parameter
 data_base_folder = os.path.join(data_base_folder, experiment_subfolder)
 
-node_loginfo(f"Using data base folder: {data_base_folder}")
+# For now this will use the param. But ideally we should get the rigid body name from the data stored by the
+# experiment recorder.
+dipole_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
+
+node_loginfo(f"Using data base folder: {data_base_folder}. Using dipole body: {dipole_body.name}")
 
 def get_latest_dated_folder(base_folder):
     """
@@ -247,7 +252,6 @@ if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
                                                     calibration_file=calib_file)
 
     # Actual wrench is based on each magnet, the actual currents, and the forward nonlinear MPEM model
-    dipole_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
     dipole = dipole_body.dipole_list[0]
 
     act_des_wrench_save = None

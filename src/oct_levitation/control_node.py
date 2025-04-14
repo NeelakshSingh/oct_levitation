@@ -3,6 +3,7 @@ import rospy
 import oct_levitation.mechanical as mechanical
 import oct_levitation.geometry as geometry
 import oct_levitation.numerical as numerical
+from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import tf2_ros
 import numpy as np
 import time
@@ -30,6 +31,7 @@ class ControlSessionNodeBase:
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
         self.CONTROL_RATE = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
+        self.rigid_body_dipole
         self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
@@ -65,7 +67,7 @@ class ControlSessionNodeBase:
         if self.publish_computation_time:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
 
-        self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = None # Set this in post init
+        self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
         self.coils_to_enable = [True]*9
         self.coils_to_enable[6] = False # Coil 7 is not being used at the moment.
 

@@ -1,10 +1,12 @@
 <launch>
-    <arg name="data_subfolder"/>
-    <arg name="sim"/>
+    <arg name="data_subfolder" default="linear_x_control"/>
+    <arg name="sim" default="true"/>
     <arg name="experiment_folder" default=""/>
     <arg name="summarize" default="false"/>
     <arg name="note_observations" default="true"/>
+    
     <rosparam command="load" file="$(find oct_levitation)/config/experiment_analysis_params.yaml"/>
+    <rosparam command="load" file="$(find oct_levitation)/config/general_params.yaml"/>
 
     <group unless="$(arg summarize)">
         <node pkg="oct_levitation" name="experiment_analysis_node" type="experiment_analysis.py" output="screen">

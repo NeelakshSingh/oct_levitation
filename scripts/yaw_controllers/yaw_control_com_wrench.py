@@ -17,7 +17,6 @@ class DirectCOMWrenchYawController(ControlSessionNodeBase):
         self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
         self.control_rate = 100 # Set it to the vicon frequency\
-        self.rigid_body_dipole = rigid_bodies.TwoDipoleDisc80x15_6HKCM10x3
         self.publish_desired_com_wrenches = True
         self.control_input_publisher = rospy.Publisher("/com_wrench_yaw_control/control_input",
                                                        VectorStamped, queue_size=1)

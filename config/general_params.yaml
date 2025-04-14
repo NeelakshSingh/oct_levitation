@@ -1,0 +1,2 @@
+oct_levitation:
+  rigid_body: "onyx_disc_80x22" # Use name registered in rigid_bodies.REGISTERED_BODIES

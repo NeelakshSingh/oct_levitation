@@ -1,7 +1,7 @@
 import rospy
 import numpy as np
-import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry as geometry
+from oct_levitation.rigid_bodies import REGISTERED_BODIES
 
 from geometry_msgs.msg import TransformStamped, Quaternion
 from control_utils.traj_gen.lissajous_figures import return_lissajous_traj
@@ -9,7 +9,8 @@ from control_utils.traj_gen.lissajous_figures import return_lissajous_traj
 class ReferencePosePublisher:
     def __init__(self):
         rospy.init_node("reference_pose_publisher")
-        self.tf_topic = rigid_bodies.Onyx80x22DiscCenterRingDipole.pose_frame + "_reference"
+        rigid_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
+        self.tf_topic = rigid_body.pose_frame + "_reference"
         self.f_pub = 100
 
         ### Sinusoidal yaw

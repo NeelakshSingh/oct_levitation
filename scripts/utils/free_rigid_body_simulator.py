@@ -12,7 +12,7 @@ from std_msgs.msg import Bool
 from tnb_mns_driver.msg import DesCurrentsReg
 
 import oct_levitation.common as common
-import oct_levitation.rigid_bodies as rigid_bodies
+from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import oct_levitation.geometry as geometry
 import oct_levitation.numerical as numerical
 
@@ -71,7 +71,7 @@ class DynamicsSimulator:
         # self.Ts = 1/3000
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.__tf_msg = TransformStamped()
-        self.rigid_body = rigid_bodies.Onyx80x22DiscCenterRingDipole
+        self.rigid_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
         self.vicon_frame = self.rigid_body.pose_frame
         self.world_frame = "vicon/world"
         self.vicon_pub = rospy.Publisher(self.vicon_frame, TransformStamped, queue_size=10)
