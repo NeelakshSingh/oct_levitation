@@ -253,13 +253,17 @@ if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
     act_des_wrench_save = None
     if SAVE_PLOTS:
         act_des_wrench_save = os.path.join(plot_folder, "act_des_wrench.svg")
+    
+    ft_plot_params = rospy.get_param("experiment_analysis/ft_plot_params")
     plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data['_vicon_onyx_disc_80x22_Origin'],
                                                                 data['_tnb_mns_driver_system_state'],
                                                                 data['_onyx_disc_80x22_com_wrench'],
                                                                 calibration_model,
                                                                 dipole,
-                                                                use_local_frame_for_torques=True,
-                                                                dataset_torques_in_local_frame=True,
+                                                                use_local_frame_for_torques=ft_plot_params['use_local_frame_for_torques'],
+                                                                dataset_torques_in_local_frame=ft_plot_params['dataset_torques_in_local_frame'],
+                                                                plot_overall_magnet_torque_component=ft_plot_params['plot_overall_magnet_torque_component'],
+                                                                plot_torque_components_separately=ft_plot_params['plot_torque_components_separately'],
                                                                 save_as=act_des_wrench_save,
                                                                 save_as_emf=SAVE_PLOTS_AS_EMF)
 ### FORCE AND TORQUE RELATED PLOTS END

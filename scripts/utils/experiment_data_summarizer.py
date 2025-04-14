@@ -68,11 +68,27 @@ with open(summary_file_path, 'w') as summary_file:
     summary_file.write(f"Experiment subfolder: {experiment_subfolder}\n")
     
     folders = [f for f in os.listdir(data_base_folder) if os.path.isdir(os.path.join(data_base_folder, f)) and f != 'summary.txt']
+    # sort chronologically
+    sort_strategy = rospy.get_param('experiment_analysis/summarizer/sort_by', 'folder_name')
+    if sort_strategy == 'folder_name':
+        folders.sort()
+    elif sort_strategy == 'last_modified':
+        # Sort by last modified time
+        try:
+            folders.sort(key=lambda x: os.path.getmtime(os.path.join(data_base_folder, x)))
+        except Exception as e:
+            node_logerr(f"Error sorting folders by last modified time: {e}")
+            # Fallback to folder name sorting
+            folders.sort()
+    else:
+        raise ValueError(f"Invalid sort strategy: {sort_strategy}. Use 'folder_name' or 'last_modified'.")
+
+    folders.sort(key=lambda x: os.path.getmtime(os.path.join(data_base_folder, x)))
     summary_file.write(f"Scanning {len(folders)} folders: {folders}\n")
     folders = [os.path.join(data_base_folder, f) for f in folders]
 
     for folder in folders:
-        summary_file.write(f"\n\n\n === {folder} ===\n")
+        summary_file.write(f"\n\n\n === {os.path.basename(folder)} ===\n\n")
 
         if include_description:
             if not os.path.exists(os.path.join(folder, 'experiment_description.txt')):
@@ -82,7 +98,7 @@ with open(summary_file_path, 'w') as summary_file:
                 description = extract_description_block(os.path.join(folder, 'experiment_description.txt'))
                 summary_file.write(f"Experiment Description: {description}\n")
         
-        summary_file.write(" --- Observation Notes --- \n")
+        summary_file.write("\n\n --- Observation Notes --- \n\n")
 
         if not os.path.exists(os.path.join(folder, 'notes')):
             summary_file.write("Observation notes folder not found.\n")
