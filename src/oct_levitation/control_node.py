@@ -31,7 +31,8 @@ class ControlSessionNodeBase:
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
         self.CONTROL_RATE = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
-        self.rigid_body_dipole
+        self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
+        rospy.loginfo(f"Rigid body: {self.rigid_body_dipole.name}")
         self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
@@ -67,8 +68,6 @@ class ControlSessionNodeBase:
         if self.publish_computation_time:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
 
-        self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
-        rospy.loginfo(f"Rigid body: {self.rigid_body_dipole.name}")
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
