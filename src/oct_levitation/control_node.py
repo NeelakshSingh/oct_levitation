@@ -68,8 +68,7 @@ class ControlSessionNodeBase:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
 
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
-        self.coils_to_enable = [True]*9
-        self.coils_to_enable[6] = False # Coil 7 is not being used at the moment.
+        rospy.loginfo(f"Rigid body: {self.rigid_body_dipole.name}")
 
         self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)

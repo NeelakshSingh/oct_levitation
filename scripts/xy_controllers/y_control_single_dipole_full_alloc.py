@@ -15,7 +15,7 @@ from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaterni
 from std_msgs.msg import String
 from tnb_mns_driver.msg import DesCurrentsReg
 
-class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
+class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         ## EXPERIMENT FLAGS
@@ -213,5 +213,5 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":
-    controller = DirectCOMWrenchZSingleDipoleController()
+    controller = DirectCOMWrenchYSingleDipoleController()
     rospy.spin()
