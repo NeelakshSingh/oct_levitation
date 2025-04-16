@@ -3362,7 +3362,7 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
 
     # Finally plotting the condition number.
     # Plot condition number in the last subplot
-    axs[6].plot(cond_df['time'], cond_df['condition'], color=colors[6], label="Allocation Condition Number", **kwargs)
+    axs[6].plot(cond_df['time'], cond_df['vector_0'], color=colors[6], label="Allocation Condition Number", **kwargs)
     axs[6].set_xlabel('Time')
     axs[6].set_ylabel("Condition Number")
     axs[6].legend()

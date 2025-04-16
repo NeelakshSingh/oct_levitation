@@ -278,6 +278,42 @@ if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
 #################################
 
 #################################
+### CONDITION NUMBER RELATED PLOTS
+
+if rospy.get_param("experiment_analysis/enable_condition_number_plots", default=False):
+    cond_topic = None
+    topic_map = rospy.get_param("experiment_analysis/condition_number_plot_options/experiment_subfolder_topic_map")
+    if experiment_subfolder not in topic_map.keys():
+        node_logerr(f"Experiment folder {experiment_subfolder} not found in condition number topic map.")
+    for topic in topic_map[experiment_subfolder]:
+        topic_bgpy_name = topic_name_to_bagpyext_name(topic)
+        if topic_bgpy_name in data.keys():
+            cond_topic = topic_bgpy_name
+            break
+    if cond_topic is None:
+        node_logerr(f"None of the candidate topic names specified in the condition number topic options for the experiment {experiment_subfolder} were found in the dataset.")
+
+    cond_plot_save = None
+    if SAVE_PLOTS:
+        cond_plot_save = os.path.join(plot_folder, "allocation_condition_number.svg")
+    plotting.plot_jma_condition_number(data[cond_topic],
+                                       save_as=cond_plot_save,
+                                       save_as_emf=SAVE_PLOTS_AS_EMF,
+                                       inkscape_path=INKSCAPE_PATH)
+    
+    cond_pose_plot_save = None
+    if SAVE_PLOTS:
+        cond_pose_plot_save = os.path.join(plot_folder, "allocation_condition_number_pose_plot.svg")
+    plotting.plot_6dof_pose_with_jma_condition_number(data[pose_topic],
+                                                      data[cond_topic],
+                                                      save_as=cond_pose_plot_save,
+                                                      save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                      inkscape_path=INKSCAPE_PATH)
+    
+### CONDITION NUMBER RELATED PLOTS END
+#################################
+
+#################################
 ### Z CONTROL SPECIFIC PLOTS
 if rospy.get_param("experiment_analysis/enable_z_specific_plots", default=False):
     z_fz_plot_save = None
