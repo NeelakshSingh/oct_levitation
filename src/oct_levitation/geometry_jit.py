@@ -11,14 +11,14 @@ EPSILON_TOLERANCE = 1e-15 # for numerical stability
 CLOSE_CHECK_TOLERANCE = 1e-3
 IDENTITY_QUATERNION = np.array([0.0, 0.0, 0.0, 1.0]) # Identity quaternion
 
-@numba.njit
+@numba.njit(cache=True)
 def check_if_unit_quaternion(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
     """
     return (np.abs(np.linalg.norm(q) - 1.0) <= CLOSE_CHECK_TOLERANCE)
 
-@numba.njit
+@numba.njit(cache=True)
 def check_if_unit_quaternion_raise_error(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
@@ -53,7 +53,7 @@ def numpy_arrays_from_tf_msg(tf_msg: Transform):
 
     return rotation, translation
 
-@numba.njit
+@numba.njit(cache=True)
 def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -65,7 +65,7 @@ def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
                      [v[2], 0, -v[0]],
                      [-v[1], v[0], 0]])
 
-get_skew_symmetric_matrix(np.zeros(3)) # Force compilation on import
+get_skew_symmetric_matrix(np.zeros(3)) # Force compilation for expected argument type signature in import
 
 def get_homogeneous_vector(v: np.ndarray) -> np.ndarray:
     """
@@ -97,7 +97,7 @@ def get_non_homoegeneous_vector(v_h: np.ndarray) -> np.ndarray:
 # Quaternion Related Functions
 #############################################
 
-@numba.njit
+@numba.njit(cache=True)
 def rotation_matrix_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -114,7 +114,7 @@ def rotation_matrix_from_quaternion(q: np.ndarray) -> np.ndarray:
     R = (2*q[3]**2 - 1)*np.eye(3) + 2*q[3]*qx + 2*np.outer(q[:3], q[:3])
     return R
 
-rotation_matrix_from_quaternion(IDENTITY_QUATERNION) # Force compilation on import
+rotation_matrix_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
 def invert_quaternion(q: np.ndarray) -> np.ndarray:
     """
@@ -123,7 +123,7 @@ def invert_quaternion(q: np.ndarray) -> np.ndarray:
     """
     return np.concatenate([-q[:3], [q[3]]])
 
-@numba.njit
+@numba.njit(cache=True)
 def get_normal_vector_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -137,18 +137,18 @@ def get_normal_vector_from_quaternion(q: np.ndarray) -> np.ndarray:
     R = rotation_matrix_from_quaternion(q)
     return R[:, 2]
 
-get_normal_vector_from_quaternion(IDENTITY_QUATERNION) # Force compilation on import
+get_normal_vector_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
-@numba.njit
+@numba.njit(cache=True)
 def get_final_rotation_matrix_from_sequence_of_quaternions(*quaternions: np.ndarray) -> np.ndarray:
     R = np.eye(3)
     for quaternion in quaternions:
         R = R @ rotation_matrix_from_quaternion(quaternion)
     return R
 
-get_final_rotation_matrix_from_sequence_of_quaternions(IDENTITY_QUATERNION, IDENTITY_QUATERNION, IDENTITY_QUATERNION) # Force compilation on import
+get_final_rotation_matrix_from_sequence_of_quaternions(IDENTITY_QUATERNION, IDENTITY_QUATERNION, IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
-@numba.njit
+@numba.njit(cache=True)
 def get_normal_alpha_beta_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -168,9 +168,9 @@ def get_normal_alpha_beta_from_quaternion(q: np.ndarray) -> np.ndarray:
     beta = np.arcsin(-n[1])
     return np.array([alpha, beta])
 
-get_normal_alpha_beta_from_quaternion(IDENTITY_QUATERNION) # Force compilation on import
+get_normal_alpha_beta_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
-@numba.njit
+@numba.njit(cache=True)
 def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -185,7 +185,7 @@ def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.nd
     T[:3, 3] = p
     return T
 
-transformation_matrix_from_quaternion(IDENTITY_QUATERNION, np.zeros(3)) # Force compilation on import
+transformation_matrix_from_quaternion(IDENTITY_QUATERNION, np.zeros(3)) # Force compilation for expected argument type signature in import
 
 def transform_vector_from_quaternion(q: np.ndarray, p: np.ndarray, v: np.ndarray) -> np.ndarray:
     """
@@ -226,7 +226,7 @@ def transform_vector_from_transform_stamped(msg: TransformStamped, v: np.ndarray
                   msg.transform.translation.z])
     return transform_vector_from_quaternion(q, p, v)
 
-@numba.njit
+@numba.njit(cache=True)
 def invert_transformation_matrix(T: np.ndarray) -> np.ndarray:
     """
     Takes the inverse of the 4x4 homogeneous transformation matrix.
@@ -242,7 +242,7 @@ def invert_transformation_matrix(T: np.ndarray) -> np.ndarray:
     T_inv[:3, 3] = -R.T @ p
     return T_inv
 
-invert_transformation_matrix(np.eye(4)) # Force compilation on import
+invert_transformation_matrix(np.eye(4)) # Force compilation for expected argument type signature in import
 
 def transformation_matrix_from_compose_transforms(*transforms: Transform) -> Transform:
     """
@@ -259,7 +259,7 @@ def transformation_matrix_from_compose_transforms(*transforms: Transform) -> Tra
     
     return T
 
-@numba.njit
+@numba.njit(cache=True)
 def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -287,9 +287,9 @@ def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     q_left[3, 3] = q[3]
     return q_left
 
-get_left_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation on import
+get_left_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
-@numba.njit
+@numba.njit(cache=True)
 def get_right_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -318,9 +318,9 @@ def get_right_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     q_right[3, 3] = q[3]
     return q_right
 
-get_right_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation on import
+get_right_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
-@numba.njit
+@numba.njit(cache=True)
 def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -343,7 +343,7 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     v_rot = (Ml @ Mr @ v_aug).flatten()
     return v_rot[1:]*v_mag
 
-rotate_vector_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation on import
+rotate_vector_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import
 
 def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
@@ -363,7 +363,7 @@ def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
 # Euler Angle Related Functions
 #############################################
 
-@numba.njit
+@numba.njit(cache=True)
 def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -648,7 +648,7 @@ def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray)
 # Magnetic Interaction Matrix Calculations
 #############################################
 
-@numba.njit
+@numba.njit(cache=True)
 def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray:
     M_F = np.array([
                 [ dipole_moment[0],  dipole_moment[1], dipole_moment[2], 0.0,              0.0 ],
@@ -657,18 +657,35 @@ def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray
             ])
     return M_F
 
-magnetic_interaction_grad5_to_force(np.array([1.0, 0.0, 0.0])) # Force compilation on import
+magnetic_interaction_grad5_to_force(np.array([1.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
 
-@numba.njit
+@numba.njit(cache=True)
 def magnetic_interaction_field_to_torque(dipole_moment: np.ndarray) -> np.ndarray:
     return get_skew_symmetric_matrix(dipole_moment)
 
-magnetic_interaction_field_to_torque(np.array([1.0, 0.0, 0.0])) # Force compilation on import
+magnetic_interaction_field_to_torque(np.array([1.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
 
+@numba.njit(cache=True)
+def magnetic_interaction_field_to_torque_from_rotmat(dipole_moment: np.ndarray,
+                                                     R: np.ndarray) -> np.ndarray:
+    """
+    The dipole moment must be expressed in the local frame for this to work.
+    """
+    return get_skew_symmetric_matrix(dipole_moment) @ R.T
+
+magnetic_interaction_field_to_torque_from_rotmat(np.array([1.0, 0.0, 0.0]),
+                                                    np.eye(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def magnetic_interaction_field_to_local_torque(dipole_strength: float,
                                                dipole_axis: np.ndarray,
                                                dipole_quaternion: np.ndarray) -> np.ndarray:
     return dipole_strength * get_skew_symmetric_matrix(dipole_axis) @ (rotation_matrix_from_quaternion(dipole_quaternion).T)
+
+
+magnetic_interaction_field_to_local_torque(1.0,
+                                           np.array([0.0, 0.0, 1.0]),
+                                           IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
 def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray,
                                                    full_mat: float = True,
@@ -780,7 +797,7 @@ def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
                                                        torque_first=torque_first,
                                                        dipole_axis=dipole_axis)
 
-@numba.njit
+@numba.njit(cache=True)
 def get_full_magnetic_interaction_torque_first_jit(dipole_axis: np.ndarray,
                                                    dipole_quaternion: np.ndarray,
                                                    dipole_strength: np.float64) -> np.ndarray:
@@ -801,4 +818,4 @@ def get_full_magnetic_interaction_torque_first_jit(dipole_axis: np.ndarray,
 
 get_full_magnetic_interaction_torque_first_jit(np.array([0.0, 0.0, 1.0]),
                                                 np.array([0.0, 0.0, 0.0, 1.0]),
-                                                1.0) # Force compilation on import
+                                                1.0) # Force compilation for expected argument type signature in import

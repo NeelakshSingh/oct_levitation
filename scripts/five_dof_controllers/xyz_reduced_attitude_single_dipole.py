@@ -22,6 +22,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.tfsub_callback_style_control_loop = True
         self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
 
+        self.control_rate = self.CONTROL_RATE
         self.dt = 1/self.control_rate
         self.publish_desired_com_wrenches = True
         self.publish_desired_dipole_wrenches = False
@@ -38,14 +39,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.control_gain_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_gains",
                                                       String, queue_size=1, latch=True)
-        
-        self.publish_jma_condition = True
-        self.south_pole_up = True
-        self.warn_jma_condition = True
-
-        if self.publish_jma_condition:
-            self.jma_condition_pub = rospy.Publisher("/xyz_rp_control_single_dipole/jma_condition",
-                                                     VectorStamped, queue_size=1)
             
         #############################
         ### Z CONTROL DLQR DESIGN ###
@@ -162,7 +155,7 @@ Tzy: {Tzy}"""
         self.last_y = 0.0
 
         self.__first_reading = True
-        self.metadata_msg.data = f"""
+        self.metadata_msg.metadata.data = f"""
 Experiment metadata.
 Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
 Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
@@ -171,6 +164,7 @@ Gains: {self.control_gains_message.data}
 Calibration type: Legacy yaml file
 Dipole object used: {self.rigid_body_dipole}
 """
+        self.set_path_metadata(__file__)
 
     def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
@@ -320,6 +314,7 @@ Dipole object used: {self.rigid_body_dipole}
 
         # Performing the simplified allocation for the two torques.
         des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
+        # des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

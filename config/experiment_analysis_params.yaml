@@ -46,6 +46,9 @@ experiment_analysis:
       reduced_attitude_control: 
         - "/com_single_dipole_normal_orientation_control/jma_condition"
         - "/control_session/jma_condition"
+      xyz_normal_control:
+        - "/xyz_rp_control_single_dipole/jma_condition"
+        - "/control_session/jma_condition"
 
   filter_time_range:
     enable: false # If true then specify the start and end times properly.

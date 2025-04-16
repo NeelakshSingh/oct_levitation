@@ -237,19 +237,65 @@ class ControlSessionNodeBase:
         Lambda_tau = np.zeros((3, len(self.__ACTIVE_COILS)))
         Lambda_F = np.zeros((3, len(self.__ACTIVE_COILS)))
         T_VM = geometry.transformation_matrix_from_quaternion(com_quaternion, com_position)
-        R = T_VM[:3, :3]
+        R_VM = T_VM[:3, :3]
 
         for dipole in self.rigid_body_dipole.dipole_list:
+            dipole_quat = geometry.numpy_quaternion_from_tf_msg(dipole.transform)
+            R = R_VM @ geometry.rotation_matrix_from_quaternion(dipole_quat)
             for magnet_tf, magnet in dipole.magnet_stack:
-                mag_quaternion = geometry.numpy_quaternion_from_tf_msg(magnet_tf.transform)
-                mag_position = geometry.numpy_translation_from_tf_msg(magnet_tf.transform)
+                mag_quaternion = geometry.numpy_quaternion_from_tf_msg(magnet_tf)
+                mag_position = geometry.numpy_translation_from_tf_msg(magnet_tf)
                 T_M_mag = geometry.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
+                t_M_mag = T_M_mag[:3, 3]
                 T_V_mag = T_VM @ T_M_mag
                 R_V_mag = T_V_mag[:3, :3]
+                R_M_mag = T_M_mag[:3, :3]
                 p_V_mag = T_V_mag[:3, 3]
                 A_mag = self.mpem_model.getActuationMatrix(p_V_mag)
                 A_mag = A_mag[:, self.__ACTIVE_COILS]
-                mag_dipole_V = magnet.magnetization_axis * magnet.get_dipole_strength()
+                mag_dipole_mag = magnet.magnetization_axis * magnet.get_dipole_strength()
+                mag_dipole_V = R_V_mag @ mag_dipole_mag
+                mag_dipole_M = R_M_mag @ mag_dipole_mag
+
+                Mf_mag_V = geometry.magnetic_interaction_grad5_to_force(mag_dipole_V)
+                Mtau_mag_M = geometry.magnetic_interaction_field_to_torque_from_rotmat(mag_dipole_M, R)
+                A_mag_G = A_mag[3:, :]
+                A_mag_B = A_mag[:3, :]
+                
+                Lambda_F_mag = Mf_mag_V @ A_mag_G
+                Lambda_tau += Mtau_mag_M @ A_mag_B + geometry.get_skew_symmetric_matrix(t_M_mag) @ Lambda_F_mag
+                Lambda_F += Lambda_F_mag
+
+        # rospy.loginfo(f"Lambda_tau: {Lambda_tau}, Lambda_F: {Lambda_F}")
+        ## NOTE: REMOVING THE 3rd ROW IS EXPERIMENT SPECIFIC. PLEASE MAKE SURE THAT LOCAL FRAME Tz IS NOT CONTROLLABLE OR CHANGE THIS CODE.
+        JMA = np.vstack((Lambda_tau[:2], Lambda_F)) # The third row will be zero anyway
+        computed_currents = np.linalg.pinv(JMA) @ w_com
+        if self.sim_mode:
+            des_currents = np.zeros(8)
+            des_currents[self.__ACTIVE_COILS] = computed_currents
+        else:
+            # Due to real world coils being connected to a different limited set of drivers.
+            des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
+            des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
+
+        jma_condition = np.linalg.cond(JMA)
+
+        if self.warn_jma_condition:
+            condition_check_tol = 300
+            if jma_condition > condition_check_tol:
+                np.set_printoptions(linewidth=np.inf)
+                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
+                                       Current TF: {tf_msg}
+                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
+                                    \n JMA: \n {JMA}""")
+
+        if self.publish_jma_condition:
+            jma_condition_msg = VectorStamped()
+            jma_condition_msg.header.stamp = rospy.Time.now()
+            jma_condition_msg.vector = [jma_condition]
+            self.jma_condition_pub.publish(jma_condition_msg)
+
+        return des_currents.flatten()
 
     def post_init(self):
         """
@@ -315,13 +361,9 @@ class ControlSessionNodeBase:
         stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time += (stop_time - start_time)
-            self.computation_time_sample += 1
-            if self.computation_time_sample % self.computation_time_avg_samples == 0:
-                self.computation_time_msg.header.stamp = rospy.Time.now()
-                self.computation_time_msg.vector = [self.current_computation_time/self.computation_time_avg_samples]
-                self.computation_time_pub.publish(self.computation_time_msg)
-                self.computation_time_sample = 0
-                self.current_computation_time = 0
+            self.computation_time_msg.header.stamp = rospy.Time.now()
+            self.computation_time_msg.vector = [self.current_computation_time]
+            self.computation_time_pub.publish(self.computation_time_msg)
 
     def main_timer_loop(self, event: rospy.timer.TimerEvent):
         start_time = time.perf_counter()
@@ -331,12 +373,8 @@ class ControlSessionNodeBase:
         stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time += (stop_time - start_time)
-            self.computation_time_sample += 1
-            if self.computation_time_sample % self.computation_time_avg_samples == 0:
-                self.computation_time_msg.header.stamp = rospy.Time.now()
-                self.computation_time_msg.vector = [self.current_computation_time/self.computation_time_avg_samples]
-                self.computation_time_pub.publish(self.computation_time_msg)
-                self.computation_time_sample = 0
-                self.current_computation_time = 0
+            self.computation_time_msg.header.stamp = rospy.Time.now()
+            self.computation_time_msg.vector = [self.current_computation_time]
+            self.computation_time_pub.publish(self.computation_time_msg)
 
         
