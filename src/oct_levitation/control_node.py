@@ -360,7 +360,7 @@ class ControlSessionNodeBase:
         self.publish_topics()
         stop_time = time.perf_counter()
         if self.publish_computation_time:
-            self.current_computation_time += (stop_time - start_time)
+            self.current_computation_time = (stop_time - start_time)
             self.computation_time_msg.header.stamp = rospy.Time.now()
             self.computation_time_msg.vector = [self.current_computation_time]
             self.computation_time_pub.publish(self.computation_time_msg)
@@ -372,7 +372,7 @@ class ControlSessionNodeBase:
         self.publish_topics()
         stop_time = time.perf_counter()
         if self.publish_computation_time:
-            self.current_computation_time += (stop_time - start_time)
+            self.current_computation_time = (stop_time - start_time)
             self.computation_time_msg.header.stamp = rospy.Time.now()
             self.computation_time_msg.vector = [self.current_computation_time]
             self.computation_time_pub.publish(self.computation_time_msg)

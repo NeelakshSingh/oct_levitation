@@ -160,7 +160,7 @@
                                         <relative_minimum>-30</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/com_single_dipole_normal_orientation_control/jma_condition</topic>
+                                    <topic>/control_session/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </x_axis>
                                 <y_axis>
@@ -173,7 +173,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/com_single_dipole_normal_orientation_control/jma_condition</topic>
+                                    <topic>/control_session/jma_condition</topic>
                                     <type>control_utils/VectorStamped</type>
                                 </y_axis>
                             </axes>

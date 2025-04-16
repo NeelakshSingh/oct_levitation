@@ -37,7 +37,7 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
 
-        self.kp = 70
+        self.kp = 150
         self.Kd = np.diag([1.0, 1.0])*30
 
         # self.kp = 50
@@ -297,7 +297,8 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         # Let's try the field local frame allocation which should always yield the correct torque configuration
         # des_currents =  self.full_local_torque_inertial_force_allocation(tf_msg, Tau_x, Tau_y)
         com_wrench_5dof = np.array([Tau_x, Tau_y, 0.0, 0.0, 0.0])
-        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, com_wrench_5dof)
+        # des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, com_wrench_5dof)
+        des_currents = self.indiv_magnet_contribution_allocation(tf_msg, com_wrench_5dof)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 
