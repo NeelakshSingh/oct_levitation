@@ -3732,3 +3732,43 @@ def plot_slices_currnet_allocation_condition_number_variation(calibration_model:
         mlab.show()
 
     return (slice_x, slice_y, axes, colorbar)
+
+######################################
+# UTILITY PLOTS LIKE COMPUTATION TIMES
+######################################
+
+def plot_computation_times(comptime_df: pd.DataFrame,
+                           save_as: str = None,
+                           save_as_emf: bool = False,
+                           inkscape_path: str = INKSCAPE_PATH,
+                           **kwargs) -> Tuple[Figure, plt.Axes]:
+    """
+    Plots computation times from a DataFrame.
+
+    Parameters:
+        comptime_df (pd.DataFrame): DataFrame containing computation times.
+        save_as (str, optional): Path to save the plot as an SVG or PNG file (without extension).
+        save_as_emf (bool, optional): If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
+        inkscape_path (str, optional): Path to the Inkscape executable for converting to EMF format.
+        **kwargs: Additional keyword arguments passed to plt.plot().
+    """
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(comptime_df['time'], comptime_df['vector_0'], color='tab:blue', label='Computation Time', **kwargs)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Computation Time (s)')
+    ax.set_title('Computation Time Plot')
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.7)
+
+    fig.tight_layout()
+
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+
+    return fig, ax

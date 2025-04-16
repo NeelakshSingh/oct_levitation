@@ -370,6 +370,19 @@ if rospy.get_param("experiment_analysis/enable_alpha_beta_plots", default=False)
 #################################
 
 #################################
+### UTILITY PLOTS
+
+if rospy.get_param("experiment_analysis/enable_utility_plots", default=False):
+    computation_time_plt_save = None
+    if SAVE_PLOTS:
+        computation_time_plt_save = os.path.join(plot_folder, "controller_callback_computation_time.svg")
+    
+    plotting.plot_computation_times(data['_control_session_computation_time'],
+                                    save_as=computation_time_plt_save,
+                                    save_as_emf=SAVE_PLOTS_AS_EMF,
+                                    inkscape_path=INKSCAPE_PATH)
+
+#################################
 ### UTILITY CALLS - Note taking, and other features to come
 observations_editor = rospy.get_param("experiment_analysis/observations_editor", default="nano")
 def open_editor_for_notes(directory=".", filename_prefix="observation"):

@@ -40,6 +40,7 @@ experiment_analysis:
   enable_z_specific_plots: false
   enable_alpha_beta_plots: false
   enable_condition_number_plots: true
+  enable_utility_plots: true
 
   condition_number_plot_options:
     experiment_subfolder_topic_map: # Different experiments used a different name for this topic. So I just used this map. In the future just use the same name plox.
