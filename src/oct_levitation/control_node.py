@@ -232,16 +232,24 @@ class ControlSessionNodeBase:
         """
         Will return the 6 x N_coils allocation matrix computed by treating each magnet as an individual dipole.
         """
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
-        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
+        com_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        com_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         Lambda_tau = np.zeros((3, len(self.__ACTIVE_COILS)))
         Lambda_F = np.zeros((3, len(self.__ACTIVE_COILS)))
-        R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
+        T_VM = geometry.transformation_matrix_from_quaternion(com_quaternion, com_position)
+        R = T_VM[:3, :3]
 
         for dipole in self.rigid_body_dipole.dipole_list:
             for magnet_tf, magnet in dipole.magnet_stack:
-                pass
-
+                mag_quaternion = geometry.numpy_quaternion_from_tf_msg(magnet_tf.transform)
+                mag_position = geometry.numpy_translation_from_tf_msg(magnet_tf.transform)
+                T_M_mag = geometry.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
+                T_V_mag = T_VM @ T_M_mag
+                R_V_mag = T_V_mag[:3, :3]
+                p_V_mag = T_V_mag[:3, 3]
+                A_mag = self.mpem_model.getActuationMatrix(p_V_mag)
+                A_mag = A_mag[:, self.__ACTIVE_COILS]
+                mag_dipole_V = magnet.magnetization_axis * magnet.get_dipole_strength()
 
     def post_init(self):
         """

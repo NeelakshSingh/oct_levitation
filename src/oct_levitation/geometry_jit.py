@@ -226,6 +226,7 @@ def transform_vector_from_transform_stamped(msg: TransformStamped, v: np.ndarray
                   msg.transform.translation.z])
     return transform_vector_from_quaternion(q, p, v)
 
+@numba.njit
 def invert_transformation_matrix(T: np.ndarray) -> np.ndarray:
     """
     Takes the inverse of the 4x4 homogeneous transformation matrix.
@@ -240,6 +241,8 @@ def invert_transformation_matrix(T: np.ndarray) -> np.ndarray:
     T_inv[:3, :3] = R.T
     T_inv[:3, 3] = -R.T @ p
     return T_inv
+
+invert_transformation_matrix(np.eye(4)) # Force compilation on import
 
 def transformation_matrix_from_compose_transforms(*transforms: Transform) -> Transform:
     """
@@ -284,9 +287,6 @@ def get_left_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     q_left[3, 3] = q[3]
     return q_left
 
-    # return np.block([[q[3], -q[:3].reshape(1, 3)],
-                    #  [q[:3].reshape(3, 1), q[3]*np.eye(3) + get_skew_symmetric_matrix(q[:3])]])
-
 get_left_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation on import
 
 @numba.njit
@@ -317,8 +317,6 @@ def get_right_quaternion_matrix(q: np.ndarray) -> np.ndarray:
     q_right[3, 2] = -q[0]
     q_right[3, 3] = q[3]
     return q_right
-    # return np.block([[q[3], -q[:3].reshape(1, 3)],
-    #                  [q[:3].reshape(3, 1), q[3]*np.eye(3) - get_skew_symmetric_matrix(q[:3])]])
 
 get_right_quaternion_matrix(IDENTITY_QUATERNION) # Force compilation on import
 
