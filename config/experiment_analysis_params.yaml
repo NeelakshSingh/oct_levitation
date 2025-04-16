@@ -39,6 +39,13 @@ experiment_analysis:
   # optional flags, default to false
   enable_z_specific_plots: false
   enable_alpha_beta_plots: false
+  enable_condition_number_plots: true
+
+  condition_number_plot_options:
+    experiment_subfolder_topic_map: # Different experiments used a different name for this topic. So I just used this map. In the future just use the same name plox.
+      reduced_attitude_control: 
+        - "/com_single_dipole_normal_orientation_control/jma_condition"
+        - "/control_session/jma_condition"
 
   filter_time_range:
     enable: false # If true then specify the start and end times properly.

@@ -4,7 +4,7 @@ import scipy.signal as signal
 import control as ct
 
 import oct_levitation.rigid_bodies as rigid_bodies
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.common as common
 import oct_levitation.numerical as numerical
 

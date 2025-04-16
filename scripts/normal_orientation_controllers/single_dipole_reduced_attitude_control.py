@@ -5,7 +5,7 @@ import control as ct
 import os
 
 import oct_levitation.rigid_bodies as rigid_bodies
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.filters as filters
 
 from scipy.linalg import block_diag
@@ -35,14 +35,6 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         self.control_gain_publisher = rospy.Publisher("/com_single_dipole_normal_orientation_control/control_gains",
                                                       VectorStamped, queue_size=1, latch=True)
         
-        self.publish_jma_condition = True
-        self.south_pole_up = True
-        self.warn_jma_condition = True
-
-        if self.publish_jma_condition:
-            self.jma_condition_pub = rospy.Publisher("/com_single_dipole_normal_orientation_control/jma_condition",
-                                                     VectorStamped, queue_size=1)
-            
         self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
 
         self.kp = 70
@@ -81,7 +73,6 @@ class SingleDipoleNormalOrientationController(ControlSessionNodeBase):
         Experiment type: Reduced attitude stabilization experiment with a single dipole.
         Dipole: {self.rigid_body_dipole.name}
         Calibration file: {self.calibration_file}
-        Hardware Connected: {self.HARDWARE_CONNECTED}
         Gains: kp: {self.kp}, Kd: {self.Kd}
         Calibration type: Legacy yaml file
         """

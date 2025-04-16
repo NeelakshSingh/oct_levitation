@@ -13,7 +13,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 
 import oct_levitation.common as common
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.numerical as numerical
 
 from scipy.integrate import solve_ivp

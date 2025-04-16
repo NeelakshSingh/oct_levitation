@@ -1,12 +1,13 @@
 import os
 import rospy
 import oct_levitation.mechanical as mechanical
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.numerical as numerical
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import tf2_ros
 import numpy as np
 import time
+import numba
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3
 from tnb_mns_driver.msg import DesCurrentsReg
@@ -164,6 +165,7 @@ class ControlSessionNodeBase:
 
         self.metadata_pub.publish(self.metadata_msg)
 
+
     def set_path_metadata(self, file):
         file_path = os.path.abspath(file)
         self.metadata_msg.controller_name.data = os.path.basename(file_path)
@@ -225,6 +227,21 @@ class ControlSessionNodeBase:
             self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents.flatten()
+
+    def indiv_magnet_contribution_allocation(self, tf_msg: TransformStamped, w_com: np.ndarray):
+        """
+        Will return the 6 x N_coils allocation matrix computed by treating each magnet as an individual dipole.
+        """
+        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
+        Lambda_tau = np.zeros((3, len(self.__ACTIVE_COILS)))
+        Lambda_F = np.zeros((3, len(self.__ACTIVE_COILS)))
+        R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
+
+        for dipole in self.rigid_body_dipole.dipole_list:
+            for magnet_tf, magnet in dipole.magnet_stack:
+                pass
+
 
     def post_init(self):
         """

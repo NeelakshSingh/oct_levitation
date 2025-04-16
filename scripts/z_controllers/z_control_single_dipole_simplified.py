@@ -4,7 +4,7 @@ import scipy.signal as signal
 import control as ct
 
 import oct_levitation.rigid_bodies as rigid_bodies
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.common as common
 import oct_levitation.numerical as numerical
 
@@ -30,11 +30,6 @@ class DirectCOMWrenchZSingleDipoleController(ControlSessionNodeBase):
         
         self.control_gain_publisher = rospy.Publisher("/com_wrench_z_control/control_gains",
                                                  VectorStamped, queue_size=1, latch=True)
-        
-        self.publish_jma_condition = True
-        if self.publish_jma_condition:
-            self.jma_condition_pub = rospy.Publisher("/com_wrench_z_control/jma_condition",
-                                                        VectorStamped, queue_size=1)
         
         # Overestimating mass is quite bad and leads to strong overshoots due to gravity compensation.
         # So I remove a few grams from the estimate.
