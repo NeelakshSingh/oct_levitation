@@ -4,6 +4,7 @@
     <arg name="experiment_folder" default=""/>
     <arg name="summarize" default="false"/>
     <arg name="note_observations" default="true"/>
+    <arg name="disable_plots" default="false" />
     
     <rosparam command="load" file="$(find oct_levitation)/config/experiment_analysis_params.yaml"/>
     <rosparam command="load" file="$(find oct_levitation)/config/general_params.yaml"/>
@@ -14,6 +15,7 @@
             <param name="experiment_folder" value="$(arg experiment_folder)"/>
             <param name="sim" value="$(arg sim)"/>
             <param name="note_observations" value="$(arg note_observations)"/>
+            <param name="disable_plots" value="$(arg disable_plots)"/>
         </node>
     </group>
 

@@ -32,11 +32,12 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
         self.control_gain_publisher = rospy.Publisher("/com_wrench_z_control/control_gains",
                                                  VectorStamped, queue_size=1, latch=True)
         
+
         # Overestimating mass is quite bad and leads to strong overshoots due to gravity compensation.
         # So I remove a few grams from the estimate.
         mass_offset = 0
         self.mass = self.rigid_body_dipole.mass_properties.m + mass_offset # Subtracting 10 grams from the mass.
-        self.k_lin_y = 15 # Friction damping parameter, to be tuned. Originally because of the rod.
+        self.k_lin_y = 10 # Friction damping parameter, to be tuned. Originally because of the rod.
 
         self.south_pole_up = True
         

@@ -196,191 +196,197 @@ pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
 reference_pose_topic = pose_topic + "_reference"
 com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
 
-#################################
-### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.
-current_plt_save = None
-system_state_df = data['_tnb_mns_driver_system_state']
-des_currents_df = data['_tnb_mns_driver_des_currents_reg']
-if rospy.get_param("experiment_analysis/plot_raw_ecb_data", default=False):
-    system_state_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_system_state.csv"))
-    des_currents_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_des_currents_reg.csv"))
-    t0 = system_state_df['time'].to_numpy()[0]
-    system_state_df['time'] = system_state_df['time'].to_numpy() - t0
-    des_currents_df['time'] = des_currents_df['time'].to_numpy() - t0
-    des_currents_df, system_state_df = utils.adjust_current_datasets_for_coil_subset(
-        des_currents_df, system_state_df, ACTIVE_COILS, ACTIVE_DRIVERS
-    )
+DISABLE_PLOTS = rospy.get_param("~disable_plots", default=False)
 
-    
-if SAVE_PLOTS:
-    current_plt_save = os.path.join(plot_folder, "des_actual_currents.svg")
-plotting.plot_currents_with_reference(system_state_df, des_currents_df=des_currents_df,
-                                      save_as=current_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
-
-dclink_voltages_plt_save = None
-if SAVE_PLOTS:
-    dclink_voltages_plt_save = os.path.join(plot_folder, "dclink_voltages.svg")
-plotting.plot_dclink_voltages(system_state_df, save_as=dclink_voltages_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
-### ECB RELATED PLOTS END
-#################################
-
-#################################
-### POSE AND TRAJECTORY RELATED PLOTS
-## Plotting pose
-if rospy.get_param("experiment_analysis/enable_pose_plots"):
-    pose_save = None
-    if SAVE_PLOTS:
-        pose_save = os.path.join(plot_folder, "des_actual_pose.svg")
-    if time_varying_reference:
-        plotting.plot_poses_variable_reference(data[pose_topic],
-                                            data[reference_pose_topic],
-                                            save_as=pose_save,
-                                            save_as_emf=SAVE_PLOTS_AS_EMF,
-                                            inkscape_path=INKSCAPE_PATH)
-    else:
-        plotting.plot_poses_constant_reference(data[pose_topic],
-                                            const_reference_pose,
-                                            save_as=pose_save,
-                                            save_as_emf=SAVE_PLOTS_AS_EMF,
-                                            inkscape_path=INKSCAPE_PATH)
-### POSE AND TRAJECTORY RELATED PLOTS END
-#################################
-
-#################################
-### FORCE AND TORQUE RELATED PLOTS
-## Let's compare the desired and actual components between octomag5p and good calibration file
-
-if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
-    calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
-    calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
-                                                    calibration_file=calib_file)
-
-    # Actual wrench is based on each magnet, the actual currents, and the forward nonlinear MPEM model
-    dipole = dipole_body.dipole_list[0]
-
-    act_des_wrench_save = None
-    if SAVE_PLOTS:
-        act_des_wrench_save = os.path.join(plot_folder, "act_des_wrench.svg")
-    
-    ft_plot_params = rospy.get_param("experiment_analysis/ft_plot_params")
-    plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data[pose_topic],
-                                                                data['_tnb_mns_driver_system_state'],
-                                                                data[com_wrench_topic],
-                                                                calibration_model,
-                                                                dipole,
-                                                                use_local_frame_for_torques=ft_plot_params['use_local_frame_for_torques'],
-                                                                dataset_torques_in_local_frame=ft_plot_params['dataset_torques_in_local_frame'],
-                                                                plot_overall_magnet_torque_component=ft_plot_params['plot_overall_magnet_torque_component'],
-                                                                plot_torque_components_separately=ft_plot_params['plot_torque_components_separately'],
-                                                                save_as=act_des_wrench_save,
-                                                                save_as_emf=SAVE_PLOTS_AS_EMF)
-### FORCE AND TORQUE RELATED PLOTS END
-#################################
-
-#################################
-### CONDITION NUMBER RELATED PLOTS
-
-if rospy.get_param("experiment_analysis/enable_condition_number_plots", default=False):
-    cond_topic = None
-    topic_map = rospy.get_param("experiment_analysis/condition_number_plot_options/experiment_subfolder_topic_map")
-    if experiment_subfolder not in topic_map.keys():
-        node_logerr(f"Experiment folder {experiment_subfolder} not found in condition number topic map.")
-    for topic in topic_map[experiment_subfolder]:
-        topic_bgpy_name = topic_name_to_bagpyext_name(topic)
-        if topic_bgpy_name in data.keys():
-            cond_topic = topic_bgpy_name
-            break
-    if cond_topic is None:
-        node_logerr(f"None of the candidate topic names specified in the condition number topic options for the experiment {experiment_subfolder} were found in the dataset.")
-
-    cond_plot_save = None
-    if SAVE_PLOTS:
-        cond_plot_save = os.path.join(plot_folder, "allocation_condition_number.svg")
-    plotting.plot_jma_condition_number(data[cond_topic],
-                                       save_as=cond_plot_save,
-                                       save_as_emf=SAVE_PLOTS_AS_EMF,
-                                       inkscape_path=INKSCAPE_PATH)
-    
-    cond_pose_plot_save = None
-    if SAVE_PLOTS:
-        cond_pose_plot_save = os.path.join(plot_folder, "allocation_condition_number_pose_plot.svg")
-    plotting.plot_6dof_pose_with_jma_condition_number(data[pose_topic],
-                                                      data[cond_topic],
-                                                      save_as=cond_pose_plot_save,
-                                                      save_as_emf=SAVE_PLOTS_AS_EMF,
-                                                      inkscape_path=INKSCAPE_PATH)
-    
-### CONDITION NUMBER RELATED PLOTS END
-#################################
-
-#################################
-### Z CONTROL SPECIFIC PLOTS
-if rospy.get_param("experiment_analysis/enable_z_specific_plots", default=False):
-    z_fz_plot_save = None
-    if SAVE_PLOTS:
-        z_fz_plot_save = os.path.join(plot_folder, "z_fz_plot.svg")
-
-    if time_varying_reference:
-        plotting.plot_z_position_Fz_variable_reference(
-            data[pose_topic],
-            data[reference_pose_topic],
-            plotting.wrench_stamped_df_to_array_df(data[com_wrench_topic]),
-            save_as=z_fz_plot_save,
-            save_as_emf=SAVE_PLOTS_AS_EMF
-        )
-    else:
-        plotting.plot_z_position_Fz_constant_reference(
-            data[pose_topic],
-            const_reference_pose[2],
-            plotting.wrench_stamped_df_to_array_df(data[com_wrench_topic]),
-            save_as=z_fz_plot_save,
-            save_as_emf=SAVE_PLOTS_AS_EMF
+if not DISABLE_PLOTS:
+    #################################
+    ### ECB RELATED PLOTS: CURRENTS, VOLTAGE, ETC.
+    current_plt_save = None
+    system_state_df = data['_tnb_mns_driver_system_state']
+    des_currents_df = data['_tnb_mns_driver_des_currents_reg']
+    if rospy.get_param("experiment_analysis/plot_raw_ecb_data", default=False):
+        system_state_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_system_state.csv"))
+        des_currents_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_des_currents_reg.csv"))
+        t0 = system_state_df['time'].to_numpy()[0]
+        system_state_df['time'] = system_state_df['time'].to_numpy() - t0
+        des_currents_df['time'] = des_currents_df['time'].to_numpy() - t0
+        des_currents_df, system_state_df = utils.adjust_current_datasets_for_coil_subset(
+            des_currents_df, system_state_df, ACTIVE_COILS, ACTIVE_DRIVERS
         )
 
-    z_plot_save = os.path.join(plot_folder, "z_position.svg")
-    if time_varying_reference:
-        fig, z_axes = plotting.plot_z_position_variable_reference(data[pose_topic],
-                                                    data[reference_pose_topic],
-                                                    save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
-    else:
-        fig, z_axes = plotting.plot_z_position_constant_reference(data[pose_topic], const_reference_pose[2], save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
-
-### Z CONTROL SPECIFIC PLOTS END
-#################################
-
-#################################
-### NORMAL SPECIFIC PLOTS
-if rospy.get_param("experiment_analysis/enable_alpha_beta_plots", default=False):
-    alpha_beta_save = None
+        
     if SAVE_PLOTS:
-        alpha_beta_save = os.path.join(plot_folder, "alpha_beta.svg")
+        current_plt_save = os.path.join(plot_folder, "des_actual_currents.svg")
+    plotting.plot_currents_with_reference(system_state_df, des_currents_df=des_currents_df,
+                                        save_as=current_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
 
-    if time_varying_reference:
-        fig, ab_axes = plotting.plot_alpha_beta_torques_variable_reference(data[pose_topic], 
-                                                    data[reference_pose_topic],
-                                                    data[com_wrench_topic],
-                                                    save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
-    else:
-        fig, ab_axes = plotting.plot_alpha_beta_torques_constant_reference(data[pose_topic], 
-                                                    const_reference_rpy[:2],
-                                                    data[com_wrench_topic],
-                                                    save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
-
-### NORMAL SPECIFIC PLOTS END
-#################################
-
-#################################
-### UTILITY PLOTS
-
-if rospy.get_param("experiment_analysis/enable_utility_plots", default=False):
-    computation_time_plt_save = None
+    dclink_voltages_plt_save = None
     if SAVE_PLOTS:
-        computation_time_plt_save = os.path.join(plot_folder, "controller_callback_computation_time.svg")
-    
-    plotting.plot_computation_times(data['_control_session_computation_time'],
-                                    save_as=computation_time_plt_save,
-                                    save_as_emf=SAVE_PLOTS_AS_EMF,
-                                    inkscape_path=INKSCAPE_PATH)
+        dclink_voltages_plt_save = os.path.join(plot_folder, "dclink_voltages.svg")
+    plotting.plot_dclink_voltages(system_state_df, save_as=dclink_voltages_plt_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+    ### ECB RELATED PLOTS END
+    #################################
+
+    #################################
+    ### POSE AND TRAJECTORY RELATED PLOTS
+    ## Plotting pose
+    if rospy.get_param("experiment_analysis/enable_pose_plots"):
+        pose_save = None
+        if SAVE_PLOTS:
+            pose_save = os.path.join(plot_folder, "des_actual_pose.svg")
+        if time_varying_reference:
+            plotting.plot_poses_variable_reference(data[pose_topic],
+                                                data[reference_pose_topic],
+                                                save_as=pose_save,
+                                                save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                inkscape_path=INKSCAPE_PATH)
+        else:
+            plotting.plot_poses_constant_reference(data[pose_topic],
+                                                const_reference_pose,
+                                                save_as=pose_save,
+                                                save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                inkscape_path=INKSCAPE_PATH)
+    ### POSE AND TRAJECTORY RELATED PLOTS END
+    #################################
+
+    #################################
+    ### FORCE AND TORQUE RELATED PLOTS
+    ## Let's compare the desired and actual components between octomag5p and good calibration file
+
+    if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
+        calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
+        calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
+                                                        calibration_file=calib_file)
+
+        # Actual wrench is based on each magnet, the actual currents, and the forward nonlinear MPEM model
+        dipole = dipole_body.dipole_list[0]
+
+        act_des_wrench_save = None
+        if SAVE_PLOTS:
+            act_des_wrench_save = os.path.join(plot_folder, "act_des_wrench.svg")
+        
+        ft_plot_params = rospy.get_param("experiment_analysis/ft_plot_params")
+        plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data[pose_topic],
+                                                                    data['_tnb_mns_driver_system_state'],
+                                                                    data[com_wrench_topic],
+                                                                    calibration_model,
+                                                                    dipole,
+                                                                    use_local_frame_for_torques=ft_plot_params['use_local_frame_for_torques'],
+                                                                    dataset_torques_in_local_frame=ft_plot_params['dataset_torques_in_local_frame'],
+                                                                    plot_overall_magnet_torque_component=ft_plot_params['plot_overall_magnet_torque_component'],
+                                                                    plot_torque_components_separately=ft_plot_params['plot_torque_components_separately'],
+                                                                    save_as=act_des_wrench_save,
+                                                                    save_as_emf=SAVE_PLOTS_AS_EMF)
+    ### FORCE AND TORQUE RELATED PLOTS END
+    #################################
+
+    #################################
+    ### CONDITION NUMBER RELATED PLOTS
+
+    if rospy.get_param("experiment_analysis/enable_condition_number_plots", default=False):
+        cond_topic = None
+        topic_map = rospy.get_param("experiment_analysis/condition_number_plot_options/experiment_subfolder_topic_map")
+        if experiment_subfolder not in topic_map.keys():
+            node_logerr(f"Experiment folder {experiment_subfolder} not found in condition number topic map.")
+        for topic in topic_map[experiment_subfolder]:
+            topic_bgpy_name = topic_name_to_bagpyext_name(topic)
+            if topic_bgpy_name in data.keys():
+                cond_topic = topic_bgpy_name
+                break
+        if cond_topic is None:
+            node_logerr(f"None of the candidate topic names specified in the condition number topic options for the experiment {experiment_subfolder} were found in the dataset.")
+
+        cond_plot_save = None
+        if SAVE_PLOTS:
+            cond_plot_save = os.path.join(plot_folder, "allocation_condition_number.svg")
+        plotting.plot_jma_condition_number(data[cond_topic],
+                                        save_as=cond_plot_save,
+                                        save_as_emf=SAVE_PLOTS_AS_EMF,
+                                        inkscape_path=INKSCAPE_PATH)
+        
+        cond_pose_plot_save = None
+        if SAVE_PLOTS:
+            cond_pose_plot_save = os.path.join(plot_folder, "allocation_condition_number_pose_plot.svg")
+        plotting.plot_6dof_pose_with_jma_condition_number(data[pose_topic],
+                                                        data[cond_topic],
+                                                        save_as=cond_pose_plot_save,
+                                                        save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                        inkscape_path=INKSCAPE_PATH)
+        
+    ### CONDITION NUMBER RELATED PLOTS END
+    #################################
+
+    #################################
+    ### Z CONTROL SPECIFIC PLOTS
+    if rospy.get_param("experiment_analysis/enable_z_specific_plots", default=False):
+        z_fz_plot_save = None
+        if SAVE_PLOTS:
+            z_fz_plot_save = os.path.join(plot_folder, "z_fz_plot.svg")
+
+        if time_varying_reference:
+            plotting.plot_z_position_Fz_variable_reference(
+                data[pose_topic],
+                data[reference_pose_topic],
+                plotting.wrench_stamped_df_to_array_df(data[com_wrench_topic]),
+                save_as=z_fz_plot_save,
+                save_as_emf=SAVE_PLOTS_AS_EMF
+            )
+        else:
+            plotting.plot_z_position_Fz_constant_reference(
+                data[pose_topic],
+                const_reference_pose[2],
+                plotting.wrench_stamped_df_to_array_df(data[com_wrench_topic]),
+                save_as=z_fz_plot_save,
+                save_as_emf=SAVE_PLOTS_AS_EMF
+            )
+
+        z_plot_save = os.path.join(plot_folder, "z_position.svg")
+        if time_varying_reference:
+            fig, z_axes = plotting.plot_z_position_variable_reference(data[pose_topic],
+                                                        data[reference_pose_topic],
+                                                        save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+        else:
+            fig, z_axes = plotting.plot_z_position_constant_reference(data[pose_topic], const_reference_pose[2], save_as=z_plot_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+
+    ### Z CONTROL SPECIFIC PLOTS END
+    #################################
+
+    #################################
+    ### NORMAL SPECIFIC PLOTS
+    if rospy.get_param("experiment_analysis/enable_alpha_beta_plots", default=False):
+        alpha_beta_save = None
+        if SAVE_PLOTS:
+            alpha_beta_save = os.path.join(plot_folder, "alpha_beta.svg")
+
+        if time_varying_reference:
+            fig, ab_axes = plotting.plot_alpha_beta_torques_variable_reference(data[pose_topic], 
+                                                        data[reference_pose_topic],
+                                                        data[com_wrench_topic],
+                                                        save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+        else:
+            fig, ab_axes = plotting.plot_alpha_beta_torques_constant_reference(data[pose_topic], 
+                                                        const_reference_rpy[:2],
+                                                        data[com_wrench_topic],
+                                                        save_as=alpha_beta_save, save_as_emf=SAVE_PLOTS_AS_EMF, inkscape_path=INKSCAPE_PATH)
+
+    ### NORMAL SPECIFIC PLOTS END
+    #################################
+
+    #################################
+    ### UTILITY PLOTS
+
+    if rospy.get_param("experiment_analysis/enable_utility_plots", default=False):
+        computation_time_plt_save = None
+        if SAVE_PLOTS:
+            computation_time_plt_save = os.path.join(plot_folder, "controller_callback_computation_time.svg")
+        
+        plotting.plot_computation_times(data['_control_session_computation_time'],
+                                        save_as=computation_time_plt_save,
+                                        save_as_emf=SAVE_PLOTS_AS_EMF,
+                                        inkscape_path=INKSCAPE_PATH)
+
+else: # DISABLE_PLOTS
+    node_loginfo("Plotting disabled. Skipping all plots.")
 
 #################################
 ### UTILITY CALLS - Note taking, and other features to come
