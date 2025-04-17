@@ -206,17 +206,17 @@ class ControlSessionNodeBase:
             condition_check_tol = 300
             if jma_condition > condition_check_tol:
                 np.set_printoptions(linewidth=np.inf)
-                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
+                rospy.logwarn(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
                                        Current TF: {tf_msg}
                                     \n JMA pinv: \n {np.linalg.pinv(JMA)}
                                     \n JMA: \n {JMA}""")
-                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
+                rospy.logwarn("[Condition Debug] Trying to pinpoint the source of rank loss.")
 
-                rospy.loginfo_once(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
+                rospy.logwarn(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
                                     M: {M},
                                     M condition number: {np.linalg.cond(M)}""")
                 
-                rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
+                rospy.logwarn(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
                                     A: {A},
                                     A condition number: {np.linalg.cond(A)}""")
 
@@ -284,7 +284,7 @@ class ControlSessionNodeBase:
             condition_check_tol = 300
             if jma_condition > condition_check_tol:
                 np.set_printoptions(linewidth=np.inf)
-                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
+                rospy.logwarn(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
                                        Current TF: {tf_msg}
                                     \n JMA pinv: \n {np.linalg.pinv(JMA)}
                                     \n JMA: \n {JMA}""")
