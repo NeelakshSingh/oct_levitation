@@ -6,6 +6,9 @@ from typing import Dict
 # UTILITIES #
 ##############################################
 
+# This way of registration is actually not ideal. I would rather come up with a way to initialize the file
+# from a json, yaml, or xml file. Because one we have too many rigid bodies all of them will take up RAM in
+# the dictionary. Works for now though.
 REGISTERED_BODIES: Dict[str, MultiDipoleRigidBody] = {}
 
 UNIT_QUATERNION = Quaternion(0.0, 0.0, 0.0, 1.0)
@@ -140,3 +143,42 @@ Onyx80x7_5DiscCenterRingDipole = MultiDipoleRigidBody(
 )
 
 register_rigid_body(Onyx80x7_5DiscCenterRingDipole)
+
+Onyx80x22DiscCenterRingDipoleI40 = MultiDipoleRigidBody(
+    name="onyx_disc_80x22_I40",
+    mass_properties = MassProperties(4.23800000e-02,
+                                     np.array([[1.39912560e-04, -2.79978900e-05, 1.06775840e-04],
+                                               [-2.79978900e-05, 2.38473280e-04, -3.05975000e-05],
+                                               [1.06775840e-04, -3.05975000e-05, 1.18070670e-04]]),
+                                     np.array([[1.46556700e-05, -6.48700000e-08, 1.46640000e-07],
+                                               [-6.48700000e-08, 2.42591800e-05, 1.08130000e-07],
+                                               [1.46640000e-07, 1.08130000e-07, 1.30259300e-05]]),
+                                     np.array([0.04784000, -0.01378000, 0.05259000]),
+                                     PrincipleAxesAndMomentsOfInertia(
+                                         Ix=np.array([0.09000000, 0.01000000, 1.00000000]),
+                                         Iy=np.array([1.00000000, -0.01000000, -0.09000000]),
+                                         Iz=np.array([0.01000000, 1.00000000, -0.01000000]),
+                                         Px=1.30119200e-05,
+                                         Py=1.46681800e-05,
+                                         Pz=2.42606800e-05
+                                    )),
+    pose_frame = "vicon/onyx_disc_80x22/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterRingDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/onyx_disc_80x22/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+            ]
+        )
+    ]
+)
+
+register_rigid_body(Onyx80x22DiscCenterRingDipoleI40)
