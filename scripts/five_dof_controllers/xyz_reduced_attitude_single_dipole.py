@@ -18,9 +18,9 @@ from tnb_mns_driver.msg import DesCurrentsReg
 class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
-        self.HARDWARE_CONNECTED = False
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 7.0e-3])
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, -20.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
         self.dt = 1/self.control_rate
@@ -50,7 +50,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Bz = np.array([[0, 1/self.mass]]).T
         Cz = np.array([[1, 0]])
 
-        z_max = 4e-2 # 4 cm maximum z displacement.
+        z_max = 5e-3 # 5 mm maximum z displacement.
         z_dot_max = 5*z_max
         Fz_max = 5*self.mass*z_dot_max # Assume very small maximum force.
 
@@ -70,19 +70,23 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                   method='zoh')
         
-        Qz = np.diag([100.0, 10.0])
+        Qz = np.diag([10.0, 1.0])
         Rz = 1
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
         # Denormalize the control gains.
         # self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
-        # self.K_z = np.array([[19.45306157, 2.5]])
-        self.K_z = np.array([[19.45306157, 3]])
+        # self.Ki_z = 1
         # self.K_z = np.asarray(Kz_norm)
+        # self.K_z = np.array([[7.447, 1.006]])
+        # self.K_z = np.array([[1.078, 0.3326]])
+        # self.K_z = np.array([[0.03033, 0.06008]])
 
         # Since X and Y have the same dynamics, we use the same gains.
-        self.K_x = np.copy(self.K_z)
-        self.K_y = np.copy(self.K_z)
+        # self.K_x = np.copy(self.K_z)
+        # self.K_y = np.copy(self.K_z)
+        self.K_x = np.zeros((1,2))
+        self.K_y = np.zeros((1,2))
 
         # self.K_x = np.zeros((1,2))
         # self.K_y = np.zeros((1,2))
@@ -93,9 +97,12 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #############################
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         
-        self.Iavg = 0.5*(self.rigid_body_dipole.mass_properties.I_bf[0,0] + self.rigid_body_dipole.mass_properties.I_bf[1,1])
-        self.k_ra_p = 50
-        self.K_ra_d = np.diag([1.0, 1.0])*30
+        self.Ixx = self.rigid_body_dipole.mass_properties.I_bf[0,0]
+        self.Iyy = self.rigid_body_dipole.mass_properties.I_bf[1,1]
+        self.k_ra_p = 1.0
+        self.K_ra_d = np.diag([1.0, 1.0])*1.0
+        # self.k_ra_p = 0.0
+        # self.K_ra_d = np.diag([1.0, 1.0])*0.0
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
@@ -144,6 +151,7 @@ Tzx: {Tzx},
 Tzu: {Tzu},
 Tzy: {Tzy}"""
 
+        self.ez_integral = 0.0
         self.z_dot = 0.0
         self.x_dot = 0.0
         self.y_dot = 0.0
@@ -276,16 +284,17 @@ Dipole object used: {self.rigid_body_dipole}
         r_x = np.array([[ref_x, 0.0]]).T
         r_y = np.array([[ref_y, 0.0]]).T
 
-        z_error = x_z - r_z
+        z_error = x_z - r_z # This error is in meters. We need it to be big enough in mm.
         x_error = x_x - r_x
         y_error = x_y - r_y
+        self.ez_integral += z_error[0, 0]*self.dt
 
         u_z = -self.K_z @ z_error + self.mass*common.Constants.g # Gravity compensation
-        # u_z = -self.K_z @ z_error
+        # u_z = -self.K_z @ z_error - self.Ki_z * self.ez_integral + self.mass*common.Constants.g # Gravity compensation
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        F_z = u_z[0, 0]
+        F_z = u_z[0, 0] - 0.100
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
 
@@ -296,8 +305,8 @@ Dipole object used: {self.rigid_body_dipole}
         reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
         u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * E @ R.T @ np.cross(Lambda, Lambda_d)
         # Local frame torque allocation
-        Tau_x = u_RA[0]*self.Iavg
-        Tau_y = u_RA[1]*self.Iavg
+        Tau_x = u_RA[0]*self.Ixx
+        Tau_y = u_RA[1]*self.Iyy
 
         self.error_state_msg.vector = np.concatenate((x_error.flatten(), 
                                                       y_error.flatten(), 
@@ -313,8 +322,7 @@ Dipole object used: {self.rigid_body_dipole}
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
-        # des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
+        des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

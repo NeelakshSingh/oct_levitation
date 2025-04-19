@@ -270,6 +270,9 @@ if not DISABLE_PLOTS:
             act_des_wrench_save = os.path.join(plot_folder, "act_des_wrench.svg")
         
         ft_plot_params = rospy.get_param("experiment_analysis/ft_plot_params")
+        Fg_comp = None
+        if ft_plot_params["remove_gravity_component"]:
+            Fg_comp = common.Constants.g * np.array([0, 0, 1]) * dipole_body.mass_properties.m # By convention, the z axis is up
         plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data[pose_topic],
                                                                     data['_tnb_mns_driver_system_state'],
                                                                     data[com_wrench_topic],
@@ -279,6 +282,8 @@ if not DISABLE_PLOTS:
                                                                     dataset_torques_in_local_frame=ft_plot_params['dataset_torques_in_local_frame'],
                                                                     plot_overall_magnet_torque_component=ft_plot_params['plot_overall_magnet_torque_component'],
                                                                     plot_torque_components_separately=ft_plot_params['plot_torque_components_separately'],
+                                                                    remove_gravity_compensation_force=ft_plot_params['remove_gravity_component'],
+                                                                    fg_comp=Fg_comp,
                                                                     save_as=act_des_wrench_save,
                                                                     save_as_emf=SAVE_PLOTS_AS_EMF)
     ### FORCE AND TORQUE RELATED PLOTS END

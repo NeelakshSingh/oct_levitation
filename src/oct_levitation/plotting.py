@@ -2471,6 +2471,8 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          inkscape_path: str = INKSCAPE_PATH,
                                                          return_actual_wrench: bool = False,
                                                          component_plot_kwargs: Optional[Dict[str, Any]] = dict(),
+                                                         remove_gravity_compensation_force: bool = False,
+                                                         fg_comp: Optional[np_t.NDArray[float]] = None,
                                                          **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
     """
     Plots the actual and desired wrench (force and torque) components over time for a dipole center,
@@ -2694,6 +2696,14 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
 
     # Convert wrench dict to DataFrame
     actual_wrench_df = pd.DataFrame(actual_wrench_dict)
+
+    if remove_gravity_compensation_force:
+        actual_wrench_df[key_map['Fx']] -= fg_comp[0]
+        actual_wrench_df[key_map['Fy']] -= fg_comp[1]
+        actual_wrench_df[key_map['Fz']] -= fg_comp[2]
+        desired_wrench[key_map['Fx']] -= fg_comp[0]
+        desired_wrench[key_map['Fy']] -= fg_comp[1]
+        desired_wrench[key_map['Fz']] -= fg_comp[2]
     
     # Plot settings
     fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)

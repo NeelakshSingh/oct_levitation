@@ -31,11 +31,12 @@ experiment_analysis:
     dataset_torques_in_local_frame: true
     plot_overall_magnet_torque_component: true
     plot_torque_components_separately: false
+    remove_gravity_component: true # If true, then the gravity compensation component is removed from world frame force. Which should usually be Fz.
 
   ## Plot enable flags, ECB specific are always enabled
   # mandatory flags, always required
   enable_pose_plots: true
-  enable_force_torque_plots: false
+  enable_force_torque_plots: true
 
   # optional flags, default to false
   enable_field_gradient_plots: true
