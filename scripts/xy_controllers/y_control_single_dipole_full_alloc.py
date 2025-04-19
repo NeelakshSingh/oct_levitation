@@ -66,7 +66,7 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
         ## Setting up the DLQR parameters for exact system emulation.
         A_d_norm, B_d_norm, C_d_norm, D_d_norm, dt = signal.cont2discrete((A_norm, B_norm, C_norm, 0), dt=1/self.control_rate,
                                                   method='zoh')
-        Q = np.diag([100.0, 10.0])
+        Q = np.diag([1.0, 1.0])
         R = 1
         K_norm, S, E = ct.dlqr(A_d_norm, B_d_norm, Q, R)
 
@@ -192,7 +192,7 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
 
         F_y = u[0, 0]
         # Adding a little bit of gravity compensation in order to reduce normal forces and friction a little bit.
-        F_z = 0.90*self.mass*common.Constants.g
+        F_z = self.mass*common.Constants.g
         # F_z = 0.0
         com_wrench_des = np.array([0, 0, 0, 0, F_y, F_z])
         com_wrench_5dof = np.array([0, 0, 0, F_y, F_z])
@@ -200,9 +200,8 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
         
         # Performing simplified allocation to get the currents
-        # des_currents = self.local_frame_torque_global_force_allocation(tf_msg, F_x)
-        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, com_wrench_5dof)
-        # self.desired_currents_msg.des_currents_reg = des_currents.flatten() * self.SoftStarter(self.dt)
+        # des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, com_wrench_5dof)
+        des_currents = self.indiv_magnet_contribution_allocation(tf_msg, com_wrench_5dof)
         self.desired_currents_msg.des_currents_reg = des_currents.flatten()
 
 if __name__ == "__main__":

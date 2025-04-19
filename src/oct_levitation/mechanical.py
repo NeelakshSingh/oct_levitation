@@ -12,6 +12,11 @@ from geometry_msgs.msg import Transform, TransformStamped
 from oct_levitation.common import Constants
 from typing import List, Dict, Union, Tuple
 
+
+##################################
+### Rigid Body Properties: Mass and Material
+##################################
+
 @dataclass
 class PrincipleAxesAndMomentsOfInertia:
     """
@@ -77,6 +82,10 @@ class MaterialProperties:
     density: float
     Br: float
 
+####################################
+### Shapes and Geometric Properties To Store Magnets
+####################################
+
 @dataclass
 class ShapePropertiesInterface:
     _volume = None # No type annotation to keep this variable out of init and private.
@@ -109,6 +118,21 @@ class CylindricalRingShape(ShapePropertiesInterface):
         return self._volume
 
 @dataclass
+class CylindricalShape(CylindricalRingShape):
+    """
+    Geometric properties of a cylindrical shape.
+
+    Parameters
+    ----------
+    t (float) : Thickness (height) of the cylinder in meters.
+    R (float) : Radius of the cylinder in meters.
+    """
+    def __init__(self, t: float, R:float):
+        object.__setattr__(self, 't', t)
+        object.__setattr__(self, 'Ri', 0.0)
+        object.__setattr__(self, 'Ro', R)
+
+@dataclass
 class PermanentMagnet:
     """
     Represents a permanent magnet with defined geometry, material properties.
@@ -123,7 +147,12 @@ class PermanentMagnet:
 
     def get_dipole_strength(self):
         return self.material.Br*self.geometry.volume/Constants.mu_0 # kg*m^2/s
-    
+
+
+##################################
+### Magnetic Dipole and Rigid Body
+##################################
+
 @dataclass
 class MagneticDipole:
     """
