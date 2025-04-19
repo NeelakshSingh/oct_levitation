@@ -121,6 +121,7 @@ if plotting.DISABLE_PLT_SHOW and display_plots:
 INKSCAPE_PATH = rospy.get_param("experiment_analysis/inkscape_path", default="/usr/bin/inkscape")
 SAVE_PLOTS = rospy.get_param("experiment_analysis/save_plots", default=True)
 SAVE_PLOTS_AS_EMF = rospy.get_param("experiment_analysis/save_plots_as_emf", default=True)
+HARDWARE_CONNECTED = rospy.get_param("experiment_analysis/hardware_connected")
 
 ACTIVE_COILS = rospy.get_param("experiment_analysis/active_coils", default=[0, 1, 2, 3, 4, 5, 6, 7])
 ACTIVE_DRIVERS = rospy.get_param("experiment_analysis/active_drivers", default=[0, 1, 2, 3, 4, 5, 6, 7])
@@ -174,16 +175,19 @@ if time_filter_enable:
 
     time, data = utils.filter_dataset_by_time_range(data, time, time_filter_start, time_filter_end, renormalize_time=True)
 
-if sim:
+if sim or not HARDWARE_CONNECTED:
     # We need to fake the dataset for a few quantities
     tnb_mns_system_state_dict = {}
     tnb_mns_system_state_dict['time'] = data[time_sync_topic]['time'].to_numpy()
     for i in range(8):
         tnb_mns_system_state_dict[f"dclink_voltages_{i}"] = np.zeros(len(time))
-        tnb_mns_system_state_dict[f"currents_reg_{i}"] = np.zeros_like(data['_tnb_mns_driver_des_currents_reg'][f'des_currents_reg_{i}'].to_numpy())
+        tnb_mns_system_state_dict[f"currents_reg_{i}"] = np.zeros(len(time))
 
     data['_tnb_mns_driver_system_state'] = pd.DataFrame(tnb_mns_system_state_dict)
-    node_loginfo("\033[96m Sim mode detected. Actual currents and wrench will be shown as zero \033[0m")
+    if sim:
+        node_loginfo("\033[96m Sim mode detected. Actual currents and wrench will be shown as zero \033[0m")
+    if not HARDWARE_CONNECTED:
+        node_loginfo("\033[96m Hardware not connected. Actual currents and wrench will be shown as zero \033[0m")
 
 #################################
 # Dataset pre-processing for real world experiments
@@ -195,6 +199,10 @@ if not sim:
 pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
 reference_pose_topic = pose_topic + "_reference"
 com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
+
+calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
+calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
+                                                calibration_file=calib_file)
 
 DISABLE_PLOTS = rospy.get_param("~disable_plots", default=False)
 
@@ -254,10 +262,6 @@ if not DISABLE_PLOTS:
     ## Let's compare the desired and actual components between octomag5p and good calibration file
 
     if rospy.get_param("experiment_analysis/enable_force_torque_plots"):
-        calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
-        calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
-                                                        calibration_file=calib_file)
-
         # Actual wrench is based on each magnet, the actual currents, and the forward nonlinear MPEM model
         dipole = dipole_body.dipole_list[0]
 
@@ -278,6 +282,26 @@ if not DISABLE_PLOTS:
                                                                     save_as=act_des_wrench_save,
                                                                     save_as_emf=SAVE_PLOTS_AS_EMF)
     ### FORCE AND TORQUE RELATED PLOTS END
+    #################################
+
+    #################################
+    ### FIELD AND GRADIENT RELATED PLOTS
+
+    if rospy.get_param("experiment_analysis/enable_field_gradient_plots", default=False):
+        field_grad_save = None
+        if SAVE_PLOTS:
+            field_grad_save = os.path.join(plot_folder, "actual_fields_and_grads.svg")
+
+        plotting.plot_actual_field_and_gradients(
+            data[pose_topic],
+            data['_tnb_mns_driver_system_state'],
+            calibration_model,
+            save_as=field_grad_save, 
+            save_as_emf=SAVE_PLOTS_AS_EMF, 
+            inkscape_path=INKSCAPE_PATH
+        )
+
+    ### FIELD AND GRADIENT RELATED PLOTS END
     #################################
 
     #################################

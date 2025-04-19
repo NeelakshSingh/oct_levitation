@@ -616,7 +616,7 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     reference_euler = np.rad2deg(reference_euler)
 
     # Plot positions
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10), sharex=True)
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):

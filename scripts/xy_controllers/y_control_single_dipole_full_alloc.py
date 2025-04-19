@@ -35,7 +35,7 @@ class DirectCOMWrenchYSingleDipoleController(ControlSessionNodeBase):
 
         # Overestimating mass is quite bad and leads to strong overshoots due to gravity compensation.
         # So I remove a few grams from the estimate.
-        mass_offset = 0
+        mass_offset = 0.0
         self.mass = self.rigid_body_dipole.mass_properties.m + mass_offset # Subtracting 10 grams from the mass.
         self.k_lin_y = 0 # Friction damping parameter, to be tuned. Originally because of the rod.
 

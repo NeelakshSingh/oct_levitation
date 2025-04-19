@@ -1,5 +1,6 @@
 experiment_analysis:
   n_coils: 6 # Number of coils in the experiment. This is used to determine the number of plots to be generated.
+  hardware_connected: true # Set it to false if you just collected data without the simulator and without the ECB.
   active_coils:
     - 0
     - 1
@@ -34,9 +35,10 @@ experiment_analysis:
   ## Plot enable flags, ECB specific are always enabled
   # mandatory flags, always required
   enable_pose_plots: true
-  enable_force_torque_plots: true
+  enable_force_torque_plots: false
 
   # optional flags, default to false
+  enable_field_gradient_plots: true
   enable_z_specific_plots: false
   enable_alpha_beta_plots: false
   enable_condition_number_plots: true
