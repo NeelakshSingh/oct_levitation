@@ -26,11 +26,16 @@ import pynumdiff.optimize
 import pynumdiff.smooth_finite_difference
 
 from typing import Optional, Tuple, List, Dict, Union, Any, Callable
-# from mayavi import mlab
-# from tvtk.util.ctf import ColorTransferFunction
-# from tvtk.api import tvtk
 from warnings import warn
 from copy import deepcopy
+
+try:
+    from mayavi import mlab
+    from tvtk.util.ctf import ColorTransferFunction
+    from tvtk.api import tvtk
+except Exception as e:
+    warn("Mayavi installation could not be found, 3D volumetric and slice plots like those used for condition numbers will not work.")
+    warn("Error while importing mayavi: " + str(e))
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
 

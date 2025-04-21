@@ -170,7 +170,7 @@ Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
 Calibration file: {self.calibration_file}
 Gains: {self.control_gains_message.data}
 Calibration type: Legacy yaml file
-Dipole object used: {self.rigid_body_dipole}
+Dipole object used: {self.rigid_body_dipole.name}
 """
         self.set_path_metadata(__file__)
 

@@ -52,6 +52,11 @@ experiment_analysis:
     roll: 0.0 # deg
     pitch: 0.0 # deg
     yaw: 0.0 # deg
+  
+  velocity_plot_options:
+    also_plot_pynumdiff: true # If true, then velocity is also estimated using pynumdiff and denoised through a LPF.
+    local_frame_for_angular_velocity: true # If true then angular velocity is estimated in the inertial frame.
+    cutoff_frequency: 50.0 # Hz, cutoff frequency for pynumdiff LPF
 
   condition_number_plot_options:
     experiment_subfolder_topic_map: # Different experiments used a different name for this topic. So I just used this map. In the future just use the same name plox.

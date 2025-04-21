@@ -136,13 +136,13 @@ if len(ACTIVE_COILS) != 8:
 time_varying_reference = rospy.get_param("experiment_analysis/time_varying_reference", default=False)
 
 const_reference_pose = np.zeros(7)
-const_reference_pose[0] = rospy.get_param("experiment_analysis/const_reference_pose_mm_deg/x", default=0.0)*1e-3
-const_reference_pose[1] = rospy.get_param("experiment_analysis/const_reference_pose_mm_deg/y", default=0.0)*1e-3
-const_reference_pose[2] = rospy.get_param("experiment_analysis/const_reference_pose_mm_deg/z", default=0.0)*1e-3
+const_reference_pose[0] = rospy.get_param("experiment_analysis/const_pose_reference_mm_deg/x", default=0.0)*1e-3
+const_reference_pose[1] = rospy.get_param("experiment_analysis/const_pose_reference_mm_deg/y", default=0.0)*1e-3
+const_reference_pose[2] = rospy.get_param("experiment_analysis/const_pose_reference_mm_deg/z", default=0.0)*1e-3
 const_reference_rpy = np.zeros(3)
-const_reference_rpy[0] = np.deg2rad(rospy.get_param("experiment_analysis/const_reference_pose_mm_deg/roll", default=0.0))
-const_reference_rpy[1] = np.deg2rad(rospy.get_param("experiment_analysis/const_reference_pose_mm_deg/pitch", default=0.0))
-const_reference_rpy[2] = np.deg2rad(rospy.get_param("experiment_analysis/const_reference_pose_mm_deg/yaw", default=0.0))
+const_reference_rpy[0] = np.deg2rad(rospy.get_param("experiment_analysis/const_pose_reference_mm_deg/roll", default=0.0))
+const_reference_rpy[1] = np.deg2rad(rospy.get_param("experiment_analysis/const_pose_reference_mm_deg/pitch", default=0.0))
+const_reference_rpy[2] = np.deg2rad(rospy.get_param("experiment_analysis/const_pose_reference_mm_deg/yaw", default=0.0))
 const_reference_pose[3:] = geometry.quaternion_from_euler_xyz(const_reference_rpy)
 
 if not time_varying_reference:
@@ -254,6 +254,27 @@ if not DISABLE_PLOTS:
                                                 save_as=pose_save,
                                                 save_as_emf=SAVE_PLOTS_AS_EMF,
                                                 inkscape_path=INKSCAPE_PATH)
+        
+        velocity_save = None
+        if SAVE_PLOTS:
+            velocity_save = os.path.join(plot_folder, "velocity_plot.svg")
+        default_velocity_plot_options = {
+            "also_plot_pynumdiff": True,
+            "local_frame_for_angular_velocity": True,
+            "cutoff_frequency": 50.0
+        }
+        velocity_plot_options = rospy.get_param("experiment_analysis/velocity_plot_options", default=default_velocity_plot_options)
+        
+        plotting.plot_estimated_velocities(
+            data[pose_topic],
+            also_plot_pynumdiff=velocity_plot_options["also_plot_pynumdiff"],
+            local_frame_for_ang_vel=velocity_plot_options["local_frame_for_angular_velocity"],
+            cutoff_frequency=velocity_plot_options["cutoff_frequency"],
+            save_as=velocity_save,
+            save_as_emf=SAVE_PLOTS_AS_EMF,
+            inkscape_path=INKSCAPE_PATH
+        )
+
     ### POSE AND TRAJECTORY RELATED PLOTS END
     #################################
 
