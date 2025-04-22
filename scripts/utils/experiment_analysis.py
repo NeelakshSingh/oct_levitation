@@ -305,6 +305,7 @@ if not DISABLE_PLOTS:
                                                                     plot_torque_components_separately=ft_plot_params['plot_torque_components_separately'],
                                                                     remove_gravity_compensation_force=ft_plot_params['remove_gravity_component'],
                                                                     fg_comp=Fg_comp,
+                                                                    plot_mean_values=ft_plot_params['plot_mean_values'],
                                                                     save_as=act_des_wrench_save,
                                                                     save_as_emf=SAVE_PLOTS_AS_EMF)
     ### FORCE AND TORQUE RELATED PLOTS END
