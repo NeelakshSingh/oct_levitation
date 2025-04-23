@@ -323,8 +323,7 @@ Dipole object used: {self.rigid_body_dipole.name}
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        # des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
-        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
+        des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

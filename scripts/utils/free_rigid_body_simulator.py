@@ -14,7 +14,7 @@ from tnb_mns_driver.msg import TnbMnsStatus
 
 import oct_levitation.common as common
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.numerical as numerical
 
 from scipy.integrate import solve_ivp
@@ -256,7 +256,7 @@ class DynamicsSimulator:
             rospy.loginfo("Command received again.")
             self.__last_command_warning_sent = False
     
-    def calculate_com_wrench_indiv_magnets(self):
+    def calculate_com_wrench_indiv_magnets(self, currents: np.ndarray):
         com_quaternion = geometry.numpy_quaternion_from_tf_msg(self.__tf_msg.transform)
         com_position = geometry.numpy_translation_from_tf_msg(self.__tf_msg.transform)
 
@@ -287,7 +287,7 @@ class DynamicsSimulator:
                 R_MG = T_MG[:3, :3] # rotmat from magnet frame to body fixed frame
                 p_G_V = T_VG[:3, 3] # position of the magnet frame (magnet's dipole center) in world frame (calibration frame)
 
-                bg_V = self.calibration.get_exact_field_grad5_from_currents(p_G_V, self.__last_output_currents)
+                bg_V = self.calibration.get_exact_field_grad5_from_currents(p_G_V, currents)
                 b_V = bg_V[:3] # magnetic field in world frame
                 g_V = bg_V[3:] # magnetic field gradient in world frame
 
@@ -309,9 +309,12 @@ class DynamicsSimulator:
                 magnet_torque_com_M = magnet_com_torque_from_force + magnet_com_torque_from_torque
                 com_torque += R_VM @ magnet_torque_com_M # Because the applied torques in this simulator are in the intertial frame.
         
-        self.last_recvd_wrench.header.stamp = rospy.Time.now()
-        self.last_recvd_wrench.wrench.force = Vector3(*com_force)
-        self.last_recvd_wrench.wrench.torque = Vector3(*com_torque)
+        # self.last_recvd_wrench.header.stamp = rospy.Time.now()
+        # self.last_recvd_wrench.wrench.force = Vector3(*com_force)
+        # self.last_recvd_wrench.wrench.torque = Vector3(*com_torque)
+
+        torque_force = np.concatenate((com_torque, com_force))
+        return torque_force
                 
     
     def currents_callback(self, des_currents_msg: DesCurrentsReg):
@@ -333,15 +336,16 @@ class DynamicsSimulator:
             # This assumption is not wrong because of stops in the real world. One will ideally use smooth start anyways.
             self.__last_output_currents = self.__ecbd_A * self.__last_output_currents + self.__ecbd_B * currents
         wrench = WrenchStamped()
-        dipole_quat, dipole_pos = geometry.numpy_arrays_from_tf_msg(self.__tf_msg.transform)
-        Mq = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quat,
-                                                                  dipole_strength=self.rigid_body.dipole_list[0].strength,
-                                                                  full_mat=True,
-                                                                  torque_first=True,
-                                                                  dipole_axis=self.rigid_body.dipole_list[0].axis)
-        noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_std, size=(8,))
-        field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents) # Already a compiled function
-        actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
+        # dipole_quat, dipole_pos = geometry.numpy_arrays_from_tf_msg(self.__tf_msg.transform)
+        # Mq = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quat,
+        #                                                           dipole_strength=self.rigid_body.dipole_list[0].strength,
+        #                                                           full_mat=True,
+        #                                                           torque_first=True,
+        #                                                           dipole_axis=self.rigid_body.dipole_list[0].axis)
+        # noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_std, size=(8,))
+        # field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents) # Already a compiled function
+        # actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
+        actual_Tau_force = self.calculate_com_wrench_indiv_magnets(self.__last_output_currents)
         
         wrench.header.stamp = rospy.Time.now()
         wrench.wrench.torque = Vector3(*actual_Tau_force[:3])
