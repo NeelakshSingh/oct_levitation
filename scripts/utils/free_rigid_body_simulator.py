@@ -10,6 +10,7 @@ import numba
 from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion
 from std_msgs.msg import Bool
 from tnb_mns_driver.msg import DesCurrentsReg
+from tnb_mns_driver.msg import TnbMnsStatus
 
 import oct_levitation.common as common
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
@@ -253,6 +254,52 @@ class DynamicsSimulator:
         if self.__last_command_warning_sent:
             rospy.loginfo("Command received again.")
             self.__last_command_warning_sent = False
+    
+    def calculate_com_wrench_indiv_magnets(self):
+        com_quaternion = geometry.numpy_quaternion_from_tf_msg(self.__tf_msg.transform)
+        com_position = geometry.numpy_translation_from_tf_msg(self.__tf_msg.transform)
+
+        ### Nomenclature details
+        # V: World frame (vicon frame)
+        # M: Body fixed frame (attached to COM usually, tracked using vicon)
+        # D: Dipole frame (attached to the dipole)
+        # G: Magnet frame (attached to the magnet)
+        T_VM = geometry.transformation_matrix_from_quaternion(com_quaternion, com_position)
+        R_VM = T_VM[:3, :3] # from body fixed frame to world frame
+
+        com_force = np.zeros(3)
+        com_torque = np.zeros(3)
+
+        for dipole in self.rigid_body.dipole_list:
+            dipole_quat = geometry.numpy_quaternion_from_tf_msg(dipole.transform)
+            dipole_position = geometry.numpy_translation_from_tf_msg(dipole.transform)
+            T_MD = geometry.transformation_matrix_from_quaternion(dipole_quat, dipole_position)
+            T_VD = T_VM @ T_MD
+            for magnet_tf, magnet in dipole.magnet_stack:
+                mag_quaternion_D = geometry.numpy_quaternion_from_tf_msg(magnet_tf)
+                mag_position_D = geometry.numpy_translation_from_tf_msg(magnet_tf)
+                T_DG = geometry.transformation_matrix_from_quaternion(mag_quaternion_D, mag_position_D)
+                T_MG = T_MD @ T_DG
+                T_VG= T_VD @ T_DG
+                p_VG_V = T_VG[:3, 3] # position of magnet (G) in world frame (V) which is the clibration frame too.
+                field_grad_G_V = self.calibration.get_exact_field_grad5_from_currents(p_VG_V, self.__last_output_currents)
+                mag_dipole_G = magnet.magnetization_axis * magnet.get_dipole_strength()
+                mag_dipole_V = T_VG[:3, :3] @ mag_dipole_G
+
+                M_mag_V = geometry.magnetic_interaction_matrix_from_dipole_moment(mag_dipole_V)
+                mag_torque_force_V = M_mag_V @ field_grad_G_V
+                mag_torque_from_torque_V = mag_torque_force_V[:3]
+                mag_force_V = mag_torque_force_V[3:]
+                t_MG_V = R_VM @ T_MG[:3, :3] # Relative position of magnet w.r.t body fixed frame expressed in world frame.
+                mag_torque_from_force_V = np.cross(t_MG_V, mag_force_V)
+                
+                com_force += mag_force_V
+                com_torque += mag_torque_from_torque_V + mag_torque_from_force_V
+        
+        self.last_recvd_wrench.header.stamp = rospy.Time.now()
+        self.last_recvd_wrench.wrench.force = Vector3(*com_force)
+        self.last_recvd_wrench.wrench.torque = Vector3(*com_torque)
+                
     
     def currents_callback(self, des_currents_msg: DesCurrentsReg):
         # The idea is to use the latest available pose and the forward model

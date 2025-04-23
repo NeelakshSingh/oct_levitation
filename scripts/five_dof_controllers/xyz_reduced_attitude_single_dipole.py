@@ -19,7 +19,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 7.0e-3])
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 6.5e-3])
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, -20.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -75,19 +75,21 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
         # Denormalize the control gains.
-        # self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
+        self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
         # self.Ki_z = 1
-        # self.K_z = np.asarray(Kz_norm)
-        # self.K_z = np.array([[7.447, 1.006]])
-        # self.K_z = np.array([[1.078, 0.3326]])
-        # self.K_z = np.array([[0.03033, 0.06008]])
+        # self.K_z = np.array([[5422, 557.6]]) # I40 Tuned for input disturbance offset of 0.18mm for 100gms of force as a step disturbance and 60 deg PM at 28.1 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
+        # self.K_z = np.array([[957.4, 201.8]]) # I40 Tuned for input disturbance offset of 1.2mm for 100gms of force as a step disturbance and 60 deg PM at 9.28 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
+        # self.K_z = np.array([[125, 41.99]]) # I40 Tuned for input disturbance offset of 8mm for 100gms of force step disturbance, 43 deg phase margin at 2.84 rad. The goal is to bring the currents down to a manageable level.
+        # self.K_z = np.array([[125, 4.199]]) # I40 Tuned for input disturbance offset of 8mm for 100gms of force step disturbance, 43 deg phase margin at 2.84 rad. The goal is to bring the currents down to a manageable level.
+        # self.K_z = np.array([[69.23, 37.39]]) # I40 Tuned for input disturbance offset of 1.4mm for 10gms of force step disturbance, 4sec settling time for 1mm offset, 60 deg phase margin at 2.07 rad. 24Hz ECB 3dB bandwidth. 
+        # self.K_z = np.array([[33.69, 31.02]]) # I40 Tuned for input disturbance offset of 3mm for 10gms of force step disturbance, 5.8sec settling time for 1mm step setpoint, 55 geg phase margin at 1.61 rad. 24Hz ECB 3dB bandwidth. 
+        # self.K_z = np.array([[33.69, 3.975]]) # I40 Tuned for input disturbance offset of 3mm for 10gms of force step disturbance, 5.8sec settling time for 1mm step setpoint, 55 geg phase margin at 1.61 rad. 24Hz ECB 3dB bandwidth. 
+        
 
         # Since X and Y have the same dynamics, we use the same gains.
-        # self.K_x = np.copy(self.K_z)
-        # self.K_y = np.copy(self.K_z)
-        self.K_x = np.zeros((1,2))
-        self.K_y = np.zeros((1,2))
-
+        self.K_x = np.copy(self.K_z)
+        self.K_y = np.copy(self.K_z)
+        
         # self.K_x = np.zeros((1,2))
         # self.K_y = np.zeros((1,2))
 
@@ -290,11 +292,10 @@ Dipole object used: {self.rigid_body_dipole.name}
         self.ez_integral += z_error[0, 0]*self.dt
 
         u_z = -self.K_z @ z_error + self.mass*common.Constants.g # Gravity compensation
-        # u_z = -self.K_z @ z_error - self.Ki_z * self.ez_integral + self.mass*common.Constants.g # Gravity compensation
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        F_z = u_z[0, 0] - 0.100
+        F_z = u_z[0, 0]
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
 

@@ -9,6 +9,7 @@ import matplotlib
 from matplotlib.figure import Figure
 
 import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry_jit
 import oct_levitation.common as common
 import oct_levitation.mechanical as mechanical
 from oct_levitation.processing_utils import get_signal_fft
@@ -2609,49 +2610,55 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         # as an individual dipole. This way, we can get the forces and torques on their own
         # center. And using their pose w.r.t dipole center, we can then calculate the forces
         # and torques applied to the dipole center as a result.
-        T_VM = geometry.transformation_matrix_from_quaternion(quaternion, position)
+        T_VM = geometry_jit.transformation_matrix_from_quaternion(quaternion, position)
         R_VM = T_VM[:3, :3]
+        dipole_quat = geometry_jit.numpy_quaternion_from_tf_msg(dipole.transform)
+        dipole_position = geometry_jit.numpy_translation_from_tf_msg(dipole.transform)
+        T_MD = geometry_jit.transformation_matrix_from_quaternion(dipole_quat, dipole_position)
+        
         actual_com_force = np.zeros(3)
         actual_com_torque = np.zeros(3)
 
         for i, (magnet_tf, magnet) in enumerate(dipole.magnet_stack):
-            T_M_mag = geometry.transformation_matrix_from_compose_transforms(
-                dipole.transform,
-                magnet_tf
-            )
-            T_V_mag = T_VM @ T_M_mag
-            R_V_mag = T_V_mag[:3, :3]
-            magnet_dipole_moment = (R_V_mag @ magnet.magnetization_axis) * magnet.get_dipole_strength()
-            magnet_position = T_V_mag[:3, 3]
-            magnet_actual_fields = calibrated_model.get_exact_field_grad5_from_currents(magnet_position, actual_currents)
+            mag_quaternion = geometry_jit.numpy_quaternion_from_tf_msg(magnet_tf)
+            mag_position = geometry_jit.numpy_translation_from_tf_msg(magnet_tf)
+            T_DG= geometry_jit.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
+            T_MG = T_MD @ T_DG
+            t_MG_M = T_MG[:3, 3] # relative position of the magnet w.r.t the body fixed frame expressed in the body fixed frame
+
+            T_VG = T_VM @ T_MG
+            R_VG = T_VG[:3, :3] # rotmat from magnet frame to world frame
+            R_MG = T_MG[:3, :3] # rotmat from magnet frame to body fixed frame
+            p_G_V = T_VG[:3, 3] # position of the magnet frame (magnet's dipole center) in world frame (calibration frame)
+
+            bg_V = calibrated_model.get_exact_field_grad5_from_currents(p_G_V, actual_currents)
+            b_V = bg_V[:3] # magnetic field in world frame
+            g_V = bg_V[3:] # magnetic field gradient in world frame
+
+            mag_dipole_G = magnet.magnetization_axis * magnet.get_dipole_strength()
+            mag_dipole_V = R_VG @ mag_dipole_G # magnet's dipole moment expressed in world frame
+            mag_dipole_M = R_MG @ mag_dipole_G # magnet's dipole moment expressed in body fixed frame
+
+            Mf = geometry_jit.magnetic_interaction_grad5_to_force(mag_dipole_V) # magnetic interaction from V frame gradients to V frame forces on the magnet center
+            magnet_force_V = Mf @ g_V
+            magnet_force_M = (R_VM.T @ magnet_force_V).flatten()
+
+            Mbar_tau = geometry_jit.magnetic_interaction_field_to_local_torque_from_rotmat(mag_dipole_M, R_VM) # This will map the V frame field to M frame torques
             
-            M = geometry.magnetic_interaction_matrix_from_dipole_moment(magnet_dipole_moment,
-                                                                        full_mat=True,
-                                                                        torque_first=True)
-            
-            # Now we calculate the forces and torques on the magnet
-            magnet_wrench_world = (M @ magnet_actual_fields).flatten()
-            magnet_force_world = magnet_wrench_world[3:]
-            magnet_com_torque_from_torque = magnet_wrench_world[:3]
+            magnet_force_world = magnet_force_V.flatten()
+            magnet_com_torque_from_torque = (Mbar_tau @ b_V).flatten()
 
             actual_com_force += magnet_force_world
-
-            # For torques, we also need to consider the torque applied by the magnet on the COM.
-            # For this we will simply perform tay = r x F
-            # Also this analysis is likely easier in the body fixed frame.
-            r_M_mag_in_M = T_M_mag[:3,3]
-            r_M_mag_in_V = R_VM @ r_M_mag_in_M
-
-            magnet_com_torque_from_force = np.cross(r_M_mag_in_V, magnet_force_world) 
-            magnet_torque_com_world = magnet_com_torque_from_force + magnet_com_torque_from_torque
-            actual_com_torque += magnet_torque_com_world
+            magnet_com_torque_from_force = np.cross(t_MG_M, magnet_force_M).flatten()
+            magnet_torque_com_M = magnet_com_torque_from_force + magnet_com_torque_from_torque
+            actual_com_torque += magnet_torque_com_M
 
             # let's convert the contribution to its respective frame too.
-            magnet_com_torque_contribution = magnet_torque_com_world
-            if use_local_frame_for_torques:
-                magnet_com_torque_contribution = R_VM.T @ magnet_com_torque_contribution
-                magnet_com_torque_from_torque = R_VM.T @ magnet_com_torque_from_torque
-                magnet_com_torque_from_force = R_VM.T @ magnet_com_torque_from_force
+            magnet_com_torque_contribution = magnet_torque_com_M
+            if not use_local_frame_for_torques:
+                magnet_com_torque_contribution = R_VM @ magnet_com_torque_contribution
+                magnet_com_torque_from_torque = R_VM @ magnet_com_torque_from_torque
+                magnet_com_torque_from_force = R_VM @ magnet_com_torque_from_force
             
             # Explicit appending to avoid confusion. There were indexing errors with the overall
             # contribution dictionary. So I won't do that for this edit.
@@ -2671,8 +2678,8 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             magnet_torque_ft_contribution_dict[key_map['Tauz']].append(magnet_com_torque_from_torque[2])
 
         
-        if use_local_frame_for_torques:
-            actual_com_torque = R_VM.T @ actual_com_torque
+        if not use_local_frame_for_torques: # By default we calculate them in the local frame.
+            actual_com_torque = R_VM @ actual_com_torque
 
         ## Depending on the torque evaluation frame and the current frame of the torques in the dataset.
         ## convert the desired torques. This was implemented because some experiments perform direct world

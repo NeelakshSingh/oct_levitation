@@ -1,6 +1,6 @@
 <launch>
-    <arg name="data_subfolder" default="linear_x_control"/>
-    <arg name="sim" default="true"/>
+    <arg name="data_subfolder" default="xyz_normal_control"/>
+    <arg name="sim" default="false"/>
     <arg name="experiment_folder" default=""/>
     <arg name="summarize" default="false"/>
     <arg name="note_observations" default="true"/>

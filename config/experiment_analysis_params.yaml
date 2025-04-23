@@ -31,7 +31,7 @@ experiment_analysis:
     dataset_torques_in_local_frame: true
     plot_overall_magnet_torque_component: true
     plot_torque_components_separately: false
-    remove_gravity_component: true # If true, then the gravity compensation component is removed from world frame force. Which should usually be Fz.
+    remove_gravity_component: false # If true, then the gravity compensation component is removed from world frame force. Which should usually be Fz.
     plot_mean_values: true # If true, then the mean values of the force and torque components are plotted. This is useful for checking if the mean force or torque are zero when requested to be zero. 
 
   ## Plot enable flags, ECB specific are always enabled
@@ -55,7 +55,7 @@ experiment_analysis:
     yaw: 0.0 # deg
   
   velocity_plot_options:
-    also_plot_pynumdiff: true # If true, then velocity is also estimated using pynumdiff and denoised through a LPF.
+    also_plot_pynumdiff: false # If true, then velocity is also estimated using pynumdiff and denoised through a LPF.
     local_frame_for_angular_velocity: true # If true then angular velocity is estimated in the inertial frame.
     cutoff_frequency: 50.0 # Hz, cutoff frequency for pynumdiff LPF
 

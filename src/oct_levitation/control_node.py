@@ -231,6 +231,12 @@ class ControlSessionNodeBase:
     def indiv_magnet_contribution_allocation(self, tf_msg: TransformStamped, w_com: np.ndarray):
         """
         Will return the 6 x N_coils allocation matrix computed by treating each magnet as an individual dipole.
+
+        ### Nomenclature details in function:
+        #### V: World frame (vicon frame)
+        #### M: Body fixed frame (attached to COM usually, tracked using vicon)
+        #### D: Dipole frame (attached to the dipole)
+        #### G: Magnet frame (attached to the magnet)
         """
         com_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
         com_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
@@ -241,30 +247,36 @@ class ControlSessionNodeBase:
 
         for dipole in self.rigid_body_dipole.dipole_list:
             dipole_quat = geometry.numpy_quaternion_from_tf_msg(dipole.transform)
-            R = R_VM @ geometry.rotation_matrix_from_quaternion(dipole_quat)
+            dipole_position = geometry.numpy_translation_from_tf_msg(dipole.transform)
+            T_MD = geometry.transformation_matrix_from_quaternion(dipole_quat, dipole_position)
             for magnet_tf, magnet in dipole.magnet_stack:
                 mag_quaternion = geometry.numpy_quaternion_from_tf_msg(magnet_tf)
                 mag_position = geometry.numpy_translation_from_tf_msg(magnet_tf)
-                T_M_mag = geometry.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
-                t_M_mag = T_M_mag[:3, 3]
-                T_V_mag = T_VM @ T_M_mag
-                R_V_mag = T_V_mag[:3, :3]
-                R_M_mag = T_M_mag[:3, :3]
-                p_V_mag = T_V_mag[:3, 3]
-                A_mag = self.mpem_model.getActuationMatrix(p_V_mag)
-                A_mag = A_mag[:, self.__ACTIVE_COILS]
-                mag_dipole_mag = magnet.magnetization_axis * magnet.get_dipole_strength()
-                mag_dipole_V = R_V_mag @ mag_dipole_mag
-                mag_dipole_M = R_M_mag @ mag_dipole_mag
+                T_DG= geometry.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
+                T_MG = T_MD @ T_DG
+                t_MG_M = T_MG[:3, 3] # relative position of the magnet w.r.t the body fixed frame expressed in the body fixed frame
 
-                Mf_mag_V = geometry.magnetic_interaction_grad5_to_force(mag_dipole_V)
-                Mtau_mag_M = geometry.magnetic_interaction_field_to_torque_from_rotmat(mag_dipole_M, R)
-                A_mag_G = A_mag[3:, :]
-                A_mag_B = A_mag[:3, :]
+                T_VG = T_VM @ T_MG
+                R_VG = T_VG[:3, :3] # rotmat from magnet frame to world frame
+                R_MG = T_MG[:3, :3] # rotmat from magnet frame to body fixed frame
+                p_G_V = T_VG[:3, 3] # position of the magnet frame (magnet's dipole center) in world frame (calibration frame)
+                A_mag = self.mpem_model.getActuationMatrix(p_G_V) # Actuation matrix in world frame (calibration frame)
+                A_mag = A_mag[:, self.__ACTIVE_COILS] # Clipping to use only the active coils
+                ## IMPORTANT: Each column of A_mag is just a field and gradient vector in the world frame V (calibration frame)
+                mag_dipole_G = magnet.magnetization_axis * magnet.get_dipole_strength()
+                mag_dipole_V = R_VG @ mag_dipole_G # magnet's dipole moment expressed in world frame
+                mag_dipole_M = R_MG @ mag_dipole_G # magnet's dipole moment expressed in body fixed frame
+
+                Mf = geometry.magnetic_interaction_grad5_to_force(mag_dipole_V) # magnetic interaction from V frame gradients to V frame forces on the magnet center
+                A_g_V = A_mag[3:, :]
+                Lambda_F_mag_V = Mf @ A_g_V # this will be the magnet's contribution to the force on the COM expressed in V frame
                 
-                Lambda_F_mag = Mf_mag_V @ A_mag_G
-                Lambda_tau += Mtau_mag_M @ A_mag_B + geometry.get_skew_symmetric_matrix(t_M_mag) @ Lambda_F_mag
-                Lambda_F += Lambda_F_mag
+                Mbar_tau = geometry.magnetic_interaction_field_to_local_torque_from_rotmat(mag_dipole_M, R_VM) # This will map the V frame field to M frame torques
+                A_b_V = A_mag[:3, :]
+
+                # Combining the torque and force contributions
+                Lambda_F += Lambda_F_mag_V
+                Lambda_tau += Mbar_tau @ A_b_V + geometry.get_skew_symmetric_matrix(t_MG_M) @ R_VM.T @ Lambda_F_mag_V
 
         # rospy.loginfo(f"Lambda_tau: {Lambda_tau}, Lambda_F: {Lambda_F}")
         ## NOTE: REMOVING THE 3rd ROW IS EXPERIMENT SPECIFIC. PLEASE MAKE SURE THAT LOCAL FRAME Tz IS NOT CONTROLLABLE OR CHANGE THIS CODE.

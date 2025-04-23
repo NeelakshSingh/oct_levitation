@@ -717,57 +717,6 @@
                                     <type>tnb_mns_driver/DesCurrentsReg</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>des_currents_reg/5</field>
-                                    <field_type>0</field_type>
-                                    <scale>
-                                        <absolute_maximum>1000</absolute_maximum>
-                                        <absolute_minimum>0</absolute_minimum>
-                                        <relative_maximum>0</relative_maximum>
-                                        <relative_minimum>-1000</relative_minimum>
-                                        <type>0</type>
-                                    </scale>
-                                    <topic>/tnb_mns_driver/des_currents_reg</topic>
-                                    <type>tnb_mns_driver/DesCurrentsReg</type>
-                                </y_axis>
-                            </axes>
-                            <color>
-                                <custom_color>#000000</custom_color>
-                                <type>0</type>
-                            </color>
-                            <data>
-                                <circular_buffer_capacity>1000</circular_buffer_capacity>
-                                <time_frame_length>10</time_frame_length>
-                                <type>0</type>
-                            </data>
-                            <style>
-                                <lines_interpolate>false</lines_interpolate>
-                                <pen_style>1</pen_style>
-                                <pen_width>1</pen_width>
-                                <render_antialias>false</render_antialias>
-                                <steps_invert>false</steps_invert>
-                                <sticks_baseline>0</sticks_baseline>
-                                <sticks_orientation>2</sticks_orientation>
-                                <type>0</type>
-                            </style>
-                            <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Current Coil 5</title>
-                        </curve_5>
-                        <curve_6>
-                            <axes>
-                                <x_axis>
-                                    <field></field>
-                                    <field_type>1</field_type>
-                                    <scale>
-                                        <absolute_maximum>1000</absolute_maximum>
-                                        <absolute_minimum>0</absolute_minimum>
-                                        <relative_maximum>0</relative_maximum>
-                                        <relative_minimum>-30</relative_minimum>
-                                        <type>2</type>
-                                    </scale>
-                                    <topic>/tnb_mns_driver/des_currents_reg</topic>
-                                    <type>tnb_mns_driver/DesCurrentsReg</type>
-                                </x_axis>
-                                <y_axis>
                                     <field>des_currents_reg/6</field>
                                     <field_type>0</field_type>
                                     <scale>
@@ -802,8 +751,8 @@
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
                             <title>Current Coil 6</title>
-                        </curve_6>
-                        <curve_7>
+                        </curve_5>
+                        <curve_6>
                             <axes>
                                 <x_axis>
                                     <field></field>
@@ -853,6 +802,57 @@
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
                             <title>Current Coil 7</title>
+                        </curve_6>
+                        <curve_7>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-30</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/tnb_mns_driver/des_currents_reg</topic>
+                                    <type>tnb_mns_driver/DesCurrentsReg</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>des_currents_reg/5</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/tnb_mns_driver/des_currents_reg</topic>
+                                    <type>tnb_mns_driver/DesCurrentsReg</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>0</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Current Coil 5</title>
                         </curve_7>
                     </curves>
                     <legend>

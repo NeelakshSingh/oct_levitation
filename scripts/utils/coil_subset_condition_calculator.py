@@ -122,6 +122,9 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     dipole_axis = np.asarray(args.dipole_axis)
     dipole_moment = (dipole_strength * R @ dipole_axis).flatten()
 
+    N_ft = np.diag([1e-3, 1e-3, 0.1, 0.1, 1])
+    S = np.linalg.inv(N_ft) # normalizing matrix for the torques and forces.
+
     def jacobian_torqueforce_to_torque(beta, alpha):
         # jacobian mapping torques and forces to control-torques
         l_mag = 38e-3
@@ -166,7 +169,7 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
         def get_MA_condition_subset(x, y, z):
             A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
             A = A[:, coil_set]
-            return np.linalg.cond(M @ A)
+            return np.linalg.cond(S @ M @ A)
         
         @np.vectorize
         def get_JMA_condition_subset(x, y, z):
