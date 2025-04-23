@@ -1,5 +1,5 @@
 free_body_sim:
-  gravity_on: false
+  gravity_on: true
   initial_position:
     - 0.0
     - 0.0
@@ -25,11 +25,11 @@ free_body_sim:
     - 0.0
     - 0.0
   use_wrench: false
-  pub_status: false
+  pub_status: true
   print_ft: false
-  frequency: 500
+  frequency: 3000
   publish_status: false
-  vicon_pub_freq: 200
+  vicon_pub_freq: 400
   vicon_noise_std_exyz:
     - 1.01646014e-05
     - 4.16398263e-06

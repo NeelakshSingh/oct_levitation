@@ -19,8 +19,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 6.5e-3])
-        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, -20.0, 0.0]))
+        # self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 6.5e-3])
+        # self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, -20.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
         self.dt = 1/self.control_rate
@@ -43,7 +43,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #############################
         ### Z CONTROL DLQR DESIGN ###
         self.mass = self.rigid_body_dipole.mass_properties.m
-        self.k_lin_z = 1 # Friction damping parameter, to be tuned. Originally because of the rod.
+        self.k_lin_z = 0 # Friction damping parameter, to be tuned. Originally because of the rod.
         
         ## Continuous time state space model.
         Az = np.array([[0, 1], [0, -self.k_lin_z/self.mass]])
@@ -70,7 +70,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                   method='zoh')
         
-        Qz = np.diag([10.0, 1.0])
+        Qz = np.diag([100.0, 10.0])
         Rz = 1
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
@@ -101,8 +101,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.Ixx = self.rigid_body_dipole.mass_properties.I_bf[0,0]
         self.Iyy = self.rigid_body_dipole.mass_properties.I_bf[1,1]
-        self.k_ra_p = 1.0
-        self.K_ra_d = np.diag([1.0, 1.0])*1.0
+        self.k_ra_p = 30
+        self.K_ra_d = np.diag([1.0, 1.0])*15
         # self.k_ra_p = 0.0
         # self.K_ra_d = np.diag([1.0, 1.0])*0.0
 
@@ -323,7 +323,8 @@ Dipole object used: {self.rigid_body_dipole.name}
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
+        # des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
+        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

@@ -14,7 +14,7 @@ from tnb_mns_driver.msg import TnbMnsStatus
 
 import oct_levitation.common as common
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
-import oct_levitation.geometry_jit as geometry
+import oct_levitation.geometry as geometry
 import oct_levitation.numerical as numerical
 
 from scipy.integrate import solve_ivp
@@ -232,10 +232,11 @@ class DynamicsSimulator:
         R_vicon = self.R @ geometry.rotation_matrix_from_euler_xyz(pose_noise[3:])
 
         q_vicon = geometry.quaternion_from_rotation_matrix(R_vicon)
+        q_vicon /= np.linalg.norm(q_vicon)
 
         self.__tf_msg.header.stamp = rospy.Time.now()
         self.__tf_msg.transform.translation = Vector3(*p_vicon)
-        self.__tf_msg.transform.rotation = Quaternion(*q_vicon / np.linalg.norm(q_vicon))
+        self.__tf_msg.transform.rotation = Quaternion(*q_vicon)
         self.__tf_broadcaster.sendTransform(self.__tf_msg)
 
         if self.publish_status:
@@ -274,27 +275,39 @@ class DynamicsSimulator:
             dipole_quat = geometry.numpy_quaternion_from_tf_msg(dipole.transform)
             dipole_position = geometry.numpy_translation_from_tf_msg(dipole.transform)
             T_MD = geometry.transformation_matrix_from_quaternion(dipole_quat, dipole_position)
-            T_VD = T_VM @ T_MD
-            for magnet_tf, magnet in dipole.magnet_stack:
-                mag_quaternion_D = geometry.numpy_quaternion_from_tf_msg(magnet_tf)
-                mag_position_D = geometry.numpy_translation_from_tf_msg(magnet_tf)
-                T_DG = geometry.transformation_matrix_from_quaternion(mag_quaternion_D, mag_position_D)
+            for i, (magnet_tf, magnet) in enumerate(dipole.magnet_stack):
+                mag_quaternion = geometry.numpy_quaternion_from_tf_msg(magnet_tf)
+                mag_position = geometry.numpy_translation_from_tf_msg(magnet_tf)
+                T_DG= geometry.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
                 T_MG = T_MD @ T_DG
-                T_VG= T_VD @ T_DG
-                p_VG_V = T_VG[:3, 3] # position of magnet (G) in world frame (V) which is the clibration frame too.
-                field_grad_G_V = self.calibration.get_exact_field_grad5_from_currents(p_VG_V, self.__last_output_currents)
-                mag_dipole_G = magnet.magnetization_axis * magnet.get_dipole_strength()
-                mag_dipole_V = T_VG[:3, :3] @ mag_dipole_G
+                t_MG_M = T_MG[:3, 3] # relative position of the magnet w.r.t the body fixed frame expressed in the body fixed frame
 
-                M_mag_V = geometry.magnetic_interaction_matrix_from_dipole_moment(mag_dipole_V)
-                mag_torque_force_V = M_mag_V @ field_grad_G_V
-                mag_torque_from_torque_V = mag_torque_force_V[:3]
-                mag_force_V = mag_torque_force_V[3:]
-                t_MG_V = R_VM @ T_MG[:3, :3] # Relative position of magnet w.r.t body fixed frame expressed in world frame.
-                mag_torque_from_force_V = np.cross(t_MG_V, mag_force_V)
+                T_VG = T_VM @ T_MG
+                R_VG = T_VG[:3, :3] # rotmat from magnet frame to world frame
+                R_MG = T_MG[:3, :3] # rotmat from magnet frame to body fixed frame
+                p_G_V = T_VG[:3, 3] # position of the magnet frame (magnet's dipole center) in world frame (calibration frame)
+
+                bg_V = self.calibration.get_exact_field_grad5_from_currents(p_G_V, self.__last_output_currents)
+                b_V = bg_V[:3] # magnetic field in world frame
+                g_V = bg_V[3:] # magnetic field gradient in world frame
+
+                mag_dipole_G = magnet.magnetization_axis * magnet.get_dipole_strength()
+                mag_dipole_V = R_VG @ mag_dipole_G # magnet's dipole moment expressed in world frame
+                mag_dipole_M = R_MG @ mag_dipole_G # magnet's dipole moment expressed in body fixed frame
+
+                Mf = geometry.magnetic_interaction_grad5_to_force(mag_dipole_V) # magnetic interaction from V frame gradients to V frame forces on the magnet center
+                magnet_force_V = Mf @ g_V
+                magnet_force_M = (R_VM.T @ magnet_force_V).flatten()
+
+                Mbar_tau = geometry.magnetic_interaction_field_to_local_torque_from_rotmat(mag_dipole_M, R_VM) # This will map the V frame field to M frame torques
                 
-                com_force += mag_force_V
-                com_torque += mag_torque_from_torque_V + mag_torque_from_force_V
+                magnet_force_world = magnet_force_V.flatten()
+                magnet_com_torque_from_torque = (Mbar_tau @ b_V).flatten()
+
+                com_force += magnet_force_world
+                magnet_com_torque_from_force = np.cross(t_MG_M, magnet_force_M).flatten()
+                magnet_torque_com_M = magnet_com_torque_from_force + magnet_com_torque_from_torque
+                com_torque += R_VM @ magnet_torque_com_M # Because the applied torques in this simulator are in the intertial frame.
         
         self.last_recvd_wrench.header.stamp = rospy.Time.now()
         self.last_recvd_wrench.wrench.force = Vector3(*com_force)
@@ -326,9 +339,6 @@ class DynamicsSimulator:
                                                                   full_mat=True,
                                                                   torque_first=True,
                                                                   dipole_axis=self.rigid_body.dipole_list[0].axis)
-        # Mq = geometry.get_full_magnetic_interaction_torque_first_jit(self.rigid_body.dipole_list[0].axis,
-        #                                                              dipole_quat,
-        #                                                              self.rigid_body.dipole_list[0].strength)
         noisy_currents = self.__last_output_currents + np.random.normal(loc=0.0, scale=self.current_noise_std, size=(8,))
         field_grad = self.calibration.get_exact_field_grad5_from_currents(dipole_pos, noisy_currents) # Already a compiled function
         actual_Tau_force = (Mq @ field_grad).flatten() # This will be in the world frame.
