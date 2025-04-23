@@ -8,14 +8,7 @@
     <arg name="run_rviz" default="false"/>
     <arg name="run_rqt_multiplot" default="false"/>
     <arg name="data_subfolder" default="xyz_normal_control"/>
-
-    <node pkg="oct_levitation" name="xyz_reduced_attitude_single_dipole_control" type="xyz_reduced_attitude_single_dipole.py" output="screen">
-        <param name="sim_mode" value="$(arg sim)"/>
-        <param name="hardware_connected" value="$(arg hardware_connected)"/>
-        <param name="data_subfolder" value="$(arg data_subfolder)"/>
-        <param name="experiment_description" value="$(arg description)"/>
-    </node>
-
+    
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
     <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">
         <arg name="sim" value="$(arg sim)"/>
@@ -26,5 +19,12 @@
         <arg name="run_rviz" value="$(arg run_rviz)"/>
         <arg name="run_rqt_multiplot" value="$(arg run_rqt_multiplot)"/>
     </include>
+
+    <node pkg="oct_levitation" name="xyz_reduced_attitude_single_dipole_control" type="xyz_reduced_attitude_single_dipole.py" output="screen">
+        <param name="sim_mode" value="$(arg sim)"/>
+        <param name="hardware_connected" value="$(arg hardware_connected)"/>
+        <param name="data_subfolder" value="$(arg data_subfolder)"/>
+        <param name="experiment_description" value="$(arg description)"/>
+    </node>
 
 </launch>

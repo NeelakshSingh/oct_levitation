@@ -42,9 +42,6 @@ class ControlSessionNodeBase:
         if self.__SOFT_START:
             self.soft_starter = numerical.LinearSoftStarter(0.5, 1.0)
         self.__HARDWARE_CONNECTED = rospy.get_param("~hardware_connected", default=False) # to force explicit enablement in post init.
-        if self.sim_mode and self.__HARDWARE_CONNECTED:
-            self.__HARDWARE_CONNECTED = False
-            rospy.logwarn("Simulation mode is on, hardware connected flag is set to False.")
 
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
@@ -122,6 +119,7 @@ class ControlSessionNodeBase:
         ######## HARDWARE ACTIVATION START ########
         # if in simulation mode, override the hardware connected flag
         if self.sim_mode:
+            self.__SOFT_START = False
             self.__HARDWARE_CONNECTED = False
             self.__MAX_CURRENT = 12.0 # Amps
         self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.__HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)

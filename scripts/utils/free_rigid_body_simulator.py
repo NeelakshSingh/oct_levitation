@@ -9,12 +9,13 @@ import numba
 
 from geometry_msgs.msg import TransformStamped, WrenchStamped, Vector3, Quaternion
 from std_msgs.msg import Bool
+from rosgraph_msgs.msg import Clock
 from tnb_mns_driver.msg import DesCurrentsReg
 from tnb_mns_driver.msg import TnbMnsStatus
 
 import oct_levitation.common as common
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 import oct_levitation.numerical as numerical
 
 from scipy.integrate import solve_ivp
@@ -68,6 +69,9 @@ class DynamicsSimulator:
     def __init__(self):
         rospy.init_node('dynamics_simulator', anonymous=True)
         self.Ts = 1/rospy.get_param("~sim_freq", 3000)
+        self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
+        self.time_elapsed = 0.0
+        self.clock_msg = Clock()
         rospy.loginfo(f"[free_rigid_body_simulator] Requested frequency: {1/self.Ts}")
         # self.Ts = 1/3000
         self.__tf_broadcaster = tf2_ros.TransformBroadcaster()
@@ -91,6 +95,7 @@ class DynamicsSimulator:
         ### Initial Conditions and Operation Parameters
         gravity_on = rospy.get_param("free_body_sim/gravity_on")
         self.p = np.array(rospy.get_param("free_body_sim/initial_position")) # World frame
+        rospy.loginfo(f"[free_body_sim] initial_position: {self.p}")
         self.p_limit = np.abs(np.array(rospy.get_param("free_body_sim/position_limit"))) # World frame
         self.v = np.array(rospy.get_param("free_body_sim/initial_velocity")) # World frame
 
@@ -112,15 +117,15 @@ class DynamicsSimulator:
 
         ### Periodic Poke Disturbance Parameters
         self.enable_poke_disturbance = rospy.get_param("free_body_sim/enable_poke_disturbance", True)
-        self.poke_period_ns = 1e9*rospy.get_param("free_body_sim/poke_period_sec", 2) # Give a force and torque poke to the object every poke_period_sec seconds.
+        self.poke_period = rospy.get_param("free_body_sim/poke_period_sec", 2) # Give a force and torque poke to the object every poke_period_sec seconds.
         self.poke_position_change = np.array(rospy.get_param("free_body_sim/poke_position_change_mm", [0.0, 0.0, 0.0]))*1e-3 # World frame
         self.post_poke_velocity = np.array(rospy.get_param("free_body_sim/post_poke_velocity_mmps", [0.0, 0.0, 0.0]))*1e-3 # World frame
         poke_orientation_rpy_change = np.deg2rad(np.array(rospy.get_param("free_body_sim/poke_rpy_change_deg", [0.0, 0.0, 0.0]))) # World frame
         self.poke_rotmat = geometry.rotation_matrix_from_euler_xyz(poke_orientation_rpy_change)
         self.post_poke_angular_velocity = np.deg2rad(np.array(rospy.get_param("free_body_sim/post_poke_angular_velocity_degps", [0.0, 0.0, 0.0]))) # World frame
-        self.poke_start_time_ns = 1e9*rospy.get_param("free_body_sim/poke_start_time_sec", 0.0) # The time elapsed since simulation start to start poking.
+        self.poke_start_time = rospy.get_param("free_body_sim/poke_start_time_sec", 0.0) # The time elapsed since simulation start to start poking.
         
-        self.vicon_pub_time_ns = 1e9/self.vicon_pub_freq
+        self.vicon_pub_time = 1/self.vicon_pub_freq
         # Closed form soln is known, I will still do it cause why not
         self.__ecbd_A, self.__ecbd_B, *_ = signal.cont2discrete((np.array([[-self.ecb_bandwidth]]), np.array([[self.ecb_bandwidth]]), 0, 0), dt=1/self.vicon_pub_freq, method='zoh')
         self.__ecbd_A = self.__ecbd_A[0,0]
@@ -132,8 +137,8 @@ class DynamicsSimulator:
 
         if self.publish_status:
             self.sim_status_pub = rospy.Publisher("oct_levitation/free_rigid_body_sim/status", Bool, queue_size=1) # This is just to measure the simulator run freq
-        self.__last_vicon_pub_time_ns = -np.inf
-        self.__last_poke_time_ns = None
+        self.__last_vicon_pub_time = -np.inf
+        self.__last_poke_time = None
         self.__first_command_time_ns = None
         
         self.__tf_msg.header.frame_id = self.world_frame
@@ -160,25 +165,17 @@ class DynamicsSimulator:
         else:
             self.F_amb = np.array([0, 0, 0])
 
-    def simulation_loop(self, event):
+    def simulation_loop(self):
 
         # This simulation loop will assume ZOH, therefore the last command is just kept on being repeated
         # we won't explicitly set it to zero here. The forces are assumed to be in the world frame while
         # the torques are assumed to be in the body fixed frame.
-        t_comp_start_ns = rospy.Time.now().to_nsec()
-        if self.__first_sim_step:
-            self.__first_sim_step = False
-            self.last_sim_time = rospy.Time.now().to_sec()
-            return
         
-        if rospy.Time.now().to_sec() - self.__last_command_recv_time > self.last_commmand_timeout:
+        if self.time_elapsed - self.__last_command_recv_time > self.last_commmand_timeout:
             if self.__first_command:
                 if not self.__last_command_warning_sent:
                     self.__last_command_warning_sent = True
                     rospy.logwarn("No command received in the last %.2f seconds." % self.last_commmand_timeout)
-
-        dt = rospy.Time.now().to_sec() - self.last_sim_time
-        self.last_sim_time = rospy.Time.now().to_sec()
 
         # Computing the velocity and position
         F, Tau = ft_array_from_wrench(self.last_recvd_wrench)
@@ -193,10 +190,8 @@ class DynamicsSimulator:
 
         if self.__first_command:
             F = F + self.F_amb # Adding gravity and other constant forces, IF we have started receiving commands.
-            time_now_ns = rospy.Time.now().to_nsec()
-            t_comp_poke_ns = time_now_ns - t_comp_start_ns
-            if self.__last_poke_time_ns is not None and (time_now_ns - self.__first_command_time_ns) > self.poke_start_time_ns \
-                and (time_now_ns + t_comp_poke_ns - self.__last_poke_time_ns) >= self.poke_period_ns:
+            if self.__last_poke_time is not None and (self.time_elapsed - self.__first_command_time) > self.poke_start_time \
+                and (self.time_elapsed - self.__last_poke_time) >= self.poke_period:
                 # Apply a sudden perturbation to the object
                 # If the controller can regulate this then we can safely assume that the controller will be able to do so in the real world
                 # since this is an impulse disturbance.
@@ -205,18 +200,16 @@ class DynamicsSimulator:
                 R_next = self.R @ self.poke_rotmat
                 omega_next = self.post_poke_angular_velocity
 
-                self.__last_poke_time_ns = time_now_ns
+                self.__last_poke_time = self.time_elapsed
             else:
                 # Take a normal simulation step.
-                p_next, v_next = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, dt)
-                R_next, omega_next = numerical.integrate_R_omega_constant_torque(self.R, self.omega, Tau, self.I_bf, dt)
+                p_next, v_next = numerical.integrate_linear_dynamics_constant_force_undamped(self.p, self.v, F, self.m, self.Ts)
+                R_next, omega_next = numerical.integrate_R_omega_constant_torque(self.R, self.omega, Tau, self.I_bf, self.Ts)
 
         # Clip the position and orientation to the limits.
         self.p, v_update_mask = vector_clip_update_mask(p_next, self.p_limit)
         self.v[v_update_mask] = v_next[v_update_mask]
         self.v[np.logical_not(v_update_mask)] = 0.0 # If we clipped the position, we set the velocity to zero.
-        # self.p = p_next
-        # self.v = v_next
 
         # Numerically integration the orientation through the lie group exponential map of angular velocity.
         # The angular velocity is resolved in the local frame.
@@ -242,10 +235,14 @@ class DynamicsSimulator:
         if self.publish_status:
             self.sim_status_pub.publish(Bool(True))
 
-        t_comp_end_ns = rospy.Time.now().to_nsec()
-        if (rospy.Time.now().to_nsec() + t_comp_end_ns - t_comp_start_ns - self.__last_vicon_pub_time_ns) >= self.vicon_pub_time_ns:
-            self.__last_vicon_pub_time_ns = rospy.Time.now().to_nsec()
+        if (self.time_elapsed - self.__last_vicon_pub_time) >= self.vicon_pub_time:
+            self.__last_vicon_pub_time = self.time_elapsed
             self.vicon_pub.publish(self.__tf_msg)
+        
+        self.time_elapsed += self.Ts
+        time.sleep(self.Ts)
+        self.clock_msg.clock = rospy.Time.from_sec(self.time_elapsed)
+        self.clock_pub.publish(self.clock_msg)
 
     def wrench_callback(self, com_wrench: WrenchStamped):
         if not self.__first_command:
@@ -323,9 +320,9 @@ class DynamicsSimulator:
             # For the first time, bypass the bandwidth filter.
             self.__last_output_currents = currents
             self.__first_command = True
-            self.__first_command_time_ns = rospy.Time.now().to_nsec()
+            self.__first_command_time = self.time_elapsed
             if self.enable_poke_disturbance:
-                self.__last_poke_time_ns = -np.inf # After the first command, we start poking. This will force the first poke to happen at the disturbance start time.
+                self.__last_poke_time = -np.inf # After the first command, we start poking. This will force the first poke to happen at the disturbance start time.
         else:
             # Apply the first order filter on the currents.
             # The reason this line is inside the else statement is that the currents for gravity compensation are quite large in value
@@ -348,14 +345,14 @@ class DynamicsSimulator:
         wrench.wrench.force = Vector3(*actual_Tau_force[3:])
 
         self.last_recvd_wrench = wrench
-        self.__last_command_recv_time = rospy.Time.now().to_sec()
+        self.__last_command_recv_time = self.time_elapsed
         if self.__last_command_warning_sent:
             rospy.loginfo("Command received again.")
             self.__last_command_warning_sent = False
 
     def run(self):
-        self.simulation_timer = rospy.Timer(rospy.Duration(self.Ts), self.simulation_loop)
-        rospy.spin()
+        while not rospy.is_shutdown():
+            self.simulation_loop()
 
 
 if __name__ == "__main__":

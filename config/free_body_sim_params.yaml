@@ -27,7 +27,7 @@ free_body_sim:
   use_wrench: false
   pub_status: true
   print_ft: false
-  frequency: 3000
+  frequency: 600
   publish_status: false
   vicon_pub_freq: 400
   vicon_noise_std_exyz:
