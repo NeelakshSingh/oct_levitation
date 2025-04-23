@@ -86,7 +86,7 @@ DiscMagnet10x5_N52 = PermanentMagnet(
 
 Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
     name="onyx_disc_80x22",
-    mass_properties = MassProperties(8.51500000e-02,
+    mass_properties = MassProperties(8.51500000e-02, # TODO: Replace this with the parameteric inertia calculation
                                      np.array([[3.37872600e-05, -1.45300000e-07, -6.66800000e-08],
                                                [-1.45300000e-07, 3.02408200e-05, -1.11150000e-07],
                                                [-6.66800000e-08, -1.11150000e-07, 5.90235300e-05]]),

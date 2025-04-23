@@ -37,7 +37,7 @@ class ControlSessionNodeBase:
         self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
         self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
-        self.__SOFT_START = rospy.get_param("~oct_levitation/soft_start", True)
+        self.__SOFT_START = rospy.get_param("oct_levitation/soft_start", True)
         self.soft_starter = None
         if self.__SOFT_START:
             self.soft_starter = numerical.LinearSoftStarter(0.5, 1.0)
@@ -46,8 +46,7 @@ class ControlSessionNodeBase:
         self.world_frame = rospy.get_param("~world_frame", "vicon/world")
 
         self.publish_computation_time = rospy.get_param("oct_levitation/publish_computation_time")
-        self.computation_time_avg_samples = rospy.get_param("~computation_time_avg_samples", 100)
-        self.computation_time_topic = rospy.get_param("~computation_time_topic", "control_session/computation_time")
+        self.computation_time_topic = "control_session/computation_time"
         self.compute_time_pub = None
         self.__ACTIVE_COILS = [0, 1, 2, 3, 5] # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
         self.__ACTIVE_DRIVERS = [0, 1, 2, 4, 5] # These are the exact driver numbers these coils are connected to.
@@ -344,6 +343,7 @@ class ControlSessionNodeBase:
         self.control_input_publisher.publish(self.control_input_message)
         des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
+        ## TODO: Maybe it makes more sense to smooth start Fz
         coeff = 1
         if self.__SOFT_START:
             coeff = self.soft_starter(1/self.CONTROL_RATE)
