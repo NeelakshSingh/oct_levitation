@@ -28,7 +28,6 @@
     </group>
 
     <group if="$(arg sim)">
-        <param name="use_sim_time" value="true"/>
         <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen"/>
         <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen"/>
     </group>
