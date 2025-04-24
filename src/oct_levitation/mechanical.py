@@ -56,8 +56,6 @@ class MassProperties:
     ----------
     m (float) : Mass of the rigid body in kg.
     I_bf (np_t.NDArray) : Inertia tensor of the rigid body with respect to the body-fixed frame.
-    I_com (np_t.NDArray) : Inertia tensor of the rigid body with respect to the center of mass for axes 
-                           aligned with the body-fixed frame.
     com_position (np_t.NDArray) : Position of the center of mass with respect to the body-fixed frame.
     com_inertia_properties (PrincipleAxesAndMomentsOfInertia) : Principle axes and moments of inertia of 
                            the rigid body with respect to the center of mass. All directions are with respect
@@ -65,7 +63,6 @@ class MassProperties:
     """
     m: float
     I_bf: np_t.NDArray
-    I_com: np_t.NDArray
     com_position: np_t.NDArray
     com_inertia_properties: PrincipleAxesAndMomentsOfInertia
 

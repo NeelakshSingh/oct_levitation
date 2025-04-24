@@ -12,6 +12,9 @@ from typing import Dict
 REGISTERED_BODIES: Dict[str, MultiDipoleRigidBody] = {}
 
 UNIT_QUATERNION = Quaternion(0.0, 0.0, 0.0, 1.0)
+X_FLIP_QUATERNION = Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))
+Y_FLIP_QUATERNION = Quaternion(*geometry.quaternion_from_euler_xyz(np.array([0, np.pi, 0])))
+Z_FLIP_QUATERNION = Quaternion(*geometry.quaternion_from_euler_xyz(np.array([0, 0, np.pi])))
 ZERO_TRANSLATION = Vector3()
 
 def register_rigid_body(rigid_body: MultiDipoleRigidBody):
@@ -90,9 +93,6 @@ Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
                                      np.array([[3.37872600e-05, -1.45300000e-07, -6.66800000e-08],
                                                [-1.45300000e-07, 3.02408200e-05, -1.11150000e-07],
                                                [-6.66800000e-08, -1.11150000e-07, 5.90235300e-05]]),
-                                     np.array([[3.37844000e-05, -1.45960000e-07, -6.58400000e-08],
-                                               [-1.45960000e-07, 3.02386600e-05, -1.09760000e-07],
-                                               [-6.58400000e-08, -1.09760000e-07, 5.90220300e-05]]),
                                      np.array([-0.00007000, -0.00011000, 0.00014000]),
                                      PrincipleAxesAndMomentsOfInertia(
                                          Ix=np.array([0.04000000, -1.00000000, 0.00000000]),
@@ -110,12 +110,12 @@ Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/onyx_disc_80x22/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
-                (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 11e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -11e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
             ]
         )
     ]
@@ -129,10 +129,6 @@ Onyx80x7_5DiscCenterRingDipole = MultiDipoleRigidBody(
                                      np.array([[1.72934900e-05, -1.45310000e-07, -4.92400000e-08],
                                      [-1.45310000e-07, 1.53558800e-05, -8.20600000e-08],
                                      [-4.92400000e-08, -8.20600000e-08, 3.00703000e-05]]),
-                                     np.array([[1.72891100e-05, -1.46440000e-07, -4.79400000e-08],
-                                     [-1.46440000e-07, 1.53527100e-05, -7.99000000e-08],
-                                     [-4.79400000e-08, -7.99000000e-08, 3.00677300e-05]]),
-                                     np.array([-0.00012000, -0.00019000, 0.00022000]),
                                      PrincipleAxesAndMomentsOfInertia(
                                          Ix=np.array([0.07000000, -1.00000000, 0.01000000]),
                                          Iy=np.array([-1.00000000, -0.07000000, 0.00000000]),
@@ -149,12 +145,12 @@ Onyx80x7_5DiscCenterRingDipole = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/onyx_disc_80x7_5/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
-                (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 11e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -11e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
             ]
         )
     ]
@@ -168,9 +164,6 @@ Onyx80x22DiscCenterRingDipoleI40 = MultiDipoleRigidBody(
                                      np.array([[1.39912560e-04, -2.79978900e-05, 1.06775840e-04],
                                                [-2.79978900e-05, 2.38473280e-04, -3.05975000e-05],
                                                [1.06775840e-04, -3.05975000e-05, 1.18070670e-04]]),
-                                     np.array([[1.46556700e-05, -6.48700000e-08, 1.46640000e-07],
-                                               [-6.48700000e-08, 2.42591800e-05, 1.08130000e-07],
-                                               [1.46640000e-07, 1.08130000e-07, 1.30259300e-05]]),
                                      np.array([0.04784000, -0.01378000, 0.05259000]),
                                      PrincipleAxesAndMomentsOfInertia(
                                          Ix=np.array([0.09000000, 0.01000000, 1.00000000]),
@@ -188,12 +181,12 @@ Onyx80x22DiscCenterRingDipoleI40 = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/onyx_disc_80x22/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
-                (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-                (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, 11e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+                (Transform(Vector3(0.0, 0.0, -11e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
             ]
         )
     ]
@@ -207,9 +200,6 @@ Onyx80x22DiscCenterDiscDipoleI40_N52 = MultiDipoleRigidBody(
                                      np.array([[ 1.40133453e-04, -2.79978900e-05,  1.06775840e-04], # HOW CAN THE INERTIA BE HIGHER FOR THIS DISC THAN THE ONE WITH 100% INFILL?
                                                [-2.79978900e-05,  2.38694173e-04, -3.05975000e-05],
                                                [ 1.06775840e-04, -3.05975000e-05,  1.18291563e-04]]),
-                                     np.array([[ 1.48765632e-05, -6.48700000e-08,  1.46640000e-07],
-                                               [-6.48700000e-08,  2.44800732e-05,  1.08130000e-07],
-                                               [ 1.46640000e-07,  1.08130000e-07,  1.32468232e-05]]),
                                      np.array([0.04784000, -0.01378000, 0.05259000]),
                                      PrincipleAxesAndMomentsOfInertia(
                                          Ix=np.array([0.09000000, 0.01000000, 1.00000000]),
@@ -227,12 +217,12 @@ Onyx80x22DiscCenterDiscDipoleI40_N52 = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/onyx_disc_80x22/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
-                (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), DiscMagnet10x5_N52),
-                (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), DiscMagnet10x5_N52),
-                (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), DiscMagnet10x5_N52),
-                (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), DiscMagnet10x5_N52),
-                (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, 11e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, -8e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, -11e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
             ]
         )
     ]
