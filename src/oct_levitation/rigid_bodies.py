@@ -87,8 +87,8 @@ DiscMagnet10x5_N52 = PermanentMagnet(
 # RIGID BODIES #
 ##############################################
 
-Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
-    name="onyx_disc_80x22",
+Onyx80x15DiscCenterRingDipole = MultiDipoleRigidBody(
+    name="onyx_disc_80x15",
     mass_properties = MassProperties(8.51500000e-02, # TODO: Replace this with the parameteric inertia calculation
                                      np.array([[3.37872600e-05, -1.45300000e-07, -6.66800000e-08],
                                                [-1.45300000e-07, 3.02408200e-05, -1.11150000e-07],
@@ -102,13 +102,13 @@ Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
                                          Py=3.37902000e-05,
                                          Pz=5.90226200e-05
                                     )),
-    pose_frame = "vicon/onyx_disc_80x22/Origin",
+    pose_frame = "vicon/onyx_disc_80x15/Origin",
     dipole_list = [
         MagneticDipole(
             name="CenterRingDipole",
             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
-            frame_name="vicon/onyx_disc_80x22/Origin",
+            frame_name="vicon/onyx_disc_80x15/Origin",
             magnet_stack=[
                 (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
                 (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
@@ -121,14 +121,14 @@ Onyx80x22DiscCenterRingDipole = MultiDipoleRigidBody(
     ]
 )
 
-register_rigid_body(Onyx80x22DiscCenterRingDipole)
+register_rigid_body(Onyx80x15DiscCenterRingDipole)
 
 Onyx80x7_5DiscCenterRingDipole = MultiDipoleRigidBody(
     name="onyx_disc_80x7_5",
     mass_properties = MassProperties(4.97200000e-02,
                                      np.array([[1.72934900e-05, -1.45310000e-07, -4.92400000e-08],
-                                     [-1.45310000e-07, 1.53558800e-05, -8.20600000e-08],
-                                     [-4.92400000e-08, -8.20600000e-08, 3.00703000e-05]]),
+                                               [-1.45310000e-07, 1.53558800e-05, -8.20600000e-08],
+                                               [-4.92400000e-08, -8.20600000e-08, 3.00703000e-05]]),
                                      PrincipleAxesAndMomentsOfInertia(
                                          Ix=np.array([0.07000000, -1.00000000, 0.01000000]),
                                          Iy=np.array([-1.00000000, -0.07000000, 0.00000000]),
@@ -158,28 +158,28 @@ Onyx80x7_5DiscCenterRingDipole = MultiDipoleRigidBody(
 
 register_rigid_body(Onyx80x7_5DiscCenterRingDipole)
 
-Onyx80x22DiscCenterRingDipoleI40 = MultiDipoleRigidBody(
-    name="onyx_disc_80x22_I40",
+Onyx80x15DiscCenterRingDipoleI40 = MultiDipoleRigidBody(
+    name="onyx_disc_80x15_I40",
     mass_properties = MassProperties(4.23800000e-02,
-                                     np.array([[1.39912560e-04, -2.79978900e-05, 1.06775840e-04],
-                                               [-2.79978900e-05, 2.38473280e-04, -3.05975000e-05],
-                                               [1.06775840e-04, -3.05975000e-05, 1.18070670e-04]]),
-                                     np.array([0.04784000, -0.01378000, 0.05259000]),
+                                     np.array([[1.46619600e-05, -1.45310000e-07, -6.66800000e-08],
+                                               [-1.45310000e-07, 1.30308100e-05, -1.11140000e-07],
+                                               [-6.66800000e-08, -1.11140000e-07, 2.42621900e-05]]),
+                                     np.array([-0.00014000, -0.00023000, 0.00031000]),
                                      PrincipleAxesAndMomentsOfInertia(
-                                         Ix=np.array([0.09000000, 0.01000000, 1.00000000]),
-                                         Iy=np.array([1.00000000, -0.01000000, -0.09000000]),
-                                         Iz=np.array([0.01000000, 1.00000000, -0.01000000]),
+                                         Ix=np.array([0.09000000, -1.00000000, 0.01000000]),
+                                         Iy=np.array([1.00000000, 0.09000000, -0.01000000]),
+                                         Iz=np.array([0.01000000, 0.01000000, 1.00000000]),
                                          Px=1.30119200e-05,
                                          Py=1.46681800e-05,
                                          Pz=2.42606800e-05
-                                    )),
-    pose_frame = "vicon/onyx_disc_80x22/Origin",
+                                     )),
+    pose_frame = "vicon/onyx_disc_80x15/Origin",
     dipole_list = [
         MagneticDipole(
             name="CenterRingDipole",
             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
-            frame_name="vicon/onyx_disc_80x22/Origin",
+            frame_name="vicon/onyx_disc_80x15/Origin",
             magnet_stack=[
                 (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
                 (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
@@ -192,30 +192,30 @@ Onyx80x22DiscCenterRingDipoleI40 = MultiDipoleRigidBody(
     ]
 )
 
-register_rigid_body(Onyx80x22DiscCenterRingDipoleI40)
+register_rigid_body(Onyx80x15DiscCenterRingDipoleI40)
 
-Onyx80x22DiscCenterDiscDipoleI40_N52 = MultiDipoleRigidBody(
-    name="onyx_disc_80x22_I40_N52",
-    mass_properties = MassProperties(0.04679786466911065,
-                                     np.array([[ 1.40133453e-04, -2.79978900e-05,  1.06775840e-04], # HOW CAN THE INERTIA BE HIGHER FOR THIS DISC THAN THE ONE WITH 100% INFILL?
-                                               [-2.79978900e-05,  2.38694173e-04, -3.05975000e-05],
-                                               [ 1.06775840e-04, -3.05975000e-05,  1.18291563e-04]]),
-                                     np.array([0.04784000, -0.01378000, 0.05259000]),
+Onyx80x15DiscCenterDiscDipoleI40_N52 = MultiDipoleRigidBody(
+    name="onyx_disc_80x15_I40_N52",
+    mass_properties = MassProperties(4.72400000e-02,
+                                     np.array([[1.50992900e-05, -1.45310000e-07, -6.66800000e-08],
+                                               [-1.45310000e-07, 1.34681400e-05, -1.11140000e-07],
+                                               [-6.66800000e-08, -1.11140000e-07, 2.42827100e-05]]),
+                                     np.array([-0.00012000, -0.00021000, 0.00027000]),
                                      PrincipleAxesAndMomentsOfInertia(
-                                         Ix=np.array([0.09000000, 0.01000000, 1.00000000]),
-                                         Iy=np.array([1.00000000, -0.01000000, -0.09000000]),
-                                         Iz=np.array([0.01000000, 1.00000000, -0.01000000]),
-                                         Px=1.3232813233455532e-05,
-                                         Py=1.4889073233455532e-05,
-                                         Pz=2.4481573233455534e-05
-                                    )),
-    pose_frame = "vicon/onyx_disc_80x22/Origin",
+                                         Ix=np.array([0.09000000, -1.00000000, 0.01000000]),
+                                         Iy=np.array([1.00000000, 0.09000000, -0.01000000]),
+                                         Iz=np.array([0.01000000, 0.01000000, 1.00000000]),
+                                         Px=1.34499700e-05,
+                                         Py=1.51063300e-05,
+                                         Pz=2.42815800e-05
+                                     )),
+    pose_frame = "vicon/onyx_disc_80x15/Origin",
     dipole_list = [
         MagneticDipole(
             name="CenterDiscDipole",
             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
-            frame_name="vicon/onyx_disc_80x22/Origin",
+            frame_name="vicon/onyx_disc_80x15/Origin",
             magnet_stack=[
                 (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
                 (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
@@ -228,9 +228,9 @@ Onyx80x22DiscCenterDiscDipoleI40_N52 = MultiDipoleRigidBody(
     ]
 )
 
-register_rigid_body(Onyx80x22DiscCenterDiscDipoleI40_N52)
+register_rigid_body(Onyx80x15DiscCenterDiscDipoleI40_N52)
 
-# Onyx80x22DiscCenterDiscDipoleI20 = MultiDipoleRigidBody(
+# Onyx80x15DiscCenterDiscDipoleI20 = MultiDipoleRigidBody(
 #     name="onyx_disc_80x22_I20",
 #     mass_properties = MassProperties(0.04679786466911065,
 #                                      np.array([[ 1.40133453e-04, -2.79978900e-05,  1.06775840e-04],
@@ -248,13 +248,13 @@ register_rigid_body(Onyx80x22DiscCenterDiscDipoleI40_N52)
 #                                          Py=1.4889073233455532e-05,
 #                                          Pz=2.4481573233455534e-05
 #                                     )),
-#     pose_frame = "vicon/onyx_disc_80x22/Origin",
+#     pose_frame = "vicon/onyx_disc_80x15/Origin",
 #     dipole_list = [
 #         MagneticDipole(
 #             name="CenterDiscDipole",
 #             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
 #             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
-#             frame_name="vicon/onyx_disc_80x22/Origin",
+#             frame_name="vicon/onyx_disc_80x15/Origin",
 #             magnet_stack=[
 #                 (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
 #                 (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
@@ -267,4 +267,4 @@ register_rigid_body(Onyx80x22DiscCenterDiscDipoleI40_N52)
 #     ]
 # )
 
-# register_rigid_body(Onyx80x22DiscCenterDiscDipoleI20)
+# register_rigid_body(Onyx80x15DiscCenterDiscDipoleI20)
