@@ -15,6 +15,12 @@ from std_msgs.msg import String
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
 from tnb_mns_driver.msg import DesCurrentsReg
 
+def remove_extra_spaces(string):
+    """
+    Remove extra spaces from a string.
+    """
+    return ' '.join(string.split())
+
 class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
@@ -70,7 +76,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                   method='zoh')
         
-        Qz = np.diag([100.0, 10.0])
+        Qz = np.diag([10.0, 1.0])
         Rz = 1
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
@@ -99,8 +105,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #############################
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         
-        self.Ixx = self.rigid_body_dipole.mass_properties.I_bf[0,0]
-        self.Iyy = self.rigid_body_dipole.mass_properties.I_bf[1,1]
+        self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
+        self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
         self.k_ra_p = 30
         self.K_ra_d = np.diag([1.0, 1.0])*15
         # self.k_ra_p = 0.0
@@ -116,11 +122,11 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_phi = np.array([[0.008001, 0.0007387]]) # Tuned to include the external disc
         # self.K_z = np.array([[9.0896, 1.3842]])
 
-        rospy.loginfo(f"""Control gains for Fx: {self.K_x}, 
-Fy: {self.K_y},
-Fz: {self.K_z}, 
-RA Kp: {self.k_ra_p}, 
-RA Kd: {self.K_ra_d}""")
+        rospy.loginfo(remove_extra_spaces(f"""Control gains for Fx: {self.K_x}, 
+        Fy: {self.K_y},
+        Fz: {self.K_z}, 
+        RA Kp: {self.k_ra_p}, 
+        RA Kd: {self.K_ra_d}"""))
 
         self.control_gains_message : String = String()
 
@@ -133,25 +139,25 @@ RA Kd: {self.K_ra_d}""")
         self.diff_alpha_y = self.control_rate
         self.diff_beta_y = 0
 
-        self.control_gains_message.data = f"""Control gains for Fx: {self.K_x}, 
-Fy: {self.K_y},
-Fz: {self.K_z}, 
-RA Kp: {self.k_ra_p}, 
-RA Kd: {self.K_ra_d},
-Diff alpha RA: {self.diff_alpha_RA},
-Diff beta RA: {self.diff_beta_RA},
-Diff alpha z: {self.diff_alpha_z},
-Diff beta z: {self.diff_beta_z},
-Diff alpha x: {self.diff_alpha_x},
-Diff beta x: {self.diff_beta_x},
-Diff alpha y: {self.diff_alpha_y},
-Diff beta y: {self.diff_beta_y},
-LQR Parameters:
-Qz: {Qz},
-Rz: {Rz},
-Tzx: {Tzx},
-Tzu: {Tzu},
-Tzy: {Tzy}"""
+        self.control_gains_message.data = remove_extra_spaces(f"""Control gains for Fx: {self.K_x}, 
+        Fy: {self.K_y},
+        Fz: {self.K_z}, 
+        RA Kp: {self.k_ra_p}, 
+        RA Kd: {self.K_ra_d},
+        Diff alpha RA: {self.diff_alpha_RA},
+        Diff beta RA: {self.diff_beta_RA},
+        Diff alpha z: {self.diff_alpha_z},
+        Diff beta z: {self.diff_beta_z},
+        Diff alpha x: {self.diff_alpha_x},
+        Diff beta x: {self.diff_beta_x},
+        Diff alpha y: {self.diff_alpha_y},
+        Diff beta y: {self.diff_beta_y},
+        LQR Parameters:
+        Qz: {Qz},
+        Rz: {Rz},
+        Tzx: {Tzx},
+        Tzu: {Tzu},
+        Tzy: {Tzy}""")
 
         self.ez_integral = 0.0
         self.z_dot = 0.0
@@ -165,15 +171,15 @@ Tzy: {Tzy}"""
         self.last_y = 0.0
 
         self.__first_reading = True
-        self.metadata_msg.metadata.data = f"""
-Experiment metadata.
-Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
-Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
-Calibration file: {self.calibration_file}
-Gains: {self.control_gains_message.data}
-Calibration type: Legacy yaml file
-Dipole object used: {self.rigid_body_dipole.name}
-"""
+        self.metadata_msg.metadata.data = remove_extra_spaces(f"""
+        Experiment metadata.
+        Experiment type: Regulation experiment for 0 pose with position varying allocation matrix.
+        Controlled States: Z, Reduced Attitude (Body fixed Z axis in world frame)
+        Calibration file: {self.calibration_file}
+        Gains: {self.control_gains_message.data}
+        Calibration type: Legacy yaml file
+        Dipole object used: {self.rigid_body_dipole.name}
+        """)
         self.set_path_metadata(__file__)
 
     def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
