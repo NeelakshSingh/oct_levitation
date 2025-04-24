@@ -81,7 +81,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
         # Denormalize the control gains.
-        self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
+        # self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
         # self.Ki_z = 1
         # self.K_z = np.array([[5422, 557.6]]) # I40 Tuned for input disturbance offset of 0.18mm for 100gms of force as a step disturbance and 60 deg PM at 28.1 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
         # self.K_z = np.array([[957.4, 201.8]]) # I40 Tuned for input disturbance offset of 1.2mm for 100gms of force as a step disturbance and 60 deg PM at 9.28 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
@@ -90,6 +90,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_z = np.array([[69.23, 37.39]]) # I40 Tuned for input disturbance offset of 1.4mm for 10gms of force step disturbance, 4sec settling time for 1mm offset, 60 deg phase margin at 2.07 rad. 24Hz ECB 3dB bandwidth. 
         # self.K_z = np.array([[33.69, 31.02]]) # I40 Tuned for input disturbance offset of 3mm for 10gms of force step disturbance, 5.8sec settling time for 1mm step setpoint, 55 geg phase margin at 1.61 rad. 24Hz ECB 3dB bandwidth. 
         # self.K_z = np.array([[33.69, 3.975]]) # I40 Tuned for input disturbance offset of 3mm for 10gms of force step disturbance, 5.8sec settling time for 1mm step setpoint, 55 geg phase margin at 1.61 rad. 24Hz ECB 3dB bandwidth. 
+        # self.K_z = np.array([[2.083, 7.957]]) # I40 N52 10x3, tuned for 60deg phase margin.
+        # self.K_z = np.array([[4.359, 9.641]]) # I40 N52 10x3, tuned for 60deg phase margin.
+        # self.K_z = np.array([[0.3438, 2.3]]) # I40 N52 10x3, tuned for less D gain to avoid noise amplification.
+        self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
         
 
         # Since X and Y have the same dynamics, we use the same gains.
@@ -324,8 +328,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
         self.control_input_message.vector = w_des
 
-        com_wrench_des = np.array([Tau_x, Tau_y, 0.0, F_x, F_y, F_z])
-        # com_wrench_des = np.array([0.0, 0.0, 0.0, F_x, F_y, F_z])
+        # com_wrench_des = np.array([Tau_x, Tau_y, 0.0, F_x, F_y, F_z])
+        com_wrench_des = np.array([0.0, 0.0, 0.0, F_x, F_y, F_z])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 

@@ -1,8 +1,8 @@
 free_body_sim:
   gravity_on: true
   initial_position:
-    - 0.0
-    - 0.0
+    - 0.00
+    - 0.005
     - 0.0
   position_limit:
     - 0.02
@@ -60,5 +60,5 @@ free_body_sim:
   poke_start_time_sec: 500.0                # Time after simulation start to begin poking
 
 free_body_sim_utils:
-  delay_time: 0.0         # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
+  delay_time: 0.002         # 50ms was estimated in Jasan's paper titled "Dynamic Electromagnetic Navigation"
   delay_repub_freq: 500   # This is actually just the freq to check when to publish delayed currents. Should be comparatively higher than the control freq.
