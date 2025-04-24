@@ -319,7 +319,7 @@ class ControlSessionNodeBase:
         """
         raise NotImplementedError("The post init function has not been implemented yet.")
     
-    def callback_control_logic(self, tf_msg: TransformStamped):
+    def callback_control_logic(self, tf_msg: TransformStamped, sft_coeff: float = 1.0):
         """
         Implement all the important calculations and controller logic in this function.
         Set all the empty messages which are supposed to be published. The following
@@ -343,14 +343,6 @@ class ControlSessionNodeBase:
         self.control_input_publisher.publish(self.control_input_message)
         des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
-        ## TODO: Maybe it makes more sense to smooth start Fz
-        coeff = 1
-        if self.__SOFT_START:
-            coeff = self.soft_starter(1/self.CONTROL_RATE)
-            if np.allclose(coeff, 1.0):
-                coeff = 1.0
-                self.__SOFT_START = False # Disable it from this point onwards
-        des_currents *= coeff
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")
         
@@ -366,7 +358,14 @@ class ControlSessionNodeBase:
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         start_time = time.perf_counter()
-        self.callback_control_logic(tf_msg)
+        ## TODO: Maybe it makes more sense to smooth start Fz
+        coeff = 1
+        if self.__SOFT_START:
+            coeff = self.soft_starter(1/self.CONTROL_RATE)
+            if np.allclose(coeff, 1.0):
+                coeff = 1.0
+                self.__SOFT_START = False # Disable it from this point onwards
+        self.callback_control_logic(tf_msg, coeff)
         self.publish_topics()
         stop_time = time.perf_counter()
         if self.publish_computation_time:

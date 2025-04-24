@@ -25,8 +25,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        # self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 6.5e-3])
-        # self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, -20.0, 0.0]))
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 2e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
         self.dt = 1/self.control_rate
@@ -227,7 +227,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         return des_currents.flatten()
         
-    def callback_control_logic(self, tf_msg: TransformStamped):
+    def callback_control_logic(self, tf_msg: TransformStamped, sft_coeff: float = 1.0):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.control_input_message = VectorStamped() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
@@ -301,7 +301,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        F_z = u_z[0, 0]
+        F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
 
@@ -325,6 +325,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.control_input_message.vector = w_des
 
         com_wrench_des = np.array([Tau_x, Tau_y, 0.0, F_x, F_y, F_z])
+        # com_wrench_des = np.array([0.0, 0.0, 0.0, F_x, F_y, F_z])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 

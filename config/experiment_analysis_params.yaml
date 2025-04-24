@@ -60,11 +60,11 @@ experiment_analysis:
     cutoff_frequency: 50.0 # Hz, cutoff frequency for pynumdiff LPF
 
   condition_number_plot_options:
-    experiment_subfolder_topic_map: # Different experiments used a different name for this topic. So I just used this map. In the future just use the same name plox.
+    experiment_type_topic_map: # Different experiments used a different name for this topic. So I just used this map. In the future just use the same name plox.
       reduced_attitude_control: 
         - "/com_single_dipole_normal_orientation_control/jma_condition"
         - "/control_session/jma_condition"
-      xyz_normal_control:
+      xyz_reduced_attitude_single_dipole:
         - "/xyz_rp_control_single_dipole/jma_condition"
         - "/control_session/jma_condition"
       linear_y_control:

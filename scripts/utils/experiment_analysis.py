@@ -203,6 +203,8 @@ com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
 calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
 calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
                                                 calibration_file=calib_file)
+metadata_topic = pd.read_csv(os.path.join(expt_dir, topic_name_to_bagpyext_name("/control_session/metadata") + ".csv"))
+experiment_type = os.path.splitext(metadata_topic['controller_name.data'][0])[0]
 
 DISABLE_PLOTS = rospy.get_param("~disable_plots", default=False)
 
@@ -336,10 +338,10 @@ if not DISABLE_PLOTS:
 
     if rospy.get_param("experiment_analysis/enable_condition_number_plots", default=False):
         cond_topic = None
-        topic_map = rospy.get_param("experiment_analysis/condition_number_plot_options/experiment_subfolder_topic_map")
-        if experiment_subfolder not in topic_map.keys():
-            node_logerr(f"Experiment folder {experiment_subfolder} not found in condition number topic map.")
-        for topic in topic_map[experiment_subfolder]:
+        topic_map = rospy.get_param("experiment_analysis/condition_number_plot_options/experiment_type_topic_map")
+        if experiment_type not in topic_map.keys():
+            node_logerr(f"Experiment folder {experiment_type} not found in condition number topic map.")
+        for topic in topic_map[experiment_type]:
             topic_bgpy_name = topic_name_to_bagpyext_name(topic)
             if topic_bgpy_name in data.keys():
                 cond_topic = topic_bgpy_name

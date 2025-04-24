@@ -1705,7 +1705,7 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
     axs = axs.flatten()
     for i in range(8):
         axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='tab:blue', **kwargs)
-        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:green', **kwargs)
+        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:green', linestyle=":", **kwargs)
         axs[i].set_title(f'Currents in Coil {i+1}')
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Current (A)")
@@ -2744,7 +2744,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                 **component_plot_kwargs)
         if plot_mean_values:
             mean_value = np.mean(actual_wrench_df[key_map[force_component]]*1000)
-            axes[0, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean Actual {force_component}', zorder=11)
+            axes[0, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean Actual Force', zorder=11)
         axes[0, i].set_title(f'{force_component} - Force')
         axes[0, i].grid(True)
         if i == 0:
@@ -2802,7 +2802,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                         **component_plot_kwargs)
         if plot_mean_values:
             mean_value = np.mean(actual_wrench_df[key_map[torque_component]]*1e3)
-            axes[1, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean Actual {torque_component}', zorder=11)
+            axes[1, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean Actual Torque', zorder=11)
         axes[1, i].set_title(title)
         axes[1, i].grid(True)
         if i == 0:
