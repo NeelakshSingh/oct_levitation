@@ -221,3 +221,25 @@ class FirstOrderIntegrator:
         self.integral = np.clip(self.integral, -self.windup_lim, self.windup_lim)
         self.prev_val = val
         return self.integral
+    
+#####################################
+# Controller Utilities
+#####################################
+
+def tustin_pre_warp_discretize_PD_controller(Kp: float, Kd: float, dt: float, omega: float) -> np_t.NDArray:
+    """
+    This function discretizes a PD controller using Tustin's method.
+
+    Parameters:
+        Kp (float): The proportional gain.
+        Kd (float): The derivative gain.
+        dt (float): The time step.
+        omega (float): The pre-warp frequency to remove scale distortion in rad/s.
+
+    Returns:
+        np_t.NDArray: The discretized coefficients for the current error and the previous error.
+    """
+    eta = omega/np.tan(omega*dt/2)
+    now_gain = Kp + Kd*eta
+    prev_gain = Kp - Kd*eta
+    return np.array([now_gain, prev_gain])

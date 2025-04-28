@@ -74,7 +74,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Cz_norm = Cz
 
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
-                                                  method='zoh')
+                                                method='zoh')
         
         Qz = np.diag([10.0, 1.0])
         Rz = 1
@@ -93,12 +93,23 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_z = np.array([[2.083, 7.957]]) # I40 N52 10x3, tuned for 60deg phase margin.
         # self.K_z = np.array([[4.359, 9.641]]) # I40 N52 10x3, tuned for 60deg phase margin.
         # self.K_z = np.array([[0.3438, 2.3]]) # I40 N52 10x3, tuned for less D gain to avoid noise amplification.
-        self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
+        # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
+        # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
+        # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
+        self.K_z = np.array([[0.002613, 1.758]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.1 rad/s crossover.
+        omega_prewarp = 100
+        # self.K_z = np.array([[0.6281, 6.051]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.288 rad/s crossover.
+        # omega_prewarp = 0.288
+
+        self.K_z_tustin = numerical.tustin_pre_warp_discretize_PD_controller(self.K_z[0, 0], self.K_z[0, 1], self.dt, omega_prewarp)
         
 
         # Since X and Y have the same dynamics, we use the same gains.
         self.K_x = np.copy(self.K_z)
         self.K_y = np.copy(self.K_z)
+
+        self.K_x_tustin = numerical.tustin_pre_warp_discretize_PD_controller(self.K_x[0, 0], self.K_x[0, 1], self.dt, omega_prewarp)
+        self.K_y_tustin = numerical.tustin_pre_warp_discretize_PD_controller(self.K_y[0, 0], self.K_y[0, 1], self.dt, omega_prewarp)
         
         # self.K_x = np.zeros((1,2))
         # self.K_y = np.zeros((1,2))
@@ -146,6 +157,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.control_gains_message.data = remove_extra_spaces(f"""Control gains for Fx: {self.K_x}, 
         Fy: {self.K_y},
         Fz: {self.K_z}, 
+        omega_prewarp: {omega_prewarp},
+        Kz_tustin: {self.K_z_tustin},
+        Kx_tustin: {self.K_x_tustin},
+        Ky_tustin: {self.K_y_tustin},
         RA Kp: {self.k_ra_p}, 
         RA Kd: {self.K_ra_d},
         Diff alpha RA: {self.diff_alpha_RA},
@@ -173,6 +188,14 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.last_z = 0.0
         self.last_x = 0.0
         self.last_y = 0.0
+
+        self.tustin_last_ez = 0.0
+        self.tustin_last_ex = 0.0
+        self.tustin_last_ey = 0.0
+
+        self.tustin_last_uz = 0.0
+        self.tustin_last_ux = 0.0
+        self.tustin_last_uy = 0.0
 
         self.__first_reading = True
         self.metadata_msg.metadata.data = remove_extra_spaces(f"""
@@ -305,9 +328,28 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        F_z = u_z[0, 0] * sft_coeff
-        F_x = u_x[0, 0]
-        F_y = u_y[0, 0]
+        tustin_ez = -z_error[0, 0]
+        tustin_ex = -x_error[0, 0]
+        tustin_ey = -y_error[0, 0]
+
+        tustin_uz = self.K_z_tustin[0] * tustin_ez + self.K_z_tustin[1] * self.tustin_last_ez - self.tustin_last_uz
+        tustin_ux = self.K_x_tustin[0] * tustin_ex + self.K_x_tustin[1] * self.tustin_last_ex - self.tustin_last_ux
+        tustin_uy = self.K_y_tustin[0] * tustin_ey + self.K_y_tustin[1] * self.tustin_last_ey - self.tustin_last_uy
+
+        self.tustin_last_ez = tustin_ez
+        self.tustin_last_ex = tustin_ex
+        self.tustin_last_ey = tustin_ey
+        self.tustin_last_uz = tustin_uz
+        self.tustin_last_ux = tustin_ux
+        self.tustin_last_uy = tustin_uy
+
+        # F_z = u_z[0, 0] * sft_coeff
+        # F_x = u_x[0, 0]
+        # F_y = u_y[0, 0]
+
+        F_z = tustin_uz * sft_coeff
+        F_x = tustin_ux
+        F_y = tustin_uy
 
         omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
         E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
