@@ -353,16 +353,15 @@ class WrenchInput6DOFDipoleEulerXYZDynamics(LinearizableNonLinearDynamicalSystem
         s_next[8] = geometry.angle_residual(s_next[8], 0)
         return s_next
     
-    def calculate_steady_state_input(self, s: np_t.NDArray) -> np_t.NDArray:
-        """
-        Calculates the steady state input to maintain the given state vector.
+    # def calculate_steady_state_input(self, s: np_t.NDArray) -> np_t.NDArray:
+    #     """
+    #     Calculates the steady state input to maintain the given state vector.
 
-        Parameters
-        ----------
-            s (np_t.ArrayLike) : The state vector.
+    #     Parameters
+    #     ----------
+    #         s (np_t.ArrayLike) : The state vector.
         
-        Returns
-        -------
-            u_op (np_t.ArrayLike) : The steady state input vector.
-        """
-        
+    #     Returns
+    #     -------
+    #         u_op (np_t.ArrayLike) : The steady state input vector.
+    #     """
