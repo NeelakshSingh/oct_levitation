@@ -96,8 +96,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
         # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
         # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
-        self.K_z = np.array([[0.002613, 1.758]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.1 rad/s crossover.
-        # self.K_z = np.array([[0.6281, 6.051]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.288 rad/s crossover.
+        # self.K_z = np.array([[0.002613, 1.758]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.1 rad/s crossover.
+        self.K_z = np.array([[0.6281, 6.051]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.288 rad/s crossover.
         
 
         # Since X and Y have the same dynamics, we use the same gains.

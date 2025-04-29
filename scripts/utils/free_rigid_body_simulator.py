@@ -96,7 +96,6 @@ class DynamicsSimulator:
 
         initial_rpy = np.array(rospy.get_param("free_body_sim/initial_rpy_deg")) # World frame
         self.rpy_limit = np.abs(np.deg2rad(np.array(rospy.get_param("free_body_sim/rpy_limit_deg")))) # World frame
-        self.R_lim = geometry.rotation_matrix_from_euler_xyz(self.rpy_limit)
         rospy.loginfo(f"[free_body_sim] initial_rpy: {initial_rpy}")
         self.q = geometry.quaternion_from_euler_xyz(np.deg2rad(initial_rpy)) # World frame
         self.R = geometry.rotation_matrix_from_quaternion(self.q) # Same as above.

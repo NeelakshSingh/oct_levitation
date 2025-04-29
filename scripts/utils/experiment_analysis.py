@@ -41,8 +41,8 @@ def topic_name_to_bagpyext_name(topic_name: str) -> str:
     # Replace slashes with underscores
     return "_" + topic_name.replace("/", "_")
 
-rospkg = rospkg.RosPack()
-pkg_path = rospkg.get_path('oct_levitation')
+rospack = rospkg.RosPack()
+pkg_path = rospack.get_path('oct_levitation')
 data_base_folder = rospy.get_param('experiment_analysis/base_folder', "")
 if data_base_folder == "":
     node_loginfo("No base folder specified. Using default: oct_levitation/data/experiment_data.")
