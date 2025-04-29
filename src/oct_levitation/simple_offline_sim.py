@@ -102,14 +102,15 @@ class DynamicsSimulator:
         
         # Linear Dynamics
         A_lin = np.array([[0.0, 1.0], [0.0, 0.0]])
-        B_lin = np.array([[0.0, 1/self.rigid_body.mass_properties.m]]).T
+        self.mass = self.SIM_PARAMS['mass']
+        B_lin = np.array([[0.0, 1/self.mass]]).T
         C_lin = np.eye(2)
         self.lin_dynamics_ss : ct.StateSpace = ct.ss(*signal.cont2discrete((A_lin, B_lin, C_lin, 0.0), dt=self.Ts, method='zoh'))
         
         # Angular dynamics in terms of euler angles (any representation works), small angle assumption implying simple double integrator
         A_ang = np.array([[0.0, 1.0], [0.0, 0.0]])
-        I_avg = (self.rigid_body.mass_properties.principal_inertia_properties.Px + self.rigid_body.mass_properties.principal_inertia_properties.Py)/2
-        B_ang = np.array([[0.0, 1/I_avg]]).T
+        self.I_avg = self.SIM_PARAMS['inertia_xx_yy']
+        B_ang = np.array([[0.0, 1/self.I_avg]]).T
         C_ang = np.eye(2)
         self.ang_dynamics_ss : ct.StateSpace = ct.ss(*signal.cont2discrete((A_ang, B_ang, C_ang, 0.0), dt=self.Ts, method='zoh'))
         
@@ -121,7 +122,7 @@ class DynamicsSimulator:
         self.F_amb = np.zeros(3)
         
         if self.SIM_PARAMS['gravity_on']:
-            self.F_amb = np.array([0.0, 0.0, -self.rigid_body.mass_properties.m * common.Constants.g])
+            self.F_amb = np.array([0.0, 0.0, -self.mass * common.Constants.g])
         
         
     def calculate_com_wrench_indiv_magnets(self, currents: np.ndarray):
