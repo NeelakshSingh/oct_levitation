@@ -1,5 +1,5 @@
 <launch>
-    <arg name="data_subfolder" default="xyz_normal_control"/>
+    <arg name="data_subfolder"/>
     <arg name="sim" default="false"/>
     <arg name="experiment_folder" default=""/>
     <arg name="summarize" default="false"/>

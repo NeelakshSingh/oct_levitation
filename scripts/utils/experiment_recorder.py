@@ -101,8 +101,10 @@ def controller_details_callback(msg: ControllerDetails):
         file_path = msg.controller_path.data
         controller_node_base = os.path.join(pkg_path, 'src', 'oct_levitation', 'control_node.py')
         destination_path = os.path.join(file_backup_path, os.path.basename(file_path))
+        rigid_body_file = os.path.join(pkg_path, 'src', 'oct_levitation', 'rigid_bodies.py')
         shutil.copyfile(controller_node_base, os.path.join(file_backup_path, os.path.basename(controller_node_base)))
         shutil.copyfile(file_path, destination_path)
+        shutil.copyfile(rigid_body_file, os.path.join(file_backup_path, os.path.basename(rigid_body_file)))
         # Saving the experiment details separately.
         desc_file = os.path.join(data_folder, 'experiment_description.txt')
         with open(desc_file, 'w') as f:

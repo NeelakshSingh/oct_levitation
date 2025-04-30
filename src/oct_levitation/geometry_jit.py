@@ -345,7 +345,7 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 rotate_vector_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import
 
-def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
+def quaternion_from_rotation_matrix(R: np.ndarray, canonical=True) -> np.ndarray:
     """
     Parameters
     ----------
@@ -357,6 +357,9 @@ def quaternion_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
     scipy_rotation = scitf.Rotation.from_matrix(R)
     q = scipy_rotation.as_quat() # Always returned in scalar last from scipy 1.10
+    if canonical:
+        if q[3] < 0:
+            q = -q
     return q
 
 #############################################

@@ -296,7 +296,7 @@ if not DISABLE_PLOTS:
         Fg_comp = None
         if ft_plot_params["remove_gravity_component"]:
             Fg_comp = common.Constants.g * np.array([0, 0, 1]) * dipole_body.mass_properties.m # By convention, the z axis is up
-        plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data[pose_topic],
+        fix, axes, actual_wrench_df = plotting.plot_actual_wrench_on_dipole_center_from_each_magnet(data[pose_topic],
                                                                     data['_tnb_mns_driver_system_state'],
                                                                     data[com_wrench_topic],
                                                                     calibration_model,
@@ -309,6 +309,7 @@ if not DISABLE_PLOTS:
                                                                     fg_comp=Fg_comp,
                                                                     plot_mean_values=ft_plot_params['plot_mean_values'],
                                                                     save_as=act_des_wrench_save,
+                                                                    return_actual_wrench=True,
                                                                     save_as_emf=SAVE_PLOTS_AS_EMF)
     ### FORCE AND TORQUE RELATED PLOTS END
     #################################

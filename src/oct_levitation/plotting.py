@@ -2577,7 +2577,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         for i in range(len(label_color_list)): # rescaling opacities
             dist = label_color_list[i][3]
             # The closer the magnet, the darker its plot should be
-            alpha = max_alpha - (max_alpha - min_alpha)*((dist - min_dist)/(max_dist - min_dist))
+            alpha = max_alpha - (max_alpha - min_alpha)*((dist - min_dist)/(max_dist - min_dist + 1e-6))
             label_color_list[i][3] = alpha
             label_color_list[i] = tuple(label_color_list[i])
         

@@ -89,7 +89,7 @@ def get_simple_inertia_from_mass(mass):
     I_xx_yy_disc = (1/12) * mass * (3 * r_disc**2 + h_disc**2)
     I_xx_yy_mag = (1/12) * mag_mass * (3 * r_mag**2 + h_mag**2)
     I_xx_yy = I_xx_yy_disc + I_xx_yy_mag
-    return I_xx_yy
+    return I_xx_yy, I_xx_yy_disc, I_xx_yy_mag
 
 LIST_OF_FOLDERS = []
 MASSES_TRIED = []
