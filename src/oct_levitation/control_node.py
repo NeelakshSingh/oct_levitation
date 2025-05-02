@@ -347,6 +347,7 @@ class ControlSessionNodeBase:
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")
         
         ### PUBLISH CURRENTS ACCORDING TO JASAN'S PROTOCOL ###
+        self.desired_currents_msg.header.stamp = rospy.Time.now()
         self.publish_currents_impl(des_currents, self.desired_currents_msg, self.currents_publisher)
 
         if self.publish_desired_com_wrenches:

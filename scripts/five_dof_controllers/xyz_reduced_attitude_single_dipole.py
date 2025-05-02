@@ -76,12 +76,12 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                 method='zoh')
         
-        Qz = np.diag([10.0, 1.0])
-        Rz = 1
+        Qz = np.diag([1.0, 1.0])
+        Rz = 0.1
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
         # Denormalize the control gains.
-        # self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
+        self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
         # self.Ki_z = 1
         # self.K_z = np.array([[5422, 557.6]]) # I40 Tuned for input disturbance offset of 0.18mm for 100gms of force as a step disturbance and 60 deg PM at 28.1 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
         # self.K_z = np.array([[957.4, 201.8]]) # I40 Tuned for input disturbance offset of 1.2mm for 100gms of force as a step disturbance and 60 deg PM at 9.28 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
@@ -97,7 +97,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
         # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
         # self.K_z = np.array([[0.002613, 1.758]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.1 rad/s crossover.
-        self.K_z = np.array([[0.6281, 6.051]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.288 rad/s crossover.
+        # self.K_z = np.array([[0.6281, 6.051]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.288 rad/s crossover.
         
 
         # Since X and Y have the same dynamics, we use the same gains.
@@ -242,7 +242,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.error_state_msg = VectorStamped() # Empty state estimate message
         self.ref_actual_msg = VectorStamped() # Empty message with reference and actual rp values
 
-        self.desired_currents_msg.header.stamp = rospy.Time.now()
         self.com_wrench_msg.header.stamp = rospy.Time.now()
         self.control_input_message.header.stamp = rospy.Time.now()
         self.error_state_msg.header.stamp = rospy.Time.now()

@@ -9,12 +9,20 @@
     <arg name="run_rqt_multiplot" default="false"/>
     <arg name="data_subfolder" default="xyz_normal_control"/>
        
-        <node pkg="oct_levitation" name="xyz_reduced_attitude_single_dipole_control" type="xyz_reduced_attitude_single_dipole.py" output="screen">
-            <param name="sim_mode" value="$(arg sim)"/>
-            <param name="hardware_connected" value="$(arg hardware_connected)"/>
-            <param name="data_subfolder" value="$(arg data_subfolder)"/>
-            <param name="experiment_description" value="$(arg description)"/>
-        </node>
+    <node pkg="oct_levitation" name="xyz_reduced_attitude_single_dipole_control" type="xyz_reduced_attitude_single_dipole.py" output="screen">
+        <param name="sim_mode" value="$(arg sim)"/>
+        <param name="hardware_connected" value="$(arg hardware_connected)"/>
+        <param name="data_subfolder" value="$(arg data_subfolder)"/>
+        <param name="experiment_description" value="$(arg description)"/>
+    </node>
+
+    <node pkg="oct_levitation" name="vicon_delay_meas" type="delay_measurement.py" output="screen">
+        <param name="topic" value="vicon/onyx_disc_80x15/Origin"/>
+    </node>
+
+    <node pkg="oct_levitation" name="driver_delay_meas" type="delay_measurement.py" output="screen">
+        <param name="topic" value="tnb_mns_driver/des_currents_reg"/>
+    </node>
      
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
     <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">

@@ -197,6 +197,7 @@ catkin_install_python(PROGRAMS
   scripts/utils/experiment_recorder.py
   scripts/utils/experiment_analysis.py
   scripts/utils/experiment_data_summarizer.py
+  scripts/utils/delay_measurement.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
