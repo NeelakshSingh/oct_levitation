@@ -717,7 +717,7 @@ def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
                                     dipole_strength:float,
                                     full_mat: float = True,
                                     torque_first: bool = True,
-                                    torque_in_local_frame: bool = False,
+                                    torque_in_local_frame: bool = True,
                                     dipole_axis: np.ndarray = np.array([0, 0, 1])) -> np.ndarray:
     """
     This function returns the magnetic interaction matrix of a dipole.
@@ -729,7 +729,7 @@ def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
         full_mat (float): Whether to return the full magnetic interaction matrix. 
                           If False, it returns the tuple (M_F, M_Tau) for the force and
                           torque magnetization matrices respectively. Defaults to False.
-        torque_first (bool): Whether to return the torque block first or the force block first\
+        torque_first (bool): Whether to return the torque block first or the force block first
                              when full_mat is set to True.
                              If True, then [[M_Tau], [M_F]] is returned and vice versa.
         dipole_axis (np.ndarray): The axis of the dipole according to vicon in home position. 
