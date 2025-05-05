@@ -3,3 +3,20 @@ oct_levitation:
   # rigid_body: "onyx_disc_80x15_I40"
   rigid_body: "onyx_disc_80x15_I40_N52"
   # rigid_body: "onyx_disc_80x7_5"
+
+  cpp_impl:
+    num_magnets: 1
+    z_values: # should have the same number of elements as num_magnets
+      - 0.0
+    magnet:
+      inner_radius: 0.0
+      outer_radius: 0.005
+      height: 0.005
+      remanence: 1.48
+      density: 7.5e3
+    dipole_axis: [0.0, 0.0, -1.0]
+    disc:
+      inner_radius: 0.005
+      outer_radius: 0.025
+      height: 0.01694
+      density: 1014.91

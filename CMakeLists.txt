@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.0.2)
 project(oct_levitation)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+# add_compile_options(-std=c++17)
+set(CMAKE_CXX_STANDARD 17)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -16,6 +17,8 @@ find_package(catkin REQUIRED
               tnb_mns_driver
               oct_ctrl
               vicon_bridge)
+
+include_directories(${EIGEN3_INCLUDE_DIR})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -101,8 +104,8 @@ add_message_files(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-# ${catkin_INCLUDE_DIRS}
+  include
+  ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -118,7 +121,9 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/oct_levitation_node.cpp)
+add_executable(ultimate_final_controller_node 
+  scripts/ultimate_final_controller_node.cpp
+)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -128,12 +133,15 @@ include_directories(
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(ultimate_final_controller_node ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(ultimate_final_controller_node
+  ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
+)
+
+set_target_properties(ultimate_final_controller_node PROPERTIES LINKER_LANGUAGE CXX)
 
 #############
 ## Install ##
@@ -220,7 +228,7 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+ INCLUDE_DIRS include
 #  LIBRARIES oct_levitation
 #  CATKIN_DEPENDS other_catkin_pkg
 #  DEPENDS system_lib
