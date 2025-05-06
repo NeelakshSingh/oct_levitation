@@ -5,6 +5,7 @@ oct_levitation:
   # rigid_body: "onyx_disc_80x7_5"
 
   cpp_impl:
+    calfile: "mc3ao8s_md200_handp.yaml"
     num_magnets: 1
     z_values: # should have the same number of elements as num_magnets
       - 0.0
@@ -14,7 +15,7 @@ oct_levitation:
       height: 0.005
       remanence: 1.48
       density: 7.5e3
-    dipole_axis: [0.0, 0.0, -1.0]
+    north_pole_down: true
     disc:
       inner_radius: 0.005
       outer_radius: 0.025

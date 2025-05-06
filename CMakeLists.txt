@@ -129,6 +129,10 @@ add_executable(ultimate_final_controller_node
   scripts/ultimate_final_controller_node.cpp
 )
 
+add_executable(ultimate_final_kalman_filter
+  scripts/ultimate_final_kalman_filter.cpp
+)
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -138,14 +142,20 @@ add_executable(ultimate_final_controller_node
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 add_dependencies(ultimate_final_controller_node ${catkin_EXPORTED_TARGETS})
+add_dependencies(ultimate_final_kalman_filter ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(ultimate_final_controller_node
+  ${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${EIGEN3_LIBRARIES}
 )
 
-set_target_properties(ultimate_final_controller_node PROPERTIES LINKER_LANGUAGE CXX)
+target_link_libraries(ultimate_final_kalman_filter
+  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
+)
 
 #############
 ## Install ##

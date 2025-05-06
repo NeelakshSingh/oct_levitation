@@ -82,12 +82,11 @@ struct RingMagnetsRingObject {
                           double height,
                           double density,
                           int num_magnets,
-                          const mag_manip::DipoleVec& dipole_axis,
+                          const bool north_pole_down,
                           const std::vector<double>& magnet_z_positions)
         : magnet(magnet), 
          geometry(inner_radius, outer_radius, height, density),
          num_magnets(num_magnets), 
-         dipole_axis(dipole_axis), 
          magnet_z_positions(magnet_z_positions) {
 
             if(magnet_z_positions.size() != num_magnets) {
@@ -112,6 +111,13 @@ struct RingMagnetsRingObject {
             // and that the magnets are stacked vertically
             Ixxyy = Ixxyy_magnets + geometry.Ixxyy;
             Izz = Izz_magnets + geometry.Izz;
+
+            if (north_pole_down) {
+                dipole_axis = Eigen::Vector3d(0.0, 0.0, -1.0);
+            }
+            else {
+                dipole_axis = Eigen::Vector3d(0.0, 0.0, 1.0);
+            }
         }
     
     mag_manip::DipoleVec getLocalDipoleMoment() const {

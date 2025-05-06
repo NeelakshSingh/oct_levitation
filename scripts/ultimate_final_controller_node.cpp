@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         0.0169,
         1014.9,
         1,
-        mag_manip::DipoleVec(0.0, 0.0, -1.0),
+        true,
         std::vector<double>{0.0}
     );
     
