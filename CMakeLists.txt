@@ -108,10 +108,14 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+set(SRC_FILES
+  src/oct_levitation/kalman_filter.cpp
+)
+
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/oct_levitation.cpp
-# )
+add_library(${PROJECT_NAME}
+  ${SRC_FILES}
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
