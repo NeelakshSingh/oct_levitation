@@ -663,27 +663,21 @@ def magnetic_interaction_grad5_to_force(dipole_moment: np.ndarray) -> np.ndarray
 magnetic_interaction_grad5_to_force(np.array([1.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
-def magnetic_interaction_field_to_torque(dipole_moment: np.ndarray) -> np.ndarray:
-    return get_skew_symmetric_matrix(dipole_moment)
-
-magnetic_interaction_field_to_torque(np.array([1.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
-
-@numba.njit(cache=True)
-def magnetic_interaction_field_to_local_torque_from_rotmat(dipole_moment: np.ndarray,
+def magnetic_interaction_field_to_local_torque_from_rotmat(local_dipole_moment: np.ndarray,
                                                      R: np.ndarray) -> np.ndarray:
     """
     The dipole moment must be expressed in the local frame for this to work.
     """
-    return get_skew_symmetric_matrix(dipole_moment) @ R.T
+    return get_skew_symmetric_matrix(local_dipole_moment) @ R.T
 
 magnetic_interaction_field_to_local_torque_from_rotmat(np.array([1.0, 0.0, 0.0]),
                                                     np.eye(3)) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
 def magnetic_interaction_field_to_local_torque(dipole_strength: float,
-                                               dipole_axis: np.ndarray,
+                                               local_dipole_axis: np.ndarray,
                                                dipole_quaternion: np.ndarray) -> np.ndarray:
-    return dipole_strength * get_skew_symmetric_matrix(dipole_axis) @ (rotation_matrix_from_quaternion(dipole_quaternion).T)
+    return dipole_strength * get_skew_symmetric_matrix(local_dipole_axis) @ (rotation_matrix_from_quaternion(dipole_quaternion).T)
 
 
 magnetic_interaction_field_to_local_torque(1.0,
@@ -691,129 +685,26 @@ magnetic_interaction_field_to_local_torque(1.0,
                                            IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
-def magnetic_interaction_matrix_from_dipole_moment(dipole_moment: np.ndarray) -> np.ndarray:
+def magnetic_interaction_force_local_torque(local_dipole_moment: np.ndarray,
+                                            quaternion: np.ndarray) -> np.ndarray:
     """
-    This function returns the magnetic interaction matrix of a dipole.
-    This is purely defined by the orientation of the dipole and its strength.
-    The returned matrix is the full magnetic interaction matrix with torque first.
-    Note that the frame of both torque and forces will be the same as the frame used for the dipole moment
-    and therefore the field calculation should also be done in the same frame in order to calcualte the
-    allocation matrix and the field and torques.
+    
     Args:
-        dipole_moment (float): The dipole moment vector of the dipole.
+        local_dipole_moment (float): The dipole moment vector of the dipole in the local frame. 
+        eg: [0.0, 0.0, -1.0] * strength for a north down dipole aligned with local frame z axis.
     
     Returns:
-        np.ndarray: The magnetic interaction matrix of the dipole
+        np.ndarray: The magnetic interaction matrix of the dipole mapping world frame fields and gradients to world frame forces
+        and local frame torques.
     """
+    R = rotation_matrix_from_quaternion(quaternion)
+    dipole_moment = R @ local_dipole_moment
     M_F = magnetic_interaction_grad5_to_force(dipole_moment)
-    M_Tau = magnetic_interaction_field_to_torque(dipole_moment)
-    M = np.zeros((6, 6))
-    
-    M[:3, :3] = M_Tau
-    M[3:, 3:] = M_F
-    return M
-
-def magnetic_interaction_matrix_from_quaternion(dipole_quaternion: np.ndarray,
-                                    dipole_strength:float,
-                                    full_mat: float = True,
-                                    torque_first: bool = True,
-                                    torque_in_local_frame: bool = True,
-                                    dipole_axis: np.ndarray = np.array([0, 0, 1])) -> np.ndarray:
-    """
-    This function returns the magnetic interaction matrix of a dipole.
-    This is purely defined by the orientation of the dipole and its strength.
-
-    Args:
-        dipole_quaternion (np.ndarray): Quaternion of the form [qx, qy, qz, qw].
-        dipole_strength (float): The strength of the dipole.
-        full_mat (float): Whether to return the full magnetic interaction matrix. 
-                          If False, it returns the tuple (M_F, M_Tau) for the force and
-                          torque magnetization matrices respectively. Defaults to False.
-        torque_first (bool): Whether to return the torque block first or the force block first
-                             when full_mat is set to True.
-                             If True, then [[M_Tau], [M_F]] is returned and vice versa.
-        dipole_axis (np.ndarray): The axis of the dipole according to vicon in home position. 
-                                  Defaults to [0, 0, 1].
-    
-    Returns:
-        np.ndarray: The magnetic interaction matrix of the dipole
-    """
-    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
-    R_OH = rotation_matrix_from_quaternion(dipole_quaternion)
-    dipole_axis = R_OH.dot(dipole_axis)
-    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
-    dipole_moment = dipole_strength*dipole_axis
-
-    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
-
-    if torque_in_local_frame:
-        M_Tau = magnetic_interaction_field_to_local_torque(dipole_strength=dipole_strength,
-                                                           dipole_axis=dipole_axis,
-                                                           dipole_quaternion=dipole_quaternion)
-    else:
-        M_Tau = magnetic_interaction_field_to_torque(dipole_moment)
-    if full_mat:
-        if torque_first:
-            return block_diag(M_Tau, M_F)
-        else:
-            return block_diag(M_F, M_Tau)
-    else:
-        return M_F, M_Tau
-
-def get_magnetic_interaction_matrix(dipole_tf: TransformStamped,
-                                    dipole_strength:float,
-                                    full_mat: float = True,
-                                    torque_first: bool = True,
-                                    dipole_axis: np.ndarray = np.array([0, 0, 1])):
-    """
-    This function returns the magnetic interaction matrix of a dipole.
-    This is purely defined by the orientation of the dipole and its strength.
-
-    Args:
-        dipole_tf (TransformStamped): The transform of the dipole in the world frame.
-        dipole_strength (float): The strength of the dipole.
-        full_mat (float): Whether to return the full magnetic interaction matrix. 
-                          If False, it returns the tuple (M_F, M_Tau) for the force and
-                          torque magnetization matrices respectively. Defaults to False.
-        torque_first (bool): Whether to return the torque block first or the force block first\
-                             when full_mat is set to True.
-                             If True, then [[M_Tau], [M_F]] is returned and vice versa.
-        dipole_axis (np.ndarray): The axis of the dipole according to vicon in home position. 
-                                  Defaults to [0, 0, 1].
-    
-    Returns:
-        np.ndarray: The magnetic interaction matrix of the dipole
-    """
-    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
-    dipole_quaternion = np.array([dipole_tf.transform.rotation.x,
-                                  dipole_tf.transform.rotation.y,
-                                  dipole_tf.transform.rotation.z,
-                                  dipole_tf.transform.rotation.w])
-    return magnetic_interaction_matrix_from_quaternion(dipole_quaternion,
-                                                       dipole_strength=dipole_strength,
-                                                       full_mat=full_mat,
-                                                       torque_first=torque_first,
-                                                       dipole_axis=dipole_axis)
-
-@numba.njit(cache=True)
-def get_full_magnetic_interaction_torque_first_jit(dipole_axis: np.ndarray,
-                                                   dipole_quaternion: np.ndarray,
-                                                   dipole_strength: np.float64) -> np.ndarray:
-    """
-    This function is a faster jit version to get the magnetic interaction matrix for the world frame forces and torques.
-    """
-    dipole_axis = dipole_axis/np.linalg.norm(dipole_axis, 2)
-    dipole_moment = dipole_strength * rotate_vector_from_quaternion(dipole_quaternion, dipole_axis)
-    M_Tau = magnetic_interaction_field_to_torque(dipole_moment)
-
-    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
+    M_Tau = get_skew_symmetric_matrix(local_dipole_moment) @ R.T
     M = np.zeros((6, 8))
-
+    
     M[:3, :3] = M_Tau
     M[3:, 3:] = M_F
-
     return M
 
-get_full_magnetic_interaction_torque_first_jit(np.array([0.0, 0.0, 1.0]),
-                                                np.array([0.0, 0.0, 0.0, 1.0]),
-                                                1.0) # Force compilation for expected argument type signature in import
+magnetic_interaction_force_local_torque(np.array([0.0, 0.0, -0.45]), np.array([0.0, 0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import 
