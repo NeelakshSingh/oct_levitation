@@ -80,17 +80,11 @@ class ControlSessionNodeBase:
             raise ValueError(msg)
         self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0.0, 0.0, 0.0])
-        self.warn_jma_condition = True
-        self.publish_jma_condition = True
-        if self.publish_jma_condition:
-            self.jma_condition_pub = rospy.Publisher("/control_session/jma_condition",
-                                                     VectorStamped, queue_size=1)
 
         if self.publish_computation_time:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
 
 
-        self.publish_desired_dipole_wrenches = rospy.get_param("~log_desired_dipole_wrench", False)
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
         self.metadata_topic = rospy.get_param("~metadata_pub_topic", "control_session/metadata")
 
@@ -107,7 +101,6 @@ class ControlSessionNodeBase:
         # Set empty messages to be set in the main control logic.
         self.com_wrench_msg : WrenchStamped = None
         self.dipole_wrench_messages: List[WrenchStamped] = None
-        self.control_input_message: VectorStamped = None
         self.control_gains_message: VectorStamped = None
         self.computation_time_msg = VectorStamped()
         self.computation_time_sample = 0
@@ -269,7 +262,6 @@ class ControlSessionNodeBase:
 
         The following optional attributed must be set.
             1. self.com_wrench_msg : WrenchStamped (if publish_desired_com_wrenches is True)
-            2. self.dipole_wrench_messages: List[WrenchStamped] (if publish_desired_dipole_wrenches is True)
         """
         raise NotImplementedError("Control logic must be implemented")
     
@@ -280,7 +272,6 @@ class ControlSessionNodeBase:
         # Publishing all the mandatory messages. They are all
         # set by the control_logic if it is implemented acc to
         # the specifications.
-        # self.control_input_publisher.publish(self.control_input_message)
         des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
@@ -292,10 +283,6 @@ class ControlSessionNodeBase:
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher.publish(self.com_wrench_msg)
-        
-        if self.publish_desired_dipole_wrenches:
-            for publisher, msg in zip(self.dipole_wrench_publishers, self.dipole_wrench_messages):
-                publisher.publish(msg)
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         start_time = time.perf_counter()

@@ -464,6 +464,49 @@ def local_angular_velocities_from_euler_xyz_rate(euler: np.ndarray, euler_rate: 
 
 local_angular_velocities_from_euler_xyz_rate(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
 
+@numba.njit(cache=True)
+def rotation_matrix_to_quaternion(R):
+    """
+    Convert a 3x3 rotation matrix to quaternion representation
+    Source: tsc_utils.rotations
+
+    Args:
+        R (np.ndarray): rotation matrix (3x3 numpy array)
+    Returns:
+        np.ndarray: quaternion as 4d numpy array [x,y,z,w]
+    """
+    w2_a = 1 + R[0, 0] + R[1, 1] + R[2, 2]
+    w2_b = 1 + R[0, 0] - R[1, 1] - R[2, 2]
+    w2_c = 1 - R[0, 0] + R[1, 1] - R[2, 2]
+    w2_d = 1 - R[0, 0] - R[1, 1] + R[2, 2]
+
+    w2_m = max([w2_a, w2_b, w2_c, w2_d])
+
+    if w2_m == w2_a:
+        w = 0.5 * np.sqrt(w2_a)
+        x = (R[2, 1] - R[1, 2]) / (4 * w)
+        y = (R[0, 2] - R[2, 0]) / (4 * w)
+        z = (R[1, 0] - R[0, 1]) / (4 * w)
+    elif w2_m == w2_b:
+        x = 0.5 * np.sqrt(w2_b)
+        y = (R[0, 1] + R[1, 0]) / (4 * x)
+        z = (R[0, 2] + R[2, 0]) / (4 * x)
+        w = (R[2, 1] - R[1, 2]) / (4 * x)
+    elif w2_m == w2_c:
+        y = 0.5 * np.sqrt(w2_c)
+        x = (R[1, 0] + R[0, 1]) / (4 * y)
+        z = (R[1, 2] + R[2, 1]) / (4 * y)
+        w = (R[0, 2] - R[2, 0]) / (4 * y)
+    else:
+        z = 0.5 * np.sqrt(w2_d)
+        x = (R[2, 0] + R[0, 2]) / (4 * z)
+        y = (R[2, 1] + R[1, 2]) / (4 * z)
+        w = (R[1, 0] - R[0, 1]) / (4 * z)
+
+    return np.array([x, y, z, w])
+
+rotation_matrix_to_quaternion(np.eye(3)) # Force compilation for expected argument type signature in import
+
 def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -550,6 +593,7 @@ def quaternion_from_euler_zyx(euler: np.ndarray) -> np.ndarray:
     q = scipy_rotation.as_quat()
     return q
 
+@numba.njit(cache=True)
 def angle_residual(a: float, b: float):
     """
     Computes the smaller arc's angle residual between a and b by converting it to the 
@@ -570,6 +614,7 @@ def angle_residual(a: float, b: float):
         residual -= 2*np.pi
     return residual
 
+angle_residual(0.0, 0.0) # Force compilation for expected argument type signature in import
 #############################################
 # Reduced Attitude Representation Realted
 # Functions
