@@ -34,15 +34,15 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.publish_desired_com_wrenches = True
         self.publish_desired_dipole_wrenches = False
         
-        self.control_input_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_input",
-                                                       VectorStamped, queue_size=1, latch=True)
+        # self.control_input_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_input",
+        #                                                VectorStamped, queue_size=1, latch=True)
         
         # Extra publishers which I wrote only in the post init and are not mandatory end with the shorthand pub.
-        self.error_state_pub = rospy.Publisher("/xyz_rp_control_single_dipole/error_states",
-                                                         VectorStamped, queue_size=1)
+        # self.error_state_pub = rospy.Publisher("/xyz_rp_control_single_dipole/error_states",
+        #                                                  VectorStamped, queue_size=1)
         
-        self.ref_actual_pub = rospy.Publisher("/xyz_rp_control_single_dipole/ref_actual_values",
-                                                         VectorStamped, queue_size=1)
+        # self.ref_actual_pub = rospy.Publisher("/xyz_rp_control_single_dipole/ref_actual_values",
+        #                                                  VectorStamped, queue_size=1)
         
         self.control_gain_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_gains",
                                                       String, queue_size=1, latch=True)
@@ -190,23 +190,25 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Dipole object used: {self.rigid_body_dipole.name}
         """)
         self.set_path_metadata(__file__)
+
+        self.E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
         
     def callback_control_logic(self, tf_msg: TransformStamped, sft_coeff: float = 1.0):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
-        self.control_input_message = VectorStamped() # Empty message
+        # self.control_input_message = VectorStamped() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
-        self.error_state_msg = VectorStamped() # Empty state estimate message
-        self.ref_actual_msg = VectorStamped() # Empty message with reference and actual rp values
+        # self.error_state_msg = VectorStamped() # Empty state estimate message
+        # self.ref_actual_msg = VectorStamped() # Empty message with reference and actual rp values
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
-        self.control_input_message.header.stamp = rospy.Time.now()
-        self.error_state_msg.header.stamp = rospy.Time.now()
-        self.ref_actual_msg.header.stamp = rospy.Time.now()
+        # self.control_input_message.header.stamp = rospy.Time.now()
+        # self.error_state_msg.header.stamp = rospy.Time.now()
+        # self.ref_actual_msg.header.stamp = rospy.Time.now()
 
         # Getting the current orientation and positions
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
 
-        e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
+        # e_xyz = geometry.euler_xyz_from_quaternion(dipole_quaternion)
         z_com = tf_msg.transform.translation.z
         x_com = tf_msg.transform.translation.x
         y_com = tf_msg.transform.translation.y
@@ -215,18 +217,20 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # The following explicit type casting is required by numba jit versions. np.linalg.norm
         # will fail for int arguments, in some cases this argument can be an int.
         desired_quaternion = np.asarray(geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform), dtype=np.float64)
-        ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
+
         ref_z = self.last_reference_tf_msg.transform.translation.z
         ref_x = self.last_reference_tf_msg.transform.translation.x
         ref_y = self.last_reference_tf_msg.transform.translation.y
 
-        phi = e_xyz[0]
-        theta = e_xyz[1]
-        phi_ref = ref_e_xyz[0]
-        theta_ref = ref_e_xyz[1]
-        self.ref_actual_msg.vector = np.concatenate((np.array([x_com, ref_x, y_com, ref_y, z_com, ref_z]),
-                                                     np.rad2deg(np.array([phi, phi_ref, theta, theta_ref]))))
-        self.ref_actual_pub.publish(self.ref_actual_msg)
+        # ref_e_xyz = geometry.euler_xyz_from_quaternion(desired_quaternion)
+        # phi = e_xyz[0]
+        # theta = e_xyz[1]
+        # phi_ref = ref_e_xyz[0]
+        # theta_ref = ref_e_xyz[1]
+        # self.ref_actual_msg.vector = np.concatenate((np.array([x_com, ref_x, y_com, ref_y, z_com, ref_z]),
+        #                                              np.rad2deg(np.array([phi, phi_ref, theta, theta_ref]))))
+        # self.ref_actual_pub.publish(self.ref_actual_msg)
+
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
         R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
 
@@ -269,26 +273,27 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         F_y = u_y[0, 0]
 
         omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
-        E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
-        omega_tilde = E @ omega
+        
+        omega_tilde = self.E @ omega
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
         reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
-        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * E @ R.T @ np.cross(Lambda, Lambda_d)
+        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
         # Local frame torque allocation
         Tau_x = u_RA[0]*self.Ixx
         Tau_y = u_RA[1]*self.Iyy
 
-        self.error_state_msg.vector = np.concatenate((x_error.flatten(), 
-                                                      y_error.flatten(), 
-                                                      z_error.flatten(), 
-                                                      [reduced_attitude_error],
-                                                      omega_tilde.flatten()))
-        self.error_state_pub.publish(self.error_state_msg)
-        w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
-        self.control_input_message.vector = w_des
+        # self.error_state_msg.vector = np.concatenate((x_error.flatten(), 
+        #                                               y_error.flatten(), 
+        #                                               z_error.flatten(), 
+        #                                               [reduced_attitude_error],
+        #                                               omega_tilde.flatten()))
+        # self.error_state_pub.publish(self.error_state_msg)
 
-        # com_wrench_des = np.array([Tau_x, Tau_y, 0.0, F_x, F_y, F_z])
-        com_wrench_des = np.array([0.0, 0.0, 0.0, F_x, F_y, F_z])
+        w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
+        # self.control_input_message.vector = w_des
+
+        com_wrench_des = np.array([Tau_x, Tau_y, 0.0, F_x, F_y, F_z])
+        # com_wrench_des = np.array([0.0, 0.0, 0.0, F_x, F_y, F_z])
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 

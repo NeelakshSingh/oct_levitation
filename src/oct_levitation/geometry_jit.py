@@ -12,6 +12,12 @@ CLOSE_CHECK_TOLERANCE = 1e-3
 IDENTITY_QUATERNION = np.array([0.0, 0.0, 0.0, 1.0]) # Identity quaternion
 
 @numba.njit(cache=True)
+def numba_cross(v: np.ndarray, w: np.ndarray) -> np.ndarray:
+    return np.cross(v, w)
+
+numba_cross(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def check_if_unit_quaternion(q: np.ndarray):
     """
     Check if the quaternion is a unit quaternion.
@@ -390,6 +396,7 @@ def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
 # Force compilation
 rotation_matrix_from_euler_xyz(np.zeros(3))
 
+@numba.njit(cache=True)
 def transformation_matrix_from_euler_xyz(euler: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -407,6 +414,9 @@ def transformation_matrix_from_euler_xyz(euler: np.ndarray, p: np.ndarray) -> np
     T[:3, 3] = p
     return T
 
+transformation_matrix_from_euler_xyz(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def local_angular_velocity_to_euler_xyz_rate_map_matrix(euler: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -428,6 +438,9 @@ def local_angular_velocity_to_euler_xyz_rate_map_matrix(euler: np.ndarray) -> np
             [ -np.cos(z)*np.tan(y),   np.sin(z)*np.tan(y),  1  ]
         ])
 
+local_angular_velocity_to_euler_xyz_rate_map_matrix(np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def euler_xyz_rate_to_local_angular_velocity_map_matrix(euler: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -446,8 +459,11 @@ def euler_xyz_rate_to_local_angular_velocity_map_matrix(euler: np.ndarray) -> np
             [  np.sin(y),            0,          1  ]
         ])
 
+@numba.njit(cache=True)
 def local_angular_velocities_from_euler_xyz_rate(euler: np.ndarray, euler_rate: np.ndarray) -> np.ndarray:
     return euler_xyz_rate_to_local_angular_velocity_map_matrix(euler) @ euler_rate
+
+local_angular_velocities_from_euler_xyz_rate(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
 
 def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
@@ -560,6 +576,7 @@ def angle_residual(a: float, b: float):
 # Functions
 #############################################
 
+@numba.njit(cache=True)
 def angular_velocity_body_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -578,7 +595,10 @@ def angular_velocity_body_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.nd
     omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2
     return omega
 
-def angular_velocity_ref_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
+angular_velocity_body_frame_from_rotation_matrix(np.eye(3), np.zeros((3, 3))) # Force compilation for expected argument type signature at import
+
+@numba.njit(cache=True)
+def angular_velocity_world_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
@@ -596,7 +616,10 @@ def angular_velocity_ref_frame_from_rotation_matrix(R: np.ndarray, R_dot: np.nda
     omega[2] = (omega_skew[1, 0] - omega_skew[0, 1])/2
     return omega
 
-def angular_velocity_ref_frame_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.ndarray:
+angular_velocity_world_frame_from_rotation_matrix(np.eye(3), np.zeros((3, 3))) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def angular_velocity_world_frame_from_quaternion(q: np.ndarray, q_dot: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
@@ -617,6 +640,9 @@ def angular_velocity_ref_frame_from_quaternion(q: np.ndarray, q_dot: np.ndarray)
     omega = 2*left_component_matrix.T @ q_dot
     return omega.flatten()
 
+angular_velocity_world_frame_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def inertial_reduced_attitude_from_quaternion(q: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     This function computes the inertial reduced attitude representation from the current pose
@@ -627,8 +653,11 @@ def inertial_reduced_attitude_from_quaternion(q: np.ndarray, b: np.ndarray) -> n
     Lambda = R @ b
     return Lambda
 
-z_axis_inertial_attitude_from_quaternion = partial(inertial_reduced_attitude_from_quaternion, b=np.array([0, 0, 1]))
+inertial_reduced_attitude_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import
 
+z_axis_inertial_attitude_from_quaternion = partial(inertial_reduced_attitude_from_quaternion, b=np.array([0.0, 0.0, 1.0]))
+
+@numba.njit(cache=True)
 def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     This function computes the inertial reduced attitude representation from the current pose
@@ -646,6 +675,8 @@ def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray)
     b = b/np.linalg.norm(b, 2)
     Lambda = R @ b
     return Lambda
+
+inertial_reduced_attitude_from_rotation_matrix(np.eye(3), np.array([0.0, 0.0, 1.0]) * 0.45) # Force compilation for expected argument type signature in import
 
 #############################################
 # Magnetic Interaction Matrix Calculations
@@ -711,4 +742,4 @@ def magnetic_interaction_force_local_torque(local_dipole_moment: np.ndarray,
         M = np.vstack((M[:2], M[3:]))
     return M
 
-magnetic_interaction_force_local_torque(np.array([0.0, 0.0, -0.45]), np.array([0.0, 0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import 
+magnetic_interaction_force_local_torque(np.array([0.0, 0.0, -0.45]), IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import 

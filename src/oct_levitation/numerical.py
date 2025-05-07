@@ -243,3 +243,12 @@ def tustin_pre_warp_discretize_PD_controller(Kp: float, Kd: float, dt: float, om
     now_gain = Kp + Kd*eta
     prev_gain = Kp - Kd*eta
     return np.array([now_gain, prev_gain])
+
+@numba.njit(cache=True)
+def numba_pinv(A: np_t.NDArray) -> np_t.NDArray:
+    """
+    This function is expected to provide a 2x speedup over the normal numpy version.
+    """
+    return np.linalg.pinv(A)
+
+numba_pinv(np.eye(3)) # Force compilation on import.

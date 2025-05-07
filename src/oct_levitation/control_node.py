@@ -22,27 +22,27 @@ from scipy.linalg import block_diag
 from control_utils.general.utilities import init_system
 from oct_levitation.msg import ControllerDetails
 
-Profiler = cProfile.Profile()
-PROFILE_FREQUENCY = 4 # Hz
-LAST_PROFILE_TIME = 0
+# Profiler = cProfile.Profile()
+# PROFILE_FREQUENCY = 4 # Hz
+# LAST_PROFILE_TIME = 0
 
-import rospkg
-rospack = rospkg.RosPack()
-pkg_path = rospack.get_path("oct_levitation")
-profiler_file_stats_path = os.path.join(pkg_path, "profiler_stats")
+# import rospkg
+# rospack = rospkg.RosPack()
+# pkg_path = rospack.get_path("oct_levitation")
+# profiler_file_stats_path = os.path.join(pkg_path, "profiler_stats")
 
-def dump_profiler_stats():
-    """
-    Dumps the profiler stats to a file.
-    """
-    stats = pstats.Stats(Profiler).sort_stats("cumulative")
-    if not os.path.exists(profiler_file_stats_path):
-        os.makedirs(profiler_file_stats_path)
-    profiler_file = os.path.join(profiler_file_stats_path, "profiler_stats.prof")
-    stats.dump_stats(profiler_file)
-    rospy.loginfo(f"Profiler stats dumped to {profiler_file}")
+# def dump_profiler_stats():
+#     """
+#     Dumps the profiler stats to a file.
+#     """
+#     stats = pstats.Stats(Profiler).sort_stats("cumulative")
+#     if not os.path.exists(profiler_file_stats_path):
+#         os.makedirs(profiler_file_stats_path)
+#     profiler_file = os.path.join(profiler_file_stats_path, "profiler_stats.prof")
+#     stats.dump_stats(profiler_file)
+#     rospy.loginfo(f"Profiler stats dumped to {profiler_file}")
 
-atexit.register(dump_profiler_stats)
+# atexit.register(dump_profiler_stats)
 
 class ControlSessionNodeBase:
     """
@@ -203,13 +203,12 @@ class ControlSessionNodeBase:
         dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
         dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         dipole = self.rigid_body_dipole.dipole_list[0]
-        dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
         A = self.mpem_model.getActuationMatrix(dipole_position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
         M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, dipole_quaternion, remove_z_torque=True)
         JMA = M @ A
 
-        computed_currents = np.linalg.pinv(JMA) @ w_com
+        computed_currents = numerical.numba_pinv(JMA) @ w_com
         if self.sim_mode:
             des_currents = np.zeros(8)
             des_currents[self.__ACTIVE_COILS] = computed_currents
@@ -218,31 +217,32 @@ class ControlSessionNodeBase:
             des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
             des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
 
-        jma_condition = np.linalg.cond(JMA)
+        ### LINES BELOW COMMETED OUT FOR SPEEDING UP THE CODE
+        # jma_condition = np.linalg.cond(JMA)
 
-        if self.warn_jma_condition:
-            condition_check_tol = 300
-            if jma_condition > condition_check_tol:
-                np.set_printoptions(linewidth=np.inf)
-                rospy.logwarn(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
-                                       Current TF: {tf_msg}
-                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
-                                    \n JMA: \n {JMA}""")
-                rospy.logwarn("[Condition Debug] Trying to pinpoint the source of rank loss.")
+        # if self.warn_jma_condition:
+        #     condition_check_tol = 300
+        #     if jma_condition > condition_check_tol:
+        #         np.set_printoptions(linewidth=np.inf)
+        #         rospy.logwarn(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
+        #                                Current TF: {tf_msg}
+        #                             \n JMA pinv: \n {np.linalg.pinv(JMA)}
+        #                             \n JMA: \n {JMA}""")
+        #         rospy.logwarn("[Condition Debug] Trying to pinpoint the source of rank loss.")
 
-                rospy.logwarn(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
-                                    M: {M},
-                                    M condition number: {np.linalg.cond(M)}""")
+        #         rospy.logwarn(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
+        #                             M: {M},
+        #                             M condition number: {np.linalg.cond(M)}""")
                 
-                rospy.logwarn(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
-                                    A: {A},
-                                    A condition number: {np.linalg.cond(A)}""")
+        #         rospy.logwarn(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
+        #                             A: {A},
+        #                             A condition number: {np.linalg.cond(A)}""")
 
-        if self.publish_jma_condition:
-            jma_condition_msg = VectorStamped()
-            jma_condition_msg.header.stamp = rospy.Time.now()
-            jma_condition_msg.vector = [jma_condition]
-            self.jma_condition_pub.publish(jma_condition_msg)
+        # if self.publish_jma_condition:
+        #     jma_condition_msg = VectorStamped()
+        #     jma_condition_msg.header.stamp = rospy.Time.now()
+        #     jma_condition_msg.vector = [jma_condition]
+        #     self.jma_condition_pub.publish(jma_condition_msg)
 
         return des_currents.flatten()
 
@@ -280,7 +280,7 @@ class ControlSessionNodeBase:
         # Publishing all the mandatory messages. They are all
         # set by the control_logic if it is implemented acc to
         # the specifications.
-        self.control_input_publisher.publish(self.control_input_message)
+        # self.control_input_publisher.publish(self.control_input_message)
         des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
@@ -299,12 +299,12 @@ class ControlSessionNodeBase:
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         start_time = time.perf_counter()
-        now = rospy.Time.now()
-        PROFILER_ENABLED = False
-        if (now - self.LAST_PROFILE_TIME).to_sec() > 1.0 / PROFILE_FREQUENCY:
-            Profiler.enable()
-            PROFILER_ENABLED = True
-            self.LAST_PROFILE_TIME = now
+        # now = rospy.Time.now()
+        # PROFILER_ENABLED = False
+        # if (now - self.LAST_PROFILE_TIME).to_sec() > 1.0 / PROFILE_FREQUENCY:
+        #     Profiler.enable()
+        #     PROFILER_ENABLED = True
+        #     self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
         coeff = 1
         if self.__SOFT_START:
@@ -314,8 +314,8 @@ class ControlSessionNodeBase:
                 self.__SOFT_START = False # Disable it from this point onwards
         self.callback_control_logic(tf_msg, coeff)
         self.publish_topics()
-        if PROFILER_ENABLED:
-            Profiler.disable()
+        # if PROFILER_ENABLED:
+        #     Profiler.disable()
         stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time = (stop_time - start_time)
