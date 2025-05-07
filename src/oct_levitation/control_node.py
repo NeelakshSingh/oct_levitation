@@ -7,9 +7,7 @@ from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import tf2_ros
 import numpy as np
 import time
-import cProfile
-import atexit
-import pstats
+import sys
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3
 from tnb_mns_driver.msg import DesCurrentsReg
@@ -21,6 +19,11 @@ from scipy.linalg import block_diag
 
 from control_utils.general.utilities import init_system
 from oct_levitation.msg import ControllerDetails
+
+### Uncomment the following lines and associated code in the callback_control_logic to enable profiling
+# import cProfile
+# import atexit
+# import pstats
 
 # Profiler = cProfile.Profile()
 # PROFILE_FREQUENCY = 4 # Hz
@@ -55,6 +58,7 @@ class ControlSessionNodeBase:
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
+        self.RT_PRIORITY_ENABLED = rospy.get_param("~rtprio_controller", False)
         self.CONTROL_RATE = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
         rospy.loginfo(f"Rigid body: {self.rigid_body_dipole.name}")
@@ -139,7 +143,7 @@ class ControlSessionNodeBase:
             self.__SOFT_START = False
             self.__HARDWARE_CONNECTED = False
             self.__MAX_CURRENT = 12.0 # Amps
-        self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl = init_system("JECB", self.__HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
+        self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl, shutdown_hook = init_system("JECB", self.__HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
         ######## HARDWARE ACTIVATION END ########
 
         # Start the timer
@@ -210,33 +214,6 @@ class ControlSessionNodeBase:
             des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
             des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
 
-        ### LINES BELOW COMMETED OUT FOR SPEEDING UP THE CODE
-        # jma_condition = np.linalg.cond(JMA)
-
-        # if self.warn_jma_condition:
-        #     condition_check_tol = 300
-        #     if jma_condition > condition_check_tol:
-        #         np.set_printoptions(linewidth=np.inf)
-        #         rospy.logwarn(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
-        #                                Current TF: {tf_msg}
-        #                             \n JMA pinv: \n {np.linalg.pinv(JMA)}
-        #                             \n JMA: \n {JMA}""")
-        #         rospy.logwarn("[Condition Debug] Trying to pinpoint the source of rank loss.")
-
-        #         rospy.logwarn(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
-        #                             M: {M},
-        #                             M condition number: {np.linalg.cond(M)}""")
-                
-        #         rospy.logwarn(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
-        #                             A: {A},
-        #                             A condition number: {np.linalg.cond(A)}""")
-
-        # if self.publish_jma_condition:
-        #     jma_condition_msg = VectorStamped()
-        #     jma_condition_msg.header.stamp = rospy.Time.now()
-        #     jma_condition_msg.vector = [jma_condition]
-        #     self.jma_condition_pub.publish(jma_condition_msg)
-
         return des_currents.flatten()
 
     def post_init(self):
@@ -283,6 +260,26 @@ class ControlSessionNodeBase:
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher.publish(self.com_wrench_msg)
+    
+    def check_shutdown_rt(self):
+        """
+        This functions is important to ensure a clean exit of the node when it is run with RT priority since it will never yield
+        otherwise which will never cause the code to check or respond to shutdown signals and will eventually be SIGKILLed by
+        roslaunch. This function really matters in order to call the shutdown hook of the driver and make sure that the ECB's stop
+        service is called. Of course, shutting down the tnb_mns_driver should still do the job and any launches of the driver node
+        should be left as is and not be modified without knowing exactly what you are doing and what the consequences could be.
+
+        The resetting of the scheduler to SCHED_OTHER was important otherwise it seems like roslaunch will not register the exit
+        from the node.
+        """
+        if self.RT_PRIORITY_ENABLED and rospy.is_shutdown_requested():
+            rospy.loginfo("[CONTROLLER CALLBACK LOGIC] ROS shutdown requested")
+            rospy.signal_shutdown("ROS shutdown requested")
+            os.sched_setscheduler(os.getpid(), os.SCHED_OTHER, os.sched_param(0)) # Revert to default scheduler and give up RT priority to catch the shutdown signal
+            os.sched_yield()
+            time.sleep(0.1)
+            sys.exit(0)
+            return
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         start_time = time.perf_counter()
@@ -293,6 +290,7 @@ class ControlSessionNodeBase:
         #     PROFILER_ENABLED = True
         #     self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
+        self.check_shutdown_rt()
         coeff = 1
         if self.__SOFT_START:
             coeff = self.soft_starter(1/self.CONTROL_RATE)
@@ -312,6 +310,7 @@ class ControlSessionNodeBase:
 
     def main_timer_loop(self, event: rospy.timer.TimerEvent):
         start_time = time.perf_counter()
+        self.check_shutdown_rt()
         dipole_tf = self.tf_buffer.lookup_transform("vicon/world", self.rigid_body_dipole.pose_frame, rospy.Time())
         self.callback_control_logic(dipole_tf)
         self.publish_topics()

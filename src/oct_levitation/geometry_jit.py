@@ -465,7 +465,7 @@ def local_angular_velocities_from_euler_xyz_rate(euler: np.ndarray, euler_rate: 
 local_angular_velocities_from_euler_xyz_rate(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
-def rotation_matrix_to_quaternion(R):
+def quaternion_from_rotation_matrix(R):
     """
     Convert a 3x3 rotation matrix to quaternion representation
     Source: tsc_utils.rotations
@@ -505,7 +505,7 @@ def rotation_matrix_to_quaternion(R):
 
     return np.array([x, y, z, w])
 
-rotation_matrix_to_quaternion(np.eye(3)) # Force compilation for expected argument type signature in import
+quaternion_from_rotation_matrix(np.eye(3)) # Force compilation for expected argument type signature in import
 
 def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
