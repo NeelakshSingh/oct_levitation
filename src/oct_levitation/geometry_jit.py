@@ -155,8 +155,9 @@ def get_final_rotation_matrix_from_sequence_of_quaternions(*quaternions: np.ndar
 get_final_rotation_matrix_from_sequence_of_quaternions(IDENTITY_QUATERNION, IDENTITY_QUATERNION, IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
-def get_normal_alpha_beta_from_quaternion(q: np.ndarray) -> np.ndarray:
+def get_normal_angles_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
+    Jasan's implementation used for the pendulum but JIT compiled with better semantics.
     Parameters
     ----------
         q: Quaternion in the form [x, y, z, w]
@@ -164,17 +165,15 @@ def get_normal_alpha_beta_from_quaternion(q: np.ndarray) -> np.ndarray:
     Returns
     -------
         v: 2 element array containing the angles of the local frame normal
-           with the world XZ and YZ planes. First element is the angle alpha
-           with the YZ plane and the second element is the angle beta with the
-           new XZ plane obtained after the first YZ rotation. This seems to be
-           similar to YXZ intrinsic euler rotations.
+           with the world XZ and YZ planes respectively. They seem to correspond to
+           ZYX extrinsic euler angles for zero yaw.
     """
     n = get_normal_vector_from_quaternion(q)
-    alpha = np.arctan2(n[0], n[2])
-    beta = np.arcsin(-n[1])
-    return np.array([alpha, beta])
+    angle_y = np.arctan2(n[0], n[2])
+    angle_x = np.arcsin(-n[1])
+    return np.array([angle_x, angle_y])
 
-get_normal_alpha_beta_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
+get_normal_angles_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
 def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.ndarray:
