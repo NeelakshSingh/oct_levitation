@@ -21,6 +21,7 @@ def remove_extra_spaces(string):
     """
     return ' '.join(string.split())
 
+
 class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):

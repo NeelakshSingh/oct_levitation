@@ -7,7 +7,9 @@ from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import tf2_ros
 import numpy as np
 import time
-import numba
+import cProfile
+import atexit
+import pstats
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3
 from tnb_mns_driver.msg import DesCurrentsReg
@@ -19,6 +21,28 @@ from scipy.linalg import block_diag
 
 from control_utils.general.utilities import init_system
 from oct_levitation.msg import ControllerDetails
+
+Profiler = cProfile.Profile()
+PROFILE_FREQUENCY = 4 # Hz
+LAST_PROFILE_TIME = 0
+
+import rospkg
+rospack = rospkg.RosPack()
+pkg_path = rospack.get_path("oct_levitation")
+profiler_file_stats_path = os.path.join(pkg_path, "profiler_stats")
+
+def dump_profiler_stats():
+    """
+    Dumps the profiler stats to a file.
+    """
+    stats = pstats.Stats(Profiler).sort_stats("cumulative")
+    if not os.path.exists(profiler_file_stats_path):
+        os.makedirs(profiler_file_stats_path)
+    profiler_file = os.path.join(profiler_file_stats_path, "profiler_stats.prof")
+    stats.dump_stats(profiler_file)
+    rospy.loginfo(f"Profiler stats dumped to {profiler_file}")
+
+atexit.register(dump_profiler_stats)
 
 class ControlSessionNodeBase:
     """
@@ -90,6 +114,7 @@ class ControlSessionNodeBase:
         self.current_computation_time = 0
 
         self.tracking_poses_on = rospy.get_param("oct_levitation/pose_tracking")
+        self.LAST_PROFILE_TIME = rospy.Time(0)
 
         ######## POST INIT CALL ########
         self.post_init()
@@ -274,6 +299,12 @@ class ControlSessionNodeBase:
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         start_time = time.perf_counter()
+        now = rospy.Time.now()
+        PROFILER_ENABLED = False
+        if (now - self.LAST_PROFILE_TIME).to_sec() > 1.0 / PROFILE_FREQUENCY:
+            Profiler.enable()
+            PROFILER_ENABLED = True
+            self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
         coeff = 1
         if self.__SOFT_START:
@@ -283,6 +314,8 @@ class ControlSessionNodeBase:
                 self.__SOFT_START = False # Disable it from this point onwards
         self.callback_control_logic(tf_msg, coeff)
         self.publish_topics()
+        if PROFILER_ENABLED:
+            Profiler.disable()
         stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time = (stop_time - start_time)
@@ -301,5 +334,3 @@ class ControlSessionNodeBase:
             self.computation_time_msg.header.stamp = rospy.Time.now()
             self.computation_time_msg.vector = [self.current_computation_time]
             self.computation_time_pub.publish(self.computation_time_msg)
-
-        
