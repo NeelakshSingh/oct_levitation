@@ -179,15 +179,11 @@ class ControlSessionNodeBase:
         dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         dipole = self.rigid_body_dipole.dipole_list[0]
         dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
-        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
-        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
-                                                                       dipole.axis,
-                                                                       dipole_quaternion)[:2] # Only first two rows will be nonzero
         A = self.mpem_model.getActuationMatrix(dipole_position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
-        M = block_diag(Mt_local, Mf)
-
+        M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, dipole_quaternion, remove_z_torque=True)
         JMA = M @ A
+
         computed_currents = np.linalg.pinv(JMA) @ w_com
         if self.sim_mode:
             des_currents = np.zeros(8)
@@ -216,87 +212,6 @@ class ControlSessionNodeBase:
                 rospy.logwarn(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
                                     A: {A},
                                     A condition number: {np.linalg.cond(A)}""")
-
-        if self.publish_jma_condition:
-            jma_condition_msg = VectorStamped()
-            jma_condition_msg.header.stamp = rospy.Time.now()
-            jma_condition_msg.vector = [jma_condition]
-            self.jma_condition_pub.publish(jma_condition_msg)
-
-        return des_currents.flatten()
-
-    def indiv_magnet_contribution_allocation(self, tf_msg: TransformStamped, w_com: np.ndarray):
-        """
-        Will return the 6 x N_coils allocation matrix computed by treating each magnet as an individual dipole.
-
-        ### Nomenclature details in function:
-        #### V: World frame (vicon frame)
-        #### M: Body fixed frame (attached to COM usually, tracked using vicon)
-        #### D: Dipole frame (attached to the dipole)
-        #### G: Magnet frame (attached to the magnet)
-        """
-        com_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
-        com_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
-        Lambda_tau = np.zeros((3, len(self.__ACTIVE_COILS)))
-        Lambda_F = np.zeros((3, len(self.__ACTIVE_COILS)))
-        T_VM = geometry.transformation_matrix_from_quaternion(com_quaternion, com_position)
-        R_VM = T_VM[:3, :3]
-
-        for dipole in self.rigid_body_dipole.dipole_list:
-            dipole_quat = geometry.numpy_quaternion_from_tf_msg(dipole.transform)
-            dipole_position = geometry.numpy_translation_from_tf_msg(dipole.transform)
-            T_MD = geometry.transformation_matrix_from_quaternion(dipole_quat, dipole_position)
-            for magnet_tf, magnet in dipole.magnet_stack:
-                mag_quaternion = geometry.numpy_quaternion_from_tf_msg(magnet_tf)
-                mag_position = geometry.numpy_translation_from_tf_msg(magnet_tf)
-                T_DG= geometry.transformation_matrix_from_quaternion(mag_quaternion, mag_position)
-                T_MG = T_MD @ T_DG
-                t_MG_M = T_MG[:3, 3] # relative position of the magnet w.r.t the body fixed frame expressed in the body fixed frame
-
-                T_VG = T_VM @ T_MG
-                R_VG = T_VG[:3, :3] # rotmat from magnet frame to world frame
-                R_MG = T_MG[:3, :3] # rotmat from magnet frame to body fixed frame
-                p_G_V = T_VG[:3, 3] # position of the magnet frame (magnet's dipole center) in world frame (calibration frame)
-                A_mag = self.mpem_model.getActuationMatrix(p_G_V) # Actuation matrix in world frame (calibration frame)
-                A_mag = A_mag[:, self.__ACTIVE_COILS] # Clipping to use only the active coils
-                ## IMPORTANT: Each column of A_mag is just a field and gradient vector in the world frame V (calibration frame)
-                mag_dipole_G = magnet.magnetization_axis * magnet.get_dipole_strength()
-                mag_dipole_V = R_VG @ mag_dipole_G # magnet's dipole moment expressed in world frame
-                mag_dipole_M = R_MG @ mag_dipole_G # magnet's dipole moment expressed in body fixed frame
-
-                Mf = geometry.magnetic_interaction_grad5_to_force(mag_dipole_V) # magnetic interaction from V frame gradients to V frame forces on the magnet center
-                A_g_V = A_mag[3:, :]
-                Lambda_F_mag_V = Mf @ A_g_V # this will be the magnet's contribution to the force on the COM expressed in V frame
-                
-                Mbar_tau = geometry.magnetic_interaction_field_to_local_torque_from_rotmat(mag_dipole_M, R_VM) # This will map the V frame field to M frame torques
-                A_b_V = A_mag[:3, :]
-
-                # Combining the torque and force contributions
-                Lambda_F += Lambda_F_mag_V
-                Lambda_tau += Mbar_tau @ A_b_V + geometry.get_skew_symmetric_matrix(t_MG_M) @ R_VM.T @ Lambda_F_mag_V
-
-        # rospy.loginfo(f"Lambda_tau: {Lambda_tau}, Lambda_F: {Lambda_F}")
-        ## NOTE: REMOVING THE 3rd ROW IS EXPERIMENT SPECIFIC. PLEASE MAKE SURE THAT LOCAL FRAME Tz IS NOT CONTROLLABLE OR CHANGE THIS CODE.
-        JMA = np.vstack((Lambda_tau[:2], Lambda_F)) # The third row will be zero anyway
-        computed_currents = np.linalg.pinv(JMA) @ w_com
-        if self.sim_mode:
-            des_currents = np.zeros(8)
-            des_currents[self.__ACTIVE_COILS] = computed_currents
-        else:
-            # Due to real world coils being connected to a different limited set of drivers.
-            des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
-            des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
-
-        jma_condition = np.linalg.cond(JMA)
-
-        if self.warn_jma_condition:
-            condition_check_tol = 300
-            if jma_condition > condition_check_tol:
-                np.set_printoptions(linewidth=np.inf)
-                rospy.logwarn(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
-                                       Current TF: {tf_msg}
-                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
-                                    \n JMA: \n {JMA}""")
 
         if self.publish_jma_condition:
             jma_condition_msg = VectorStamped()

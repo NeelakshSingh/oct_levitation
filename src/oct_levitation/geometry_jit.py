@@ -686,7 +686,8 @@ magnetic_interaction_field_to_local_torque(1.0,
 
 @numba.njit(cache=True)
 def magnetic_interaction_force_local_torque(local_dipole_moment: np.ndarray,
-                                            quaternion: np.ndarray) -> np.ndarray:
+                                            quaternion: np.ndarray,
+                                            remove_z_torque: bool = True) -> np.ndarray:
     """
     
     Args:
@@ -705,6 +706,9 @@ def magnetic_interaction_force_local_torque(local_dipole_moment: np.ndarray,
     
     M[:3, :3] = M_Tau
     M[3:, 3:] = M_F
+
+    if remove_z_torque:
+        M = np.vstack((M[:2], M[3:]))
     return M
 
 magnetic_interaction_force_local_torque(np.array([0.0, 0.0, -0.45]), np.array([0.0, 0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import 

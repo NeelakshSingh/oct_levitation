@@ -169,6 +169,7 @@ class MagneticDipole:
     frame_name: str
     magnet_stack: List[Tuple[Transform, PermanentMagnet]]
     _strength: float = None
+    _local_dipole_moment: np_t.NDArray = None
     
     @property
     def strength(self):
@@ -179,83 +180,13 @@ class MagneticDipole:
             for magnet_tf, magnet in self.magnet_stack:
                 self._strength += magnet.get_dipole_strength()
         return self._strength
-
-
-@dataclass
-class SingleDipoleRigidBody:
-    """
-    Interface for a dipole rigid body and its required mechanical properties.
-
-    Parameters
-    ----------
-    material_properties (MaterialProperties) : Material properties of the rigid body.
-    mass_properties (MassProperties) : Mass properties of the rigid body.
-    geometric_properties (ShapePropertiesInterface) : Geometric properties of the rigid body.
-    dipole_strength (float) : Dipole strength of the rigid body in A*m^2.
-    mframe (float) : Mass of any external mechanical attachment to the rigid body in kg, for example, vicon markers.
-    dipole_axis (np_t.NDArray) : Axis of the dipole (S->N) in the body-fixed frame.
-
-    Methods
-    -------
-    get_gravitational_torque(q: np_t.NDArray, g: np_t.NDArray) -> np_t.NDArray:
-        This function takes the current orientation of the rigid body and returns the torque due to gravity.
-        It is useful for gravity compensation in control.
-    """
-    mass_properties: MassProperties
-    dipole: MagneticDipole
-    mframe: float
-    pose_frame: str
-
-    def get_gravitational_torque(self, msg: geometry.TransformStamped, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
-        """
-        This function takes the current orientation of the rigid body and returns the torque due to gravity.
-        It is useful for gravity compensation in control.
-
-        Parameters
-        ----------
-        msg (TransformStamped): The ROS transform message of the rigid body.
-        g (np_t.NDArray) : Gravitational acceleration vector in the world frame. Defaults to downward
-                           earth's gravitation along z-axis.
-
-        Returns
-        -------
-        np_t.NDArray : Torque due to gravity in the world frame.
-        """
-        com_world = geometry.transform_vector_from_transform_stamped(msg, self.mass_properties.com_position)
-        return np.cross(com_world, self.mass_properties.m*g)
     
-    def get_gravitational_force(self, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
-        """
-        This function returns the gravitational force acting on the rigid body. 
-        It is useful for gravity compensation in control.
+    @property
+    def local_dipole_moment(self):
+        if self._local_dipole_moment is None:
+            self._local_dipole_moment = self.strength * self.axis
+        return self._local_dipole_moment
 
-        Parameters
-        ----------
-        g (np_t.NDArray) : Gravitational acceleration vector in the world frame. Defaults to downward
-                            earth's gravitation along z-axis.
-        
-        Returns
-        -------
-        np_t.NDArray : Gravitational force acting on the rigid body in the world frame.
-        """
-        return self.mass_properties.m*g
-    
-    def get_gravitational_wrench(self, msg: geometry.TransformStamped, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
-        """
-        This function returns the gravitational wrench acting on the rigid body. 
-        It is useful for gravity compensation in control.
-
-        Parameters
-        ----------
-        msg (TransformStamped): The ROS transform message of the rigid body.
-        g (numpy.NDArray) : Gravitational acceleration vector in the world frame. Defaults to downward
-                           earth's gravitation along z-axis.
-        
-        Returns
-        -------
-        numpy.NDArray : Gravitational wrench [Force, Torque] acting on the rigid body in the world frame.
-        """
-        return np.hstack((self.get_gravitational_force(g), self.get_gravitational_torque(msg, g)))
 
 @dataclass
 class MultiDipoleRigidBody:
@@ -288,105 +219,3 @@ class MultiDipoleRigidBody:
 
         self.dipole_wrench_topic_list = [os.path.join(self.name, dipole.name, self.dipole_wrench_topic_prefix)
                                          for dipole in self.dipole_list]
-
-    def get_gravitational_force(self, g: np_t.NDArray = np.array([0, 0, -Constants.g])) -> np_t.NDArray:
-        """
-        Compute the gravitational force acting on the rigid body.
-
-        Parameters
-        ----------
-        g : np_t.NDArray, optional
-            Gravitational acceleration vector in the world frame. Defaults to Earth's gravity 
-            along the negative z-axis.
-
-        Returns
-        -------
-        np_t.NDArray
-            Gravitational force acting on the rigid body in the world frame.
-        """
-        return self.mass_properties.m*g
-    
-    def get_dipole_transforms(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world") -> List[TransformStamped]:
-        dipole_tf_list = []
-        for dipole in self.dipole_list:
-            dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
-                                                                     dipole.frame_name,
-                                                                     rospy.Time())
-            dipole_tf_list.append(dipole_tf)
-
-        return dipole_tf_list
-    
-    def get_vicon_frame_transform(self, tf_buffer: tf2_ros.Buffer, world_frame: str = "vicon/world") -> TransformStamped:
-        return tf_buffer.lookup_transform(world_frame, self.pose_frame, rospy.Time())
-    
-    def get_magnetic_interaction_matrices_from_world_frame(self,tf_buffer: tf2_ros.Buffer,
-                                                           world_frame: str = "vicon/world", 
-                                                           full_mat: bool = False, 
-                                                           torque_first: bool = False) -> List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]:
-        """
-        Compute the magnetic interaction matrices for each attached dipole.
-
-        Parameters
-        ----------
-        world_frame : str
-            Name of the world frame to be passed to lookup transform
-
-        Returns
-        -------
-        List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]
-            List of each magnetic interaction matrix function return values, order corresponding to dipole list
-        """
-        mag_list = []
-        for dipole in self.dipole_list:
-            dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
-                                                                     dipole.frame_name,
-                                                                     rospy.Time())
-
-            dipole_magnetization = geometry.get_magnetic_interaction_matrix(dipole_tf=dipole_tf,
-                                                                            dipole_strength=dipole.strength,
-                                                                            dipole_axis=dipole.axis,
-                                                                            full_mat=full_mat,
-                                                                            torque_first=torque_first)
-            mag_list.append(dipole_magnetization)
-        
-        return mag_list
-    
-    def get_current_wrench_matrices_from_world_frame_mpem(self,tf_buffer: tf2_ros.Buffer,
-                                                          mpem_model: mag_manip.ForwardModelMPEM,
-                                                           world_frame: str = "vicon/world", 
-                                                           full_mat: bool = False, 
-                                                           torque_first: bool = False) -> List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]:
-        """
-        Compute the magnetic interaction matrices for each attached dipole.
-
-        Parameters
-        ----------
-        world_frame : str
-            Name of the world frame to be passed to lookup transform
-
-        Returns
-        -------
-        List[Union[np_t.ArrayLike, List[np_t.ArrayLike]]]
-            List of each magnetic interaction matrix function return values, order corresponding to dipole list
-        """
-        MA_list = []
-        for dipole in self.dipole_list:
-            dipole_tf: TransformStamped = tf_buffer.lookup_transform(world_frame,
-                                                                     dipole.frame_name,
-                                                                     rospy.Time())
-
-            dipole_magnetization = geometry.get_magnetic_interaction_matrix(dipole_tf=dipole_tf,
-                                                                            dipole_strength=dipole.strength,
-                                                                            dipole_axis=dipole.axis,
-                                                                            full_mat=full_mat,
-                                                                            torque_first=torque_first)
-            
-            A = mpem_model.getActuationMatrix(np.array([
-                dipole_tf.transform.translation.x,
-                dipole_tf.transform.translation.y,
-                dipole_tf.transform.translation.z
-            ]))
-
-            MA_list.append( dipole_magnetization @ A )
-        
-        return MA_list

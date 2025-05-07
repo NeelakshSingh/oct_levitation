@@ -189,51 +189,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Dipole object used: {self.rigid_body_dipole.name}
         """)
         self.set_path_metadata(__file__)
-
-    def local_torque_inertial_force_allocation(self, tf_msg: TransformStamped, Tau_x: float, Tau_y: float, F_x: float, F_y: float, F_z: float) -> np.ndarray:
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
-        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
-        dipole = self.rigid_body_dipole.dipole_list[0]
-        dipole_vector = dipole.strength*geometry.rotate_vector_from_quaternion(dipole_quaternion, dipole.axis)
-        Mf = geometry.magnetic_interaction_grad5_to_force(dipole_vector)
-        Mt_local = geometry.magnetic_interaction_field_to_local_torque(dipole.strength,
-                                                                       dipole.axis,
-                                                                       dipole_quaternion)[:2] # Only first two rows will be nonzero
-        A = self.mpem_model.getActuationMatrix(dipole_position)
-        M = block_diag(Mt_local, Mf)
-
-        W_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
-
-        JMA = M @ A
-        des_currents = np.linalg.pinv(JMA) @ W_des
-
-        jma_condition = np.linalg.cond(JMA)
-
-        if self.warn_jma_condition:
-            condition_check_tol = 300
-            if jma_condition > condition_check_tol:
-                np.set_printoptions(linewidth=np.inf)
-                rospy.logwarn_once(f"""JMA condition number is too high: {jma_condition}, CHECK_TOL: {condition_check_tol} 
-                                       Current TF: {tf_msg}
-                                    \n JMA pinv: \n {np.linalg.pinv(JMA)}
-                                    \n JMA: \n {JMA}""")
-                rospy.loginfo_once("[Condition Debug] Trying to pinpoint the source of rank loss.")
-
-                rospy.loginfo_once(f"""[Condition Debug] M rank: {np.linalg.matrix_rank(M)},
-                                    M: {M},
-                                    M condition number: {np.linalg.cond(M)}""")
-                
-                rospy.loginfo_once(f"""[Condition Debug] A rank: {np.linalg.matrix_rank(A)},
-                                    A: {A},
-                                    A condition number: {np.linalg.cond(A)}""")
-
-        if self.publish_jma_condition:
-            jma_condition_msg = VectorStamped()
-            jma_condition_msg.header.stamp = rospy.Time.now()
-            jma_condition_msg.vector = [jma_condition]
-            self.jma_condition_pub.publish(jma_condition_msg)
-
-        return des_currents.flatten()
         
     def callback_control_logic(self, tf_msg: TransformStamped, sft_coeff: float = 1.0):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
@@ -337,8 +292,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.indiv_magnet_contribution_allocation(tf_msg, w_des)
-        # des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
+        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 
