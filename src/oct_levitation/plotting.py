@@ -1393,6 +1393,75 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
         fig.show()
     return fig, axs
 
+def plot_poses_estimated_vs_measured(estimated_poses: pd.DataFrame, measured_poses: pd.DataFrame, scale_equal: bool = True,
+                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
+    """
+    Plots estimated and measured Euler angles and positions from two pose DataFrames.
+
+    Parameters:
+    - estimated_poses (pd.DataFrame): DataFrame with estimated poses (positions and quaternions) and time.
+    - measured_poses (pd.DataFrame): DataFrame with measured poses (positions and quaternions) and time.
+    """
+    time_est = estimated_poses['time'].values
+    time_meas = measured_poses['time'].values
+
+    est_pos = estimated_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values * 1000  # in mm
+    meas_pos = measured_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values * 1000  # in mm
+
+    est_quat = estimated_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    meas_quat = measured_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    est_euler = np.rad2deg(np.array([geometry.euler_xyz_from_quaternion(q) for q in est_quat]))
+    meas_euler = np.rad2deg(np.array([geometry.euler_xyz_from_quaternion(q) for q in meas_quat]))
+
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10), sharex=True)
+
+    # Position plots
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[0, i].plot(time_meas, meas_pos[:, i], label=f"Measured {axis}", color='black')
+        axs[0, i].plot(time_est, est_pos[:, i], label=f"Estimated {axis}", linestyle='dashed', color='tab:blue')
+        axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
+        axs[0, i].set_xlabel("Time (s)")
+        axs[0, i].set_ylabel("Position (mm)")
+        axs[0, i].legend()
+        axs[0, i].grid(True, which='major', linestyle='-', linewidth=0.6, color='grey')
+        axs[0, i].grid(True, which='minor', linestyle=':', linewidth=0.4, color='lightgrey')
+        axs[0, i].minorticks_on()
+
+    # Orientation plots
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[1, i].plot(time_meas, meas_euler[:, i], label=f"Measured {angle}", color='black')
+        axs[1, i].plot(time_est, est_euler[:, i], label=f"Estimated {angle}", linestyle='dashed', color='tab:blue')
+        axs[1, i].set_title(f"{angle} Angle")
+        axs[1, i].set_xlabel("Time (s)")
+        axs[1, i].set_ylabel("Angle (deg)")
+        axs[1, i].legend()
+        axs[1, i].grid(True, which='major', linestyle='-', linewidth=0.6, color='grey')
+        axs[1, i].grid(True, which='minor', linestyle=':', linewidth=0.4, color='lightgrey')
+        axs[1, i].minorticks_on()
+
+    if scale_equal:
+        axs[0, 2].sharey(axs[0, 0])
+        axs[0, 1].sharey(axs[0, 0])
+        axs[1, 1].sharey(axs[1, 0])
+        axs[1, 2].sharey(axs[1, 0])
+        for ax_row in axs:
+            for ax in ax_row:
+                ax.relim()
+                ax.autoscale()
+
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    return fig, axs
+
 
 def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
                                       save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):

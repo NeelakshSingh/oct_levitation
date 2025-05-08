@@ -224,6 +224,7 @@ def transformation_matrix_from_quaternion(q: np.ndarray, p: np.ndarray) -> np.nd
 
 transformation_matrix_from_quaternion(IDENTITY_QUATERNION, np.zeros(3)) # Force compilation for expected argument type signature in import
 
+@numba.njit(cache=True)
 def transform_vector_from_quaternion(q: np.ndarray, p: np.ndarray, v: np.ndarray) -> np.ndarray:
     """
     Full translationa and rotation of a vector given a quaternion and the translation
@@ -241,6 +242,8 @@ def transform_vector_from_quaternion(q: np.ndarray, p: np.ndarray, v: np.ndarray
     v_homo = get_homogeneous_vector(v)
     v_tf_homo = transformation_matrix_from_quaternion(q, p).dot(v_homo)
     return get_non_homoegeneous_vector(v_tf_homo)
+
+transform_vector_from_quaternion(IDENTITY_QUATERNION, np.zeros(3), np.zeros(3))
 
 def transform_vector_from_transform_stamped(msg: TransformStamped, v: np.ndarray) -> np.ndarray:
     """
@@ -769,3 +772,31 @@ def magnetic_interaction_force_local_torque(local_dipole_moment: np.ndarray,
     return M
 
 magnetic_interaction_force_local_torque(np.array([0.0, 0.0, -0.45]), IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import 
+
+@numba.njit(cache=True)
+def magnetic_interaction_force_local_torque_from_rotmat(local_dipole_moment: np.ndarray,
+                                            R: np.ndarray,
+                                            remove_z_torque: bool) -> np.ndarray:
+    """
+    
+    Args:
+        local_dipole_moment (float): The dipole moment vector of the dipole in the local frame. 
+        eg: [0.0, 0.0, -1.0] * strength for a north down dipole aligned with local frame z axis.
+    
+    Returns:
+        np.ndarray: The magnetic interaction matrix of the dipole mapping world frame fields and gradients to world frame forces
+        and local frame torques.
+    """
+    dipole_moment = R @ local_dipole_moment
+    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
+    M_Tau = get_skew_symmetric_matrix(local_dipole_moment) @ R.T
+    M = np.zeros((6, 8))
+    
+    M[:3, :3] = M_Tau
+    M[3:, 3:] = M_F
+
+    if remove_z_torque:
+        M = np.vstack((M[:2], M[3:]))
+    return M
+
+magnetic_interaction_force_local_torque_from_rotmat(np.array([0.0, 0.0, -0.45]), np.eye(3), True) # Force compilation for expected argument type signature in import
