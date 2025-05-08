@@ -73,6 +73,7 @@ def get_skew_symmetric_matrix(v: np.ndarray) -> np.ndarray:
 
 get_skew_symmetric_matrix(np.zeros(3)) # Force compilation for expected argument type signature in import
 
+@numba.njit(cache=True)
 def get_homogeneous_vector(v: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -84,8 +85,14 @@ def get_homogeneous_vector(v: np.ndarray) -> np.ndarray:
         v_h: 4x1 array
     """
     assert v.size == 3, "Input vector must have 3 elements."
-    return np.concatenate((v, [1]))
+    v_new = np.zeros(4)
+    v_new[:3] = v
+    v_new[3] = 1.0
+    return v_new
 
+get_homogeneous_vector(np.array([0.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def get_non_homoegeneous_vector(v_h: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -98,6 +105,8 @@ def get_non_homoegeneous_vector(v_h: np.ndarray) -> np.ndarray:
     """
     assert v_h.size == 4, "Input vector must have 4 elements."
     return v_h[:3]
+
+get_non_homoegeneous_vector(np.array([0.0, 0.0, 0.0, 0.0])) # Force compilation for expected argument type signature in import
 
 #############################################
 # Quaternion Related Functions
@@ -121,6 +130,29 @@ def rotation_matrix_from_quaternion(q: np.ndarray) -> np.ndarray:
     return R
 
 rotation_matrix_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        euler: 3x1 array of XYZ extrinsic euler angles in the form [roll, pitch, yaw]
+    
+    Returns
+    -------
+        R: 3x3 rotation matrix from the oriented frame to the reference frame.
+    """
+    assert euler.size == 3, "Euler angles must have 3 elements."
+    x = euler[0]
+    y = euler[1]
+    z = euler[2]
+    return np.array([
+            [  np.cos(y) * np.cos(z),                                     -np.cos(y) * np.sin(z),                                       np.sin(y)                         ],
+            [  np.cos(x) * np.sin(z) + np.sin(x) * np.sin(y) * np.cos(z),  np.cos(x) * np.cos(z) - np.sin(x) * np.sin(y) * np.sin(z),  -np.sin(x) * np.cos(y)  ],
+            [  np.sin(x) * np.sin(z) - np.cos(x) * np.sin(y) * np.cos(z),  np.sin(x) * np.cos(z) + np.cos(x) * np.sin(y) * np.sin(z),   np.cos(x) * np.cos(y)  ]
+        ])
+
+rotation_matrix_from_euler_xyz(np.zeros(3)) # Force compilation for expected argument type signature in import
 
 def invert_quaternion(q: np.ndarray) -> np.ndarray:
     """
