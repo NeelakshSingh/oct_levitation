@@ -382,23 +382,6 @@ def rotate_vector_from_quaternion(q: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 rotate_vector_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import
 
-def quaternion_from_rotation_matrix(R: np.ndarray, canonical=True) -> np.ndarray:
-    """
-    Parameters
-    ----------
-        R: 3x3 rotation matrix
-    
-    Returns
-    -------
-        q: Quaternion in the form [x, y, z, w]
-    """
-    scipy_rotation = scitf.Rotation.from_matrix(R)
-    q = scipy_rotation.as_quat() # Always returned in scalar last from scipy 1.10
-    if canonical:
-        if q[3] < 0:
-            q = -q
-    return q
-
 #############################################
 # Euler Angle Related Functions
 #############################################
@@ -539,6 +522,7 @@ def quaternion_from_rotation_matrix(R):
 
 quaternion_from_rotation_matrix(np.eye(3)) # Force compilation for expected argument type signature in import
 
+@numba.njit(cache=True)
 def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
     """
     Parameters
@@ -547,18 +531,21 @@ def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
 
     Returns
     -------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: 3x1 array in the form [roll, pitch, yaw] for XYZ extrinsic euler angles.
     """
-    scipy_rotation = scitf.Rotation.from_matrix(R)
-    euler = scipy_rotation.as_euler('XYZ') # caps for intrinsic
+    euler = np.zeros(3)
+    euler[0] = np.arctan2(-R[1, 2], R[2, 2])
+    euler[1] = np.arcsin(R[0, 2])
+    euler[2] = np.arctan2(-R[0, 1], R[0, 0])
     return euler
 
+euler_xyz_from_rotation_matrix(np.eye(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def euler_xyz_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
-    Wrapper for scipy's Rotation class to convert a quaternion to euler angles.
-    If you are wondering why I made this instead of directly using scipy's methods,
-    well it is because it is super easy to mix the intrinsic and extrinsic notations
-    and get the wrong results with scipy.
+    This function converts quaternion to XYZ extrinsic euler angles through an interconversion to the rotation matrix.
+    I am sure there are better ways, but this is a straightforward method I chose to stick to (and a lot of other libraries do too).
     
     Parameters
     ----------
@@ -568,35 +555,15 @@ def euler_xyz_from_quaternion(q: np.ndarray) -> np.ndarray:
     -------
         euler: 3x1 array in the form [roll, pitch, yaw] (in rad)
     """
-    scipy_rotation = scitf.Rotation.from_quat(q)
-    euler = scipy_rotation.as_euler('XYZ') # caps for intrinsic
-    return euler
+    return euler_xyz_from_rotation_matrix(rotation_matrix_from_quaternion(q))
 
-def euler_zyx_from_quaternion(q: np.ndarray) -> np.ndarray:
-    """
-    Wrapper for scipy's Rotation class to convert a quaternion to euler angles.
-    If you are wondering why I made this instead of directly using scipy's methods,
-    well it is because it is super easy to mix the intrinsic and extrinsic notations
-    and get the wrong results with scipy.
-    
-    Parameters
-    ----------
-        q: Quaternion in the form [x, y, z, w]
+euler_xyz_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
-    Returns
-    -------
-        euler: 3x1 array in the form [roll, pitch, yaw] (in rad)
-    """
-    scipy_rotation = scitf.Rotation.from_quat(q)
-    euler = scipy_rotation.as_euler('ZYX') # caps for intrinsic
-    # Change euler to r, p, y form
-    euler = np.array([euler[2], euler[1], euler[0]])
-    return euler
-
+@numba.njit(cache=True)
 def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
-    Wrapper for scipy's Rotation class for converting XYZ tait-bryan intrinsic angles
-    to quaternion.
+    This function concerts XYZ extrinsic euler angles to quaternion through an interconversion to the rotation matrix.
+    I am sure there are better ways, but this is a straightforward method I chose to stick to (and a lot of other libraries do too).
 
     Parameters:
         euler (np.ndarray): The euler angles in the form [roll, pitch, yaw]
@@ -604,26 +571,9 @@ def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     Returns:
         q: Quaternion in the form [x, y, z, w]
     """
-    scipy_rotation = scitf.Rotation.from_euler('XYZ', euler)
-    q = scipy_rotation.as_quat()
-    return q
+    return quaternion_from_rotation_matrix(rotation_matrix_from_euler_xyz(euler))
 
-def quaternion_from_euler_zyx(euler: np.ndarray) -> np.ndarray:
-    """
-    Wrapper for scipy's Rotation class for converting XYZ tait-bryan intrinsic angles
-    to quaternion.
-
-    Parameters:
-        euler (np.ndarray): The euler angles in the form [roll, pitch, yaw]
-    
-    Returns:
-        q: Quaternion in the form [x, y, z, w]
-    """
-    # Change euler to r, p, y form
-    euler = np.array([euler[2], euler[1], euler[0]])
-    scipy_rotation = scitf.Rotation.from_euler('ZYX', euler)
-    q = scipy_rotation.as_quat()
-    return q
+quaternion_from_euler_xyz(np.zeros(3)) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
 def angle_residual(a: float, b: float):
