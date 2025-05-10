@@ -354,7 +354,7 @@ class ControlSessionNodeBase:
         pose: Pose = state_est_msg.pose
         position = np.array([pose.position.x, pose.position.y, pose.position.z])
         quaternion = np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
-        rpy = geometry.euler_xyz_from_quaternion(quaternion)
+        rpy = np.array([state_est_msg.eXYZ_rpy.x, state_est_msg.eXYZ_rpy.y, state_est_msg.eXYZ_rpy.z])
         twist: Twist = state_est_msg.twist
         linear_velocity = np.array([twist.linear.x, twist.linear.y, twist.linear.z])
         angular_velocity = np.array([twist.angular.x, twist.angular.y, twist.angular.z])

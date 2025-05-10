@@ -96,7 +96,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         A_ang_d_norm, B_ang_d_norm, _, _, _ = signal.cont2discrete((A_ang_norm, B_ang_norm, C_ang_norm, 0), dt=self.dt,
                                                 method='zoh')
 
-        Q_ang = np.diag([100.0, 10.0])
+        Q_ang = np.diag([1.0, 1.0])
         R_ang = 1
         K_ang_norm, S, E = ct.dlqr(A_ang_d_norm, B_ang_d_norm, Q_ang, R_ang)
 
@@ -162,8 +162,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         z_com = position[2]
 
         ### Reference for tracking
-        # The following explicit type casting is required by numba jit versions. np.linalg.norm
-        # will fail for int arguments, in some cases this argument can be an int.
 
         ref_z = 0.0
         ref_x = 0.0
@@ -171,27 +169,32 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         ref_rpy = np.zeros(3)
 
-        R = geometry.rotation_matrix_from_quaternion(quaternion)
 
-        if self.__first_reading:
-            self.last_R = R
+        if linear_velocity is None or angular_velocity is None:
+            R = geometry.rotation_matrix_from_quaternion(quaternion)
+            if self.__first_reading:
+                self.last_R = R
+                self.last_z = z_com
+                self.last_x = x_com
+                self.last_y = y_com
+                self.__first_reading = False
+
+            self.R_dot = (R - self.last_R)/self.dt
+            self.z_dot = (z_com - self.last_z)/self.dt
+            self.x_dot = (x_com - self.last_x)/self.dt
+            self.y_dot = (y_com - self.last_y)/self.dt
+            omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
+            self.roll_dot = omega[0]
+            self.pitch_dot = omega[1]
+
             self.last_z = z_com
             self.last_x = x_com
             self.last_y = y_com
-            self.__first_reading = False
-
-        self.R_dot = (R - self.last_R)/self.dt
-        self.z_dot = (z_com - self.last_z)/self.dt
-        self.x_dot = (x_com - self.last_x)/self.dt
-        self.y_dot = (y_com - self.last_y)/self.dt
-        omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
-        self.roll_dot = omega[0]
-        self.pitch_dot = omega[1]
-
-        self.last_z = z_com
-        self.last_x = x_com
-        self.last_y = y_com
-        self.last_R = R
+            self.last_R = R
+        
+        else:
+            self.x_dot, self.y_dot, self.z_dot = linear_velocity
+            self.roll_dot, self.pitch_dot, _ = angular_velocity
 
         x_z = np.array([[z_com, self.z_dot]]).T
         x_x = np.array([[x_com, self.x_dot]]).T

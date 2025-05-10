@@ -231,41 +231,34 @@ Onyx80x15DiscCenterDiscDipoleI40_N52 = MultiDipoleRigidBody(
 
 register_rigid_body(Onyx80x15DiscCenterDiscDipoleI40_N52)
 
-# Onyx80x15DiscCenterDiscDipoleI20 = MultiDipoleRigidBody(
-#     name="onyx_disc_80x22_I20",
-#     mass_properties = MassProperties(0.04679786466911065,
-#                                      np.array([[ 1.40133453e-04, -2.79978900e-05,  1.06775840e-04],
-#                                                [-2.79978900e-05,  2.38694173e-04, -3.05975000e-05],
-#                                                [ 1.06775840e-04, -3.05975000e-05,  1.18291563e-04]]),
-#                                      np.array([[ 1.48765632e-05, -6.48700000e-08,  1.46640000e-07],
-#                                                [-6.48700000e-08,  2.44800732e-05,  1.08130000e-07],
-#                                                [ 1.46640000e-07,  1.08130000e-07,  1.32468232e-05]]),
-#                                      np.array([0.04784000, -0.01378000, 0.05259000]),
-#                                      PrincipleAxesAndMomentsOfInertia(
-#                                          Ix=np.array([0.09000000, 0.01000000, 1.00000000]),
-#                                          Iy=np.array([1.00000000, -0.01000000, -0.09000000]),
-#                                          Iz=np.array([0.01000000, 1.00000000, -0.01000000]),
-#                                          Px=1.3232813233455532e-05,
-#                                          Py=1.4889073233455532e-05,
-#                                          Pz=2.4481573233455534e-05
-#                                     )),
-#     pose_frame = "vicon/onyx_disc_80x15/Origin",
-#     dipole_list = [
-#         MagneticDipole(
-#             name="CenterDiscDipole",
-#             axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
-#             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
-#             frame_name="vicon/onyx_disc_80x15/Origin",
-#             magnet_stack=[
-#                 (Transform(Vector3(0.0, 0.0, 3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
-#                 (Transform(Vector3(0.0, 0.0, 8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-#                 (Transform(Vector3(0.0, 0.0, 11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-#                 (Transform(Vector3(0.0, 0.0, -3e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-#                 (Transform(Vector3(0.0, 0.0, -8e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-#                 (Transform(Vector3(0.0, 0.0, -11e-3), Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))), RingMagnet10x5x5_N35),
-#             ]
-#         )
-#     ]
-# )
+Onyx80x15DiscCenterDiscDipoleI40_2RingMagnets = MultiDipoleRigidBody(
+    name="onyx_disc_80x15_I40_2_RingMagnets",
+    mass_properties = MassProperties(4.83400000e-02,
+                                     np.array([[1.50992900e-05, -1.45310000e-07, -6.66800000e-08],
+                                               [-1.45310000e-07, 1.34681400e-05, -1.11140000e-07],
+                                               [-6.66800000e-08, -1.11140000e-07, 2.42827100e-05]]),
+                                     np.array([-0.00012000, -0.00021000, 0.00027000]),
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=1.51063300e-05,
+                                         Py=1.34499700e-05,
+                                         Pz=2.42815800e-05
+                                     )),
+    pose_frame = "vicon/onyx_disc_80x15/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/onyx_disc_80x15/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), RingMagnet10x5x5_N35),
+            ]
+        )
+    ]
+)
 
-# register_rigid_body(Onyx80x15DiscCenterDiscDipoleI20)
+register_rigid_body(Onyx80x15DiscCenterDiscDipoleI40_2RingMagnets)

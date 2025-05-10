@@ -191,9 +191,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
 
-        # Getting the current orientation and positions
-        dipole_quaternion = quaternion
-
         x_com = position[0]
         y_com = position[1]
         z_com = position[2]
@@ -208,24 +205,29 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ref_y = self.last_reference_tf_msg.transform.translation.y
 
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
-        R = geometry.rotation_matrix_from_quaternion(dipole_quaternion)
+        R = geometry.rotation_matrix_from_quaternion(quaternion)
 
-        if self.__first_reading:
-            self.last_R = R
+        if linear_velocity is None or angular_velocity is None:
+            if self.__first_reading:
+                self.last_R = R
+                self.last_z = z_com
+                self.last_x = x_com
+                self.last_y = y_com
+                self.__first_reading = False
+
+            self.R_dot = self.diff_alpha_RA*(R - self.last_R) + self.diff_beta_RA*self.R_dot
+            self.z_dot = self.diff_alpha_z*(z_com - self.last_z) + self.diff_beta_z*self.z_dot
+            self.x_dot = self.diff_alpha_x*(x_com - self.last_x) + self.diff_beta_x*self.x_dot
+            self.y_dot = self.diff_alpha_y*(y_com - self.last_y) + self.diff_beta_y*self.y_dot
+            omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
+
             self.last_z = z_com
             self.last_x = x_com
             self.last_y = y_com
-            self.__first_reading = False
-
-        self.R_dot = self.diff_alpha_RA*(R - self.last_R) + self.diff_beta_RA*self.R_dot
-        self.z_dot = self.diff_alpha_z*(z_com - self.last_z) + self.diff_beta_z*self.z_dot
-        self.x_dot = self.diff_alpha_x*(x_com - self.last_x) + self.diff_beta_x*self.x_dot
-        self.y_dot = self.diff_alpha_y*(y_com - self.last_y) + self.diff_beta_y*self.y_dot
-
-        self.last_z = z_com
-        self.last_x = x_com
-        self.last_y = y_com
-        self.last_R = R
+            self.last_R = R
+        else:
+            self.x_dot, self.y_dot, self.z_dot = linear_velocity
+            omega = angular_velocity
 
         x_z = np.array([[z_com, self.z_dot]]).T
         x_x = np.array([[x_com, self.x_dot]]).T
@@ -247,8 +249,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
-
-        omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
         
         omega_tilde = self.E @ omega
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
