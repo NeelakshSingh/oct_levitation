@@ -1,8 +1,20 @@
 oct_levitation:
   control_freq: 1000 # ALWAYS MATCH VICON's RATE
+  calibration_file: "mc3ao8s_md200_handp.yaml"
   publish_computation_time: true
   soft_start: true # Required because gravity compensation will request very high currents immediately.
   pose_tracking: true # will require reference pose to be published. Check node for more details.
+  n_drivers: 9 # Number of coils supported by the system at the moment
+  active_coils: [0, 1, 2, 3, 4, 5, 6, 7] # the ones which are actually used, according to the calibration file
+  active_drivers: [0, 1, 2,  3, 4, 5,  7, 8] # the driver numbers which are connected to these to allocate correctly for the ECB
 
   cpp_impl:
     omega_pd: 0.5
+  
+  delay_compensation_kf: # The sampling time of the KF will be the same as the control frequency and the current sensor feedback.
+    enabled: true
+    compensation_steps: 4 # The number of controller time steps worth of delay in the feedback to compensate for.
+    unit_dipole_wrench_noise_std_rpxyz: [3.67859457e-05, 3.15473097e-05, 5.24102267e-04, 5.79027093e-04, 6.19678450e-04]
+    vicon_noise_std_rpxyz: [2.37471348e-05, 8.75457449e-05, 1.01646014e-05, 4.16398263e-06, 6.27907061e-06]
+    publish_computation_time: true
+    warn_on_expected_delay_mismatch: true

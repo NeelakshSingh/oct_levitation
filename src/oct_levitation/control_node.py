@@ -57,13 +57,13 @@ class ControlSessionNodeBase:
         rospy.init_node("oct_levitation_controller_node")
 
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
-        self.calibration_file = rospy.get_param('~mpem_cal_file', "mc3ao8s_md200_handp.yaml")
+        self.calibration_file = rospy.get_param('oct_levitation/calibration_file')
         self.RT_PRIORITY_ENABLED = rospy.get_param("~rtprio_controller", False)
         self.CONTROL_RATE = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
         self.rigid_body_dipole: mechanical.MultiDipoleRigidBody = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
         rospy.loginfo(f"Rigid body: {self.rigid_body_dipole.name}")
         self.sim_mode = rospy.get_param("~sim_mode") # Mandatory param, wait for it to be set.
-        self.__N_CONNECTED_DRIVERS = 6 # number of used drivers can be less
+        self.__N_CONNECTED_DRIVERS = int(rospy.get_param("oct_levitation/n_drivers")) # number of used drivers can be less
         self.__MAX_CURRENT = 4.0 # Amps
         self.__SOFT_START = rospy.get_param("oct_levitation/soft_start", True)
         self.soft_starter = None
@@ -76,8 +76,8 @@ class ControlSessionNodeBase:
         self.publish_computation_time = rospy.get_param("oct_levitation/publish_computation_time")
         self.computation_time_topic = "control_session/computation_time"
         self.compute_time_pub = None
-        self.__ACTIVE_COILS = [0, 1, 2, 3, 5] # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
-        self.__ACTIVE_DRIVERS = [0, 1, 2, 4, 5] # These are the exact driver numbers these coils are connected to.
+        self.__ACTIVE_COILS = np.asarray(rospy.get_param('oct_levitation/active_coils'), dtype=int) # This variable should be hidden from the derived classes since this is supposed to stay fixed for all experiments.
+        self.__ACTIVE_DRIVERS = np.asarray(rospy.get_param('oct_levitation/active_drivers'), dtype=int) # These are the exact driver numbers these coils are connected to.
         if len(self.__ACTIVE_DRIVERS) != len(self.__ACTIVE_COILS):
             msg = f"Active coils and drivers must be the same size. Active coils: {self.__ACTIVE_COILS}, Active drivers: {self.__ACTIVE_DRIVERS}"
             rospy.logerr(msg)

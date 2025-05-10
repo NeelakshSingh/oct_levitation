@@ -16,6 +16,8 @@ find_package(catkin REQUIRED
               control_utils
               tnb_mns_driver
               oct_ctrl
+              std_msgs
+              geometry_msgs
               vicon_bridge)
 
 include_directories(${EIGEN3_INCLUDE_DIR})
@@ -59,6 +61,7 @@ add_message_files(
   ControllerDetails.msg
   PID1DState.msg
   Float64MultiArrayStamped.msg
+  RigidBodyStateEstimate.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -177,6 +180,9 @@ catkin_install_python(PROGRAMS
   scripts/lqri_z_control.py
   scripts/lqri_xyz_control.py
 
+  # Delay Compensation KF
+  scripts/filters_and_estimators/sskf_delay_compensator.py
+
   # Z Control Nodes
   scripts/z_controllers/z_control_com_wrench.py
   scripts/z_controllers/z_control_com_gen_alloc.py
@@ -230,7 +236,8 @@ catkin_python_setup()
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
-  std_msgs  # Or other packages containing msgs
+  std_msgs
+  geometry_msgs
 )
 
 ## catkin specific configuration ##
