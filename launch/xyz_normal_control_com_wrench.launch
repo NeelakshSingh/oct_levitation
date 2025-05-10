@@ -47,6 +47,7 @@
         <arg name="enable_reference_pose" value="$(arg enable_reference_pose)"/>
         <arg name="run_rviz" value="$(arg run_rviz)"/>
         <arg name="run_rqt_multiplot" value="$(arg run_rqt_multiplot)"/>
+        <arg name="rtprio_nodes" value="$(arg rtprio_controller)"/>
     </include>
     
 </launch>

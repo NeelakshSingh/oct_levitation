@@ -5,6 +5,7 @@
 
     <arg name="sim"/>
     <arg name="data_subfolder"/>
+    <arg name="rtprio_nodes" default="false"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
@@ -20,6 +21,18 @@
         <node pkg="oct_levitation" name="experiment_data_recorder" type="experiment_recorder.py" output="screen">
             <param name="sim" value="$(arg sim)"/>
             <param name="data_subfolder" value="$(arg data_subfolder)"/>
+        </node>
+    </group>
+
+    <group if="$(arg rtprio_nodes)">
+        <node pkg="oct_levitation" name="sskf_delay_compensator" type="sskf_delay_compensator.py" output="screen" launch-prefix="taskset -c 4 chrt -f 90">
+            <param name="rtprio_node" value="$(arg rtprio_nodes)"/>
+        </node>
+    </group>
+
+    <group unless="$(arg rtprio_nodes)">
+        <node pkg="oct_levitation" name="sskf_delay_compensator" type="sskf_delay_compensator.py" output="screen">
+            <param name="rtprio_node" value="$(arg rtprio_nodes)"/>
         </node>
     </group>
 

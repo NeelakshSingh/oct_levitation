@@ -9,7 +9,8 @@ import numpy as np
 import time
 import sys
 
-from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3
+from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3, Pose, Twist
+from oct_levitation.msg import RigidBodyStateEstimate
 from tnb_mns_driver.msg import DesCurrentsReg
 from control_utils.msg import VectorStamped
 from std_msgs.msg import String
@@ -85,6 +86,8 @@ class ControlSessionNodeBase:
         self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0.0, 0.0, 0.0])
 
+        self.ENABLE_STATE_ESTIMATOR = rospy.get_param("oct_levitation/delay_compensation_kf/enabled")
+
         if self.publish_computation_time:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
 
@@ -126,6 +129,7 @@ class ControlSessionNodeBase:
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
+        self.state_est_sub_topic = self.tf_sub_topic + "/state_estimate"
         self.tf_reference_sub_topic = self.tf_sub_topic + "_reference"        
 
         if self.publish_desired_com_wrenches:
@@ -153,8 +157,13 @@ class ControlSessionNodeBase:
                                         # have been advertised.
             self.main_timer = rospy.Timer(rospy.Duration(1/self.control_rate), self.main_timer_loop)
         else:
-            self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
-                                           queue_size=1)
+            if not self.ENABLE_STATE_ESTIMATOR:
+                # Directly use thg vicon topic
+                self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
+                                            queue_size=1)
+            else:
+                self.state_est_sub = rospy.Subscriber(self.state_est_sub_topic, RigidBodyStateEstimate,
+                                                      self.state_est_sub_callback, queue_size=1)
         
         self.tf_reference_sub = None
         self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
@@ -181,6 +190,8 @@ class ControlSessionNodeBase:
         self.metadata_msg.experiment_description.data = rospy.get_param("~experiment_description")
         self.metadata_msg.full_controller_class_state.data = str(self.__dict__)
         self.metadata_msg.metadata.data += f"\n HARDWARE_CONNECTED: {self.__HARDWARE_CONNECTED} \n"
+        self.metadata_msg.metadata.data += f"\n SIM_MODE: {self.sim_mode} \n"
+        self.metadata_msg.metadata.data += f"\n ESTIMATOR_ENABLED: {self.ENABLE_STATE_ESTIMATOR} \n"
 
         self.metadata_pub.publish(self.metadata_msg)
 
@@ -190,19 +201,20 @@ class ControlSessionNodeBase:
         self.metadata_msg.controller_name.data = os.path.basename(file_path)
         self.metadata_msg.controller_path.data = file_path
 
-    def five_dof_wrench_allocation_single_dipole(self, tf_msg: TransformStamped, w_com: np.ndarray):
+    def five_dof_wrench_allocation_single_dipole(self,
+                                                 position: np.ndarray,
+                                                 quaternion: np.ndarray,
+                                                 w_com: np.ndarray):
         """
         This function assumes that the dipole moment in the local frame aligns with the z axis and thus clips the 3rd row
         of the torque allocation map.
         tf_msg: The transform feedback from any state feedback sensor. Vicon usually.
         w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
         """
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
-        dipole_position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
         dipole = self.rigid_body_dipole.dipole_list[0]
-        A = self.mpem_model.getActuationMatrix(dipole_position)
+        A = self.mpem_model.getActuationMatrix(position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
-        M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, dipole_quaternion, remove_z_torque=True)
+        M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
         JMA = M @ A
 
         computed_currents = numerical.numba_pinv(JMA) @ w_com
@@ -229,7 +241,13 @@ class ControlSessionNodeBase:
         """
         raise NotImplementedError("The post init function has not been implemented yet.")
     
-    def callback_control_logic(self, tf_msg: TransformStamped, sft_coeff: float = 1.0):
+    def callback_control_logic(self, 
+                               position: np.ndarray, 
+                               quaternion: np.ndarray,
+                               rpy: np.ndarray,
+                               linear_velocity: np.ndarray = None,
+                               angular_velocity: np.ndarray = None,
+                               sft_coeff: float = 1.0):
         """
         Implement all the important calculations and controller logic in this function.
         Set all the empty messages which are supposed to be published. The following
@@ -282,6 +300,9 @@ class ControlSessionNodeBase:
             return
         
     def tfsub_callback(self, tf_msg: TransformStamped):
+        """
+        Used when the state estimator is not used. Direct vicon feedback is used.
+        """
         start_time = time.perf_counter()
         # now = rospy.Time.now()
         # PROFILER_ENABLED = False
@@ -297,7 +318,48 @@ class ControlSessionNodeBase:
             if np.allclose(coeff, 1.0):
                 coeff = 1.0
                 self.__SOFT_START = False # Disable it from this point onwards
-        self.callback_control_logic(tf_msg, coeff)
+        position = geometry.numpy_translation_from_tf_msg(tf_msg.transform)
+        quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        rpy = geometry.euler_xyz_from_quaternion(quaternion)
+        self.callback_control_logic(position, quaternion, rpy, sft_coeff=coeff)
+        self.publish_topics()
+        # if PROFILER_ENABLED:
+        #     Profiler.disable()
+        stop_time = time.perf_counter()
+        if self.publish_computation_time:
+            self.current_computation_time = (stop_time - start_time)
+            self.computation_time_msg.header.stamp = rospy.Time.now()
+            self.computation_time_msg.vector = [self.current_computation_time]
+            self.computation_time_pub.publish(self.computation_time_msg)
+
+    def state_est_sub_callback(self, state_est_msg: RigidBodyStateEstimate):
+        """
+        Used when the state estimator is enabled. Then the state estimator's velocity estimates are used.
+        """
+        start_time = time.perf_counter()
+        # now = rospy.Time.now()
+        # PROFILER_ENABLED = False
+        # if (now - self.LAST_PROFILE_TIME).to_sec() > 1.0 / PROFILE_FREQUENCY:
+        #     Profiler.enable()
+        #     PROFILER_ENABLED = True
+        #     self.LAST_PROFILE_TIME = now
+        ## TODO: Maybe it makes more sense to smooth start Fz
+        self.check_shutdown_rt()
+        coeff = 1
+        if self.__SOFT_START:
+            coeff = self.soft_starter(1/self.CONTROL_RATE)
+            if np.allclose(coeff, 1.0):
+                coeff = 1.0
+                self.__SOFT_START = False # Disable it from this point onwards
+        pose: Pose = state_est_msg.pose
+        position = np.array([pose.position.x, pose.position.y, pose.position.z])
+        quaternion = np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
+        rpy = geometry.euler_xyz_from_quaternion(quaternion)
+        twist: Twist = state_est_msg.twist
+        linear_velocity = np.array([twist.linear.x, twist.linear.y, twist.linear.z])
+        angular_velocity = np.array([twist.angular.x, twist.angular.y, twist.angular.z])
+        self.callback_control_logic(position, quaternion, rpy, linear_velocity=linear_velocity,
+                                    angular_velocity=angular_velocity, sft_coeff=coeff)
         self.publish_topics()
         # if PROFILER_ENABLED:
         #     Profiler.disable()

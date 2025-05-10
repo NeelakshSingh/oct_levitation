@@ -112,6 +112,7 @@ class SSKFDelayCompensator:
         self.__quaternion_estimate : np.ndarray = None # used for wrench calculation
         self.__latest_rpxyz_vicon = None
         self.__latest_currents = None
+        self.__latest_rpy_vicon = None
         self.warn_on_expected_delay_mismatch = self.ALL_PARAMS['warn_on_expected_delay_mismatch']
         self.delay_msg = VectorStamped()
         self.computation_time_msg = VectorStamped()
@@ -147,9 +148,9 @@ class SSKFDelayCompensator:
         self.latest_vicon_pose_time = body_pose.header.stamp.to_sec()
         position = geometry.numpy_translation_from_tf_msg(body_pose)
         quaternion = geometry.numpy_quaternion_from_tf_msg(body_pose)
-        rpy = geometry.euler_xyz_from_quaternion(quaternion)
+        self.__latest_rpy_vicon = geometry.euler_xyz_from_quaternion(quaternion)
         self.__latest_rpxyz_vicon = np.zeros(5)
-        self.__latest_rpxyz_vicon[:2] = rpy[:2]
+        self.__latest_rpxyz_vicon[:2] = self.__latest_rpy_vicon[:2]
         self.__latest_rpxyz_vicon[2:] = position
         self.__latest_vicon_quaternion = quaternion
         if not self.__initial_state_acquired:
@@ -200,14 +201,13 @@ class SSKFDelayCompensator:
             self.delay_msg.vector = [time_diff]
             self.computation_time_msg.header.stamp = rospy.Time.now()
 
-
-            tau_f_hat_mpem = self.compute_single_dipole_torques_and_forces_from_currents()
+            tau_f_hat_mpem = self.compute_single_dipole_torques_and_forces_from_currents(self.__latest_currents)
             tau_f_hat_mpem = tau_f_hat_mpem + self.Tau_xy_f_amb # V. IMP: Remove constant disturbance and feedforward terms
             self.__s_tilde = self.__SS_KF_IMPL(self.__latest_rpxyz_vicon, self.__s_tilde, tau_f_hat_mpem)
 
             rpy = np.zeros(3)
             rpy[:2] = self.__s_tilde[:2]
-            rpy[2] = geometry.euler_xyz_from_quaternion(self.__latest_vicon_quaternion)[2]
+            rpy[2] = self.__latest_rpy_vicon[2] # Keep the yaw angle from the vicon pose
             self.__quaternion_estimate = geometry.quaternion_from_euler_xyz(rpy)
             self.__position_estimate = self.__s_tilde[2:5]
             estimated_angular_velocity = np.zeros(3)

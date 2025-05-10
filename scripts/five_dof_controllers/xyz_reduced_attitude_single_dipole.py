@@ -3,16 +3,12 @@ import numpy as np
 import scipy.signal as signal
 import control as ct
 
-import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.geometry_jit as geometry
 import oct_levitation.common as common
-import oct_levitation.numerical as numerical
 
-from scipy.linalg import block_diag
 from oct_levitation.control_node import ControlSessionNodeBase
-from control_utils.msg import VectorStamped
 from std_msgs.msg import String
-from geometry_msgs.msg import WrenchStamped, TransformStamped, Vector3, Quaternion
+from geometry_msgs.msg import WrenchStamped, Vector3
 from tnb_mns_driver.msg import DesCurrentsReg
 
 def remove_extra_spaces(string):
@@ -183,18 +179,24 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         self.E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
         
-    def callback_control_logic(self, tf_msg: TransformStamped, sft_coeff: float = 1.0):
+    def callback_control_logic(self, 
+                               position : np.ndarray, 
+                               quaternion: np.ndarray,
+                               rpy: np.ndarray,
+                               linear_velocity: np.ndarray = None, 
+                               angular_velocity: np.ndarray = None, 
+                               sft_coeff: float = 1.0):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
 
         # Getting the current orientation and positions
-        dipole_quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
+        dipole_quaternion = quaternion
 
-        z_com = tf_msg.transform.translation.z
-        x_com = tf_msg.transform.translation.x
-        y_com = tf_msg.transform.translation.y
+        x_com = position[0]
+        y_com = position[1]
+        z_com = position[2]
 
         ### Reference for tracking
         # The following explicit type casting is required by numba jit versions. np.linalg.norm
@@ -263,7 +265,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.five_dof_wrench_allocation_single_dipole(tf_msg, w_des)
+        des_currents = self.five_dof_wrench_allocation_single_dipole(position, quaternion, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 
