@@ -24,7 +24,7 @@
         </node>
     </group>
 
-    <group if="$(arg rtprio_nodes)">
+    <!-- <group if="$(arg rtprio_nodes)">
         <node pkg="oct_levitation" name="sskf_delay_compensator" type="sskf_delay_compensator.py" output="screen" launch-prefix="taskset -c 4 chrt -f 90">
             <param name="rtprio_node" value="$(arg rtprio_nodes)"/>
         </node>
@@ -34,7 +34,7 @@
         <node pkg="oct_levitation" name="sskf_delay_compensator" type="sskf_delay_compensator.py" output="screen">
             <param name="rtprio_node" value="$(arg rtprio_nodes)"/>
         </node>
-    </group>
+    </group> -->
 
     <group if="$(arg enable_reference_pose)">
         <node pkg="oct_levitation" name="reference_pose_publisher" type="reference_pose_publisher.py" output="screen"/>

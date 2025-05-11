@@ -29,6 +29,8 @@ class SSKFDelayCompensator:
         self.__ACTIVE_COILS = np.asarray(rospy.get_param('oct_levitation/active_coils'), dtype=int)
         self.__ACTIVE_DRIVERS = np.asarray(rospy.get_param('oct_levitation/active_drivers'), dtype=int)
         self.RT_PRIORITY_ENABLED = rospy.get_param('~rtprio_node', False)
+        if self.RT_PRIORITY_ENABLED:
+            rospy.loginfo("[SSKF CALLBACK LOGIC] Used with RT priority from launch file")
         self.mpem_model = mag_manip.ForwardModelMPEM()
         self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
         self.calibration_file = rospy.get_param('oct_levitation/calibration_file')
@@ -101,8 +103,7 @@ class SSKFDelayCompensator:
 
         self.local_dipole_moment = self.rigid_body.dipole_list[0].local_dipole_moment
 
-        self.__vicon_meas_lock = Lock() # Used to lock when updating the latest vicon pose
-        self.__system_state_lock = Lock() # Used to lock when updating the system state
+        self.__callback_lock = Lock() # Used to lock when updating the system state
 
         # Initializing the estimate variables
         self.__initial_state_acquired = False
@@ -135,7 +136,7 @@ class SSKFDelayCompensator:
         from the node.
         """
         if self.RT_PRIORITY_ENABLED and rospy.is_shutdown_requested():
-            rospy.loginfo("[CONTROLLER CALLBACK LOGIC] ROS shutdown requested")
+            rospy.loginfo("[SSKF CALLBACK LOGIC] ROS shutdown requested")
             rospy.signal_shutdown("ROS shutdown requested")
             os.sched_setscheduler(os.getpid(), os.SCHED_OTHER, os.sched_param(0)) # Revert to default scheduler and give up RT priority to catch the shutdown signal
             os.sched_yield()
@@ -144,10 +145,10 @@ class SSKFDelayCompensator:
             return
 
     def vicon_pose_callback(self, body_pose: TransformStamped):
-        self.__vicon_meas_lock.acquire()
+        self.__callback_lock.acquire()
         self.latest_vicon_pose_time = body_pose.header.stamp.to_sec()
-        position = geometry.numpy_translation_from_tf_msg(body_pose)
-        quaternion = geometry.numpy_quaternion_from_tf_msg(body_pose)
+        position = geometry.numpy_translation_from_tf_msg(body_pose.transform)
+        quaternion = geometry.numpy_quaternion_from_tf_msg(body_pose.transform)
         self.__latest_rpy_vicon = geometry.euler_xyz_from_quaternion(quaternion)
         self.__latest_rpxyz_vicon = np.zeros(5)
         self.__latest_rpxyz_vicon[:2] = self.__latest_rpy_vicon[:2]
@@ -158,20 +159,19 @@ class SSKFDelayCompensator:
             self.__position_estimate = position
             self.__quaternion_estimate = quaternion
             self.__initial_state_acquired = True
-        self.__vicon_meas_lock.release()
+        self.__callback_lock.release()
         self.check_shutdown_rt()
 
         # Maybe run the KF depending on whether all information is available
         self.run_kf_once()
 
     def system_state_callback(self, system_state_msg: TnbMnsStatus):
-        self.__system_state_lock.acquire()
+        self.__callback_lock.acquire()
         self.latest_system_state_time = system_state_msg.header.stamp.to_sec()
         currents = np.asarray(system_state_msg.currents_reg)
         self.__latest_currents = np.zeros(8)
         self.__latest_currents[self.__ACTIVE_COILS] = currents[self.__ACTIVE_DRIVERS]
-        self.__system_state_lock.release()
-
+        self.__callback_lock.release()
         self.check_shutdown_rt()
 
         # Maybe run the KF depending on whether all information is available
@@ -186,7 +186,7 @@ class SSKFDelayCompensator:
         bg_V = self.mpem_model.computeFieldGradient5FromCurrents(self.__position_estimate, currents)
         M = geometry.magnetic_interaction_force_local_torque(self.local_dipole_moment, self.__quaternion_estimate, remove_z_torque=True)
         tauxy_fxyz = M @ bg_V
-        return tauxy_fxyz
+        return tauxy_fxyz.flatten()
     
     def run_kf_once(self):
         # Checking the time difference between the vicon pose and the system state
@@ -196,7 +196,7 @@ class SSKFDelayCompensator:
             time_diff = self.latest_system_state_time - self.latest_vicon_pose_time
             if time_diff > self.Ts * self.N or time_diff <= self.Ts * (self.N - 1):
                 if self.warn_on_expected_delay_mismatch:
-                    rospy.logwarn(f"Time difference between vicon pose and system state is {time_diff:.3f} s. Expected delay: {self.Ts * self.N:.3f} s.")
+                    rospy.logwarn(f"Time difference between vicon pose and system state is {time_diff:.6f} s. Expected delay: {self.Ts * self.N:.6f} s.")
             self.delay_msg.header.stamp = rospy.Time.now()
             self.delay_msg.vector = [time_diff]
             self.computation_time_msg.header.stamp = rospy.Time.now()
@@ -216,7 +216,7 @@ class SSKFDelayCompensator:
 
             self.estimated_state_msg.header.stamp = rospy.Time.now()
             self.estimated_state_msg.header.frame_id = 'vicon/world'
-            self.estimated_state_msg.child_frame_id = self.rigid_body.pose_frame
+            self.estimated_state_msg.child_frame_id.data = self.rigid_body.pose_frame
             self.estimated_state_msg.pose.position = Point(*self.__position_estimate)
             self.estimated_state_msg.pose.orientation = Quaternion(*self.__quaternion_estimate)
             self.estimated_state_msg.twist.linear = Vector3(*estimated_velocity)
@@ -230,3 +230,11 @@ class SSKFDelayCompensator:
             if self.publish_computation_time:
                 self.computation_time_pub.publish(self.computation_time_msg)
             self.system_state_vicon_delay_pub.publish(self.delay_msg)
+
+
+if __name__ == '__main__':
+    try:
+        sskf = SSKFDelayCompensator()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        sskf.check_shutdown_rt()

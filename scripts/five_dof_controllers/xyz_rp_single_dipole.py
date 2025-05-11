@@ -80,11 +80,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         B_ang = np.array([[0, 1/self.Ixxyy]]).T
         C_ang = np.array([[1, 0]])
 
+        ## Normalization parameters
         pitch_max = np.deg2rad(20) # 20 deg maximum rotation
         pitch_dot_max = 5*pitch_max
         Ty_ang_max = 5*self.Ixxyy*pitch_dot_max # Assume very small maximum force.
-
-        ## Normalizing the state space model.
         T_ang_x = np.diag([pitch_max, pitch_dot_max])
         T_ang_u = np.diag([Ty_ang_max])
         T_ang_y = np.diag([pitch_max])
@@ -93,14 +92,25 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         B_ang_norm = np.linalg.inv(T_ang_x) @ B_ang @ T_ang_u
         C_ang_norm = np.linalg.inv(T_ang_y) @ C_ang @ T_ang_x
 
-        A_ang_d_norm, B_ang_d_norm, _, _, _ = signal.cont2discrete((A_ang_norm, B_ang_norm, C_ang_norm, 0), dt=self.dt,
-                                                method='zoh')
+        use_normalization = True
 
-        Q_ang = np.diag([1.0, 1.0])
-        R_ang = 1
-        K_ang_norm, S, E = ct.dlqr(A_ang_d_norm, B_ang_d_norm, Q_ang, R_ang)
+        if use_normalization:
+            A_ang_d_norm, B_ang_d_norm, _, _, _ = signal.cont2discrete((A_ang_norm, B_ang_norm, C_ang_norm, 0), dt=self.dt,
+                                                    method='zoh')
 
-        self.K_ang = np.asarray(T_ang_u @ K_ang_norm @ np.linalg.inv(T_ang_x))        
+            Q_ang = np.diag([1, 1])*1e-3
+            R_ang = 1
+            K_ang_norm, S, E = ct.dlqr(A_ang_d_norm, B_ang_d_norm, Q_ang, R_ang)
+            self.K_ang = np.asarray(T_ang_u @ K_ang_norm @ np.linalg.inv(T_ang_x))
+        
+        else:
+            A_ang_d, B_ang_d, _, _, _ = signal.cont2discrete((A_ang, B_ang, C_ang, 0), dt=self.dt,
+                                                    method='zoh')
+
+            Q_ang = np.diag([0.01, 0.01])*1e-5
+            R_ang = 1
+
+            self.K_ang, _, _ = ct.dlqr(A_ang_d, B_ang_d, Q_ang, R_ang)        
 
         ### ANGULAR DLQR DESIGN ###
         #############################
@@ -117,7 +127,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Angular: Q_ang = {Q_ang}, R_ang = {R_ang},
         Normalization parameters:
         Linear: Tx = {Tzx}, Tu = {Tzu}, Ty = {Tzy},
-        Angular: T_ang_x = {T_ang_x}, T_ang_u = {T_ang_u}, T_ang_y = {T_ang_y}""")
+        Angular: T_ang_x = {T_ang_x}, T_ang_u = {T_ang_u}, T_ang_y = {T_ang_y}. Angular normalization used: {use_normalization}""")
 
         self.z_dot = 0.0
         self.x_dot = 0.0
@@ -214,6 +224,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         roll_error = r_roll - x_roll
         pitch_error = r_pitch - x_pitch
 
+        # u_z = self.K_lin @ z_error + (self.mass + 8e-3)*common.Constants.g # Gravity compensation
+        # u_z = self.K_lin @ z_error + (self.mass + 8e-3)*common.Constants.g # Gravity compensation
         u_z = self.K_lin @ z_error + self.mass*common.Constants.g # Gravity compensation
         u_x = self.K_lin @ x_error
         u_y = self.K_lin @ y_error
@@ -221,10 +233,14 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_pitch = self.K_ang @ pitch_error
 
         F_z = u_z[0, 0] * sft_coeff
-        F_x = u_x[0, 0]
-        F_y = u_y[0, 0]
-        Tau_x = u_roll[0, 0]
-        Tau_y = u_pitch[0, 0]
+        # F_x = u_x[0, 0]
+        F_x = 0.0
+        # F_y = u_y[0, 0]
+        F_y = 0.0
+        # Tau_x = u_roll[0, 0]
+        Tau_x = 0.0
+        # Tau_y = u_pitch[0, 0]
+        Tau_y = 0.0
            
         w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
 
@@ -234,6 +250,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         # Performing the simplified allocation for the two torques.
         des_currents = self.five_dof_wrench_allocation_single_dipole(position, quaternion, w_des)
+        # des_currents = self.five_dof_2_step_torque_force_allocation(position, quaternion, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

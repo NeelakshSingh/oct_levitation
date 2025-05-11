@@ -8,7 +8,7 @@
     <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="false"/>
     <arg name="run_rqt_multiplot" default="false"/>
-    <arg name="data_subfolder" default="xyz_normal_control"/>
+    <arg name="data_subfolder" default="xyz_rp_control"/>
        
     <group if="$(arg rtprio_controller)">
         <node pkg="oct_levitation" name="xyz_rp_single_dipole_controller" type="xyz_rp_single_dipole.py" output="screen" launch-prefix="taskset -c 3 chrt -f 90">

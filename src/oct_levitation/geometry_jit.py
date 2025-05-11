@@ -745,6 +745,35 @@ magnetic_interaction_field_to_local_torque(1.0,
                                            IDENTITY_QUATERNION) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
+def magnetic_interaction_inertial_force_torque(local_dipole_moment: np.ndarray,
+                                              quaternion: np.ndarray,
+                                              remove_z_torque: bool) -> np.ndarray:
+    """
+    Args:
+        local_dipole_moment (float): The dipole moment vector of the dipole in the local frame. 
+        eg: [0.0, 0.0, -1.0] * strength for a north down dipole aligned with local frame z axis.
+    
+    Returns:
+        np.ndarray: The magnetic interaction matrix of the dipole mapping world frame fields and gradients to world frame forces
+        and world frame torques.
+    """
+    R = rotation_matrix_from_quaternion(quaternion)
+    dipole_moment = R @ local_dipole_moment
+    M_F = magnetic_interaction_grad5_to_force(dipole_moment)
+    M_Tau = get_skew_symmetric_matrix(dipole_moment)
+    M = np.zeros((6, 8))
+    
+    M[:3, :3] = M_Tau
+    M[3:, 3:] = M_F
+
+    if remove_z_torque:
+        M = np.vstack((M[:2], M[3:]))
+
+    return M
+
+magnetic_interaction_inertial_force_torque(np.array([0.0, 0.0, -0.45]), IDENTITY_QUATERNION, True) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
 def magnetic_interaction_force_local_torque(local_dipole_moment: np.ndarray,
                                             quaternion: np.ndarray,
                                             remove_z_torque: bool = True) -> np.ndarray:

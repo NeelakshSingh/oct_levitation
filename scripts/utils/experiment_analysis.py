@@ -60,6 +60,7 @@ data_base_folder = os.path.join(data_base_folder, experiment_subfolder)
 # For now this will use the param. But ideally we should get the rigid body name from the data stored by the
 # experiment recorder.
 dipole_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
+data_base_folder = os.path.join(data_base_folder, dipole_body.name)
 
 node_loginfo(f"Using data base folder: {data_base_folder}. Using dipole body: {dipole_body.name}")
 
@@ -125,6 +126,7 @@ HARDWARE_CONNECTED = rospy.get_param("experiment_analysis/hardware_connected")
 
 ACTIVE_COILS = rospy.get_param("experiment_analysis/active_coils", default=[0, 1, 2, 3, 4, 5, 6, 7])
 ACTIVE_DRIVERS = rospy.get_param("experiment_analysis/active_drivers", default=[0, 1, 2, 3, 4, 5, 6, 7])
+N_DRIVERS = rospy.get_param("experiment_analysis/n_drivers", default=9)
 if len(ACTIVE_DRIVERS) != len(ACTIVE_COILS):
     raise ValueError(f"Active drivers list: {ACTIVE_DRIVERS} does not match active coils list: {ACTIVE_COILS}")
 
@@ -193,7 +195,7 @@ if sim or not HARDWARE_CONNECTED:
 # Dataset pre-processing for real world experiments
 if not sim:
     data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'] = utils.adjust_current_datasets_for_coil_subset(
-        data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS
+        data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS, N_DRIVERS
     )
 
 pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
@@ -221,7 +223,7 @@ if not DISABLE_PLOTS:
         system_state_df['time'] = system_state_df['time'].to_numpy() - t0
         des_currents_df['time'] = des_currents_df['time'].to_numpy() - t0
         des_currents_df, system_state_df = utils.adjust_current_datasets_for_coil_subset(
-            des_currents_df, system_state_df, ACTIVE_COILS, ACTIVE_DRIVERS
+            des_currents_df, system_state_df, ACTIVE_COILS, ACTIVE_DRIVERS, N_DRIVERS
         )
 
         

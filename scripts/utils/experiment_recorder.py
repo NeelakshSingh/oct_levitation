@@ -34,7 +34,8 @@ if sim:
     data_base_folder = os.path.join(data_base_folder, 'sim')
     
 data_folder = datetime.strftime(datetime.now(), '%Y-%m-%d_%H-%M-%S')
-data_folder = os.path.join(data_base_folder, data_subfolder, data_folder)
+rigid_body_name = rospy.get_param('oct_levitation/rigid_body')
+data_folder = os.path.join(data_base_folder, data_subfolder, rigid_body_name, data_folder)
 
 
 bagfile_name = 'all_topics_recording.bag'

@@ -1,23 +1,14 @@
 experiment_analysis:
   n_coils: 6 # Number of coils in the experiment. This is used to determine the number of plots to be generated.
   hardware_connected: true # Set it to false if you just collected data without the simulator and without the ECB.
-  active_coils:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 5
-  active_drivers:
-    - 0
-    - 1
-    - 2
-    - 4
-    - 5
+  n_drivers: 9 # Number of coils supported by the system at the moment
+  active_coils: [0, 1, 2, 3, 4, 5, 6, 7]
+  active_drivers: [0, 1, 2, 3, 4, 5, 7, 8]
   base_folder: "" # Let it be empty string to use the default folder.
   inkscape_path: /usr/bin/inkscape # Path to inkscape executable, for saving plots to emf which is best for vector graphics in powerpoint.
   octomag_calibration_file: "mc3ao8s_md200_handp.yaml"
   plot_time_sync_topic: "/tnb_mns_driver/des_currents_reg" # For all time synced plots, this topic is used for time interpolation of other topics for proper comparison.
-  plot_raw_ecb_data: false # If true then no interpolation is done and the raw ECB data is used for plotting. This is useful for catching immediate overvoltage errors on controller start which may get lost in interpolation.
+  plot_raw_ecb_data: true # If true then no interpolation is done and the raw ECB data is used for plotting. This is useful for catching immediate overvoltage errors on controller start which may get lost in interpolation.
   enable_topic_extraction: true # If true, then bagpyext will be used to extract CSV data from topics if no CSV files are found in the experiment folder.
   show_after_each_plot: false # Show the plot after each plot is generated.
   display_plots_at_end: true # Show all plots at the end of the analysis instead of one by one. If true, show_after_each_plot is ignored. If both false, no plots are shown in interactive pane.
@@ -43,7 +34,7 @@ experiment_analysis:
   enable_field_gradient_plots: true
   enable_z_specific_plots: false
   enable_alpha_beta_plots: false
-  enable_condition_number_plots: true
+  enable_condition_number_plots: false
   enable_utility_plots: true
 
   const_pose_reference_mm_deg:

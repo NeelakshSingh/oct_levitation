@@ -161,7 +161,9 @@ class ControlSessionNodeBase:
                 # Directly use thg vicon topic
                 self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
                                             queue_size=1)
+                rospy.loginfo(f"Subscribing to {self.tf_sub_topic} topic. State estimator disabled.")
             else:
+                rospy.loginfo(f"Subscribing to {self.state_est_sub_topic} topic. State estimator enabled.")
                 self.state_est_sub = rospy.Subscriber(self.state_est_sub_topic, RigidBodyStateEstimate,
                                                       self.state_est_sub_callback, queue_size=1)
         
@@ -214,10 +216,38 @@ class ControlSessionNodeBase:
         dipole = self.rigid_body_dipole.dipole_list[0]
         A = self.mpem_model.getActuationMatrix(position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
-        M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
+        # M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
+        M = geometry.magnetic_interaction_inertial_force_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
         JMA = M @ A
 
         computed_currents = numerical.numba_pinv(JMA) @ w_com
+        if self.sim_mode:
+            des_currents = np.zeros(8)
+            des_currents[self.__ACTIVE_COILS] = computed_currents
+        else:
+            # Due to real world coils being connected to a different limited set of drivers.
+            des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
+            des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
+
+        return des_currents.flatten()
+    
+    def five_dof_2_step_torque_force_allocation(self,
+                                              position: np.ndarray,
+                                              quaternion: np.ndarray,
+                                              w_com: np.ndarray):
+        """
+        This function assumes that the dipole moment in the local frame aligns with the z axis and thus clips the 3rd row
+        of the torque allocation map. Furthermore, the 3rd column will be clipped and Bz will be explicitly set to 0.
+        tf_msg: The transform feedback from any state feedback sensor. Vicon usually.
+        w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
+        """
+        dipole = self.rigid_body_dipole.dipole_list[0]
+        A = self.mpem_model.getActuationMatrix(position)
+        A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
+        M = geometry.magnetic_interaction_inertial_force_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
+        bg_des = numerical.numba_pinv(M) @ w_com
+
+        computed_currents = numerical.numba_pinv(A) @ bg_des
         if self.sim_mode:
             des_currents = np.zeros(8)
             des_currents[self.__ACTIVE_COILS] = computed_currents

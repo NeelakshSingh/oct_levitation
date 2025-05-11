@@ -526,14 +526,15 @@ def get_signal_std_deviation(signal: np.ndarray):
 def adjust_current_datasets_for_coil_subset(des_currents_reg_df: pd.DataFrame,
                                             system_state_df: pd.DataFrame,
                                             active_coils: List[int],
-                                            active_drivers: List[int]):
+                                            active_drivers: List[int],
+                                            n_drivers: int):
     """
     Adjusts the des_currents_reg_df and system_state_df DataFrames which are
     obtained from a specific set of active physical coils connected to a set of 
     active drivers so that they work with the plotting functions.
     """
-    full_des_currents_idx = [f"des_currents_reg_{i}" for i in range(8)]
-    full_actual_currents_idx = [f"currents_reg_{i}" for i in range(8)]
+    full_des_currents_idx = [f"des_currents_reg_{i}" for i in range(n_drivers)]
+    full_actual_currents_idx = [f"currents_reg_{i}" for i in range(n_drivers)]
 
     active_coil_cols_des = [full_des_currents_idx[i] for i in active_coils]
     active_driver_cols_des = [full_des_currents_idx[i] for i in active_drivers]
