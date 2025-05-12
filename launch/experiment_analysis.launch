@@ -1,6 +1,7 @@
 <launch>
     <arg name="data_subfolder"/>
     <arg name="sim" default="false"/>
+    <arg name="hardware_connected" default="true"/>
     <arg name="experiment_folder" default=""/>
     <arg name="summarize" default="false"/>
     <arg name="note_observations" default="true"/>
@@ -16,6 +17,7 @@
             <param name="sim" value="$(arg sim)"/>
             <param name="note_observations" value="$(arg note_observations)"/>
             <param name="disable_plots" value="$(arg disable_plots)"/>
+            <param name="hardware_connected" value="$(arg hardware_connected)"/>
         </node>
     </group>
 

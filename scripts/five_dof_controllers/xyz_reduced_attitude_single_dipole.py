@@ -8,7 +8,7 @@ import oct_levitation.common as common
 
 from oct_levitation.control_node import ControlSessionNodeBase
 from std_msgs.msg import String
-from geometry_msgs.msg import WrenchStamped, Vector3
+from geometry_msgs.msg import WrenchStamped, Vector3, TwistStamped
 from tnb_mns_driver.msg import DesCurrentsReg
 
 def remove_extra_spaces(string):
@@ -32,6 +32,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.control_gain_publisher = rospy.Publisher("/xyz_rp_control_single_dipole/control_gains",
                                                       String, queue_size=1, latch=True)
+        
+        self.estimated_velocity_publisher = rospy.Publisher("control_session/finite_difference_velocity", TwistStamped, queue_size=1)
             
         #############################
         ### Z CONTROL DLQR DESIGN ###
@@ -68,31 +70,11 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
         # Denormalize the control gains.
-        self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))
-        # self.Ki_z = 1
-        # self.K_z = np.array([[5422, 557.6]]) # I40 Tuned for input disturbance offset of 0.18mm for 100gms of force as a step disturbance and 60 deg PM at 28.1 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
-        # self.K_z = np.array([[957.4, 201.8]]) # I40 Tuned for input disturbance offset of 1.2mm for 100gms of force as a step disturbance and 60 deg PM at 9.28 rad (37ms delay tolerance). Assuming 24Hz ECB 3dB bandwidth.
-        # self.K_z = np.array([[125, 41.99]]) # I40 Tuned for input disturbance offset of 8mm for 100gms of force step disturbance, 43 deg phase margin at 2.84 rad. The goal is to bring the currents down to a manageable level.
-        # self.K_z = np.array([[125, 4.199]]) # I40 Tuned for input disturbance offset of 8mm for 100gms of force step disturbance, 43 deg phase margin at 2.84 rad. The goal is to bring the currents down to a manageable level.
-        # self.K_z = np.array([[69.23, 37.39]]) # I40 Tuned for input disturbance offset of 1.4mm for 10gms of force step disturbance, 4sec settling time for 1mm offset, 60 deg phase margin at 2.07 rad. 24Hz ECB 3dB bandwidth. 
-        # self.K_z = np.array([[33.69, 31.02]]) # I40 Tuned for input disturbance offset of 3mm for 10gms of force step disturbance, 5.8sec settling time for 1mm step setpoint, 55 geg phase margin at 1.61 rad. 24Hz ECB 3dB bandwidth. 
-        # self.K_z = np.array([[33.69, 3.975]]) # I40 Tuned for input disturbance offset of 3mm for 10gms of force step disturbance, 5.8sec settling time for 1mm step setpoint, 55 geg phase margin at 1.61 rad. 24Hz ECB 3dB bandwidth. 
-        # self.K_z = np.array([[2.083, 7.957]]) # I40 N52 10x3, tuned for 60deg phase margin.
-        # self.K_z = np.array([[4.359, 9.641]]) # I40 N52 10x3, tuned for 60deg phase margin.
-        # self.K_z = np.array([[0.3438, 2.3]]) # I40 N52 10x3, tuned for less D gain to avoid noise amplification.
-        # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
-        # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
-        # self.K_z = np.array([[7.229, 4.923]]) # I40 N52 10x3, tuned for high P gain to have fast enough response so as to not let D and the amplified noise drive the system.
-        # self.K_z = np.array([[0.002613, 1.758]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.1 rad/s crossover.
-        # self.K_z = np.array([[0.6281, 6.051]]) # I40 6 N52 10x3, tuned with delay of 10ms. 0.288 rad/s crossover.
-        
+        self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))      
 
         # Since X and Y have the same dynamics, we use the same gains.
         self.K_x = np.copy(self.K_z)
         self.K_y = np.copy(self.K_z)
-        
-        # self.K_x = np.zeros((1,2))
-        # self.K_y = np.zeros((1,2))
 
         ### Z CONTROL DLQR DESIGN ###
         #############################
@@ -102,20 +84,13 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
         self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
-        self.k_ra_p = 30
-        self.K_ra_d = np.diag([1.0, 1.0])*15
-        # self.k_ra_p = 0.0
-        # self.K_ra_d = np.diag([1.0, 1.0])*0.0
+        self.k_ra_p = 150
+        self.K_ra_d = np.diag([1.0, 1.0])*70
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
 
         self.mass = self.rigid_body_dipole.mass_properties.m
-        # self.K_theta = np.array([[0.002621, 0.0007889]]) # Tuned for overdamped PD response.
-        # self.K_phi = np.array([[0.002621, 0.0007889]]) # Tuned to include the external disc
-        # self.K_theta = np.array([[0.007157, 0.0006609]]) # Tuned for overdamped PD response.
-        # self.K_phi = np.array([[0.008001, 0.0007387]]) # Tuned to include the external disc
-        # self.K_z = np.array([[9.0896, 1.3842]])
 
         rospy.loginfo(remove_extra_spaces(f"""Control gains for Fx: {self.K_x}, 
         Fy: {self.K_y},
@@ -125,13 +100,13 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         self.control_gains_message : String = String()
 
-        self.diff_alpha_RA = self.control_rate
+        self.diff_alpha_RA = 1/self.dt
         self.diff_beta_RA = 0
         self.diff_alpha_z = 1/self.dt
         self.diff_beta_z = 0
-        self.diff_alpha_x = self.control_rate
+        self.diff_alpha_x = 1/self.dt
         self.diff_beta_x = 0
-        self.diff_alpha_y = self.control_rate
+        self.diff_alpha_y = 1/self.dt
         self.diff_beta_y = 0
 
         self.control_gains_message.data = remove_extra_spaces(f"""Control gains for Fx: {self.K_x}, 
@@ -188,6 +163,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                                sft_coeff: float = 1.0):
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
+        self.velocity_msg = TwistStamped() # Empty message
+        self.velocity_msg.header.stamp = rospy.Time.now()
+        self.velocity_msg.header.frame_id = self.rigid_body_dipole.name
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
 
@@ -229,6 +207,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
             self.x_dot, self.y_dot, self.z_dot = linear_velocity
             omega = angular_velocity
 
+        self.velocity_msg.twist.linear = Vector3(self.x_dot, self.y_dot, self.z_dot)
+        self.velocity_msg.twist.angular = Vector3(omega[0], omega[1], omega[2])
+        self.estimated_velocity_publisher.publish(self.velocity_msg)
+
         x_z = np.array([[z_com, self.z_dot]]).T
         x_x = np.array([[x_com, self.x_dot]]).T
         x_y = np.array([[y_com, self.y_dot]]).T
@@ -246,17 +228,22 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        F_z = u_z[0, 0] * sft_coeff
-        F_x = u_x[0, 0]
-        F_y = u_y[0, 0]
-        
+        # F_z = u_z[0, 0] * sft_coeff
+        # F_x = u_x[0, 0]
+        # F_y = u_y[0, 0]
+        F_z = 0.0
+        F_x = 0.0
+        F_y = 0.0
+
         omega_tilde = self.E @ omega
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
-        reduced_attitude_error = 1 - np.dot(Lambda_d, Lambda)
         u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
         # Local frame torque allocation
         Tau_x = u_RA[0]*self.Ixx
         Tau_y = u_RA[1]*self.Iyy
+
+        # Tau_x = 0.0
+        # Tau_y = 0.0
 
         w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
 

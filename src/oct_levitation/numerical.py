@@ -252,3 +252,10 @@ def numba_pinv(A: np_t.NDArray) -> np_t.NDArray:
     return np.linalg.pinv(A)
 
 numba_pinv(np.eye(3)) # Force compilation on import.
+
+@numba.njit(cache=True)
+def numba_cond(A: np_t.NDArray) -> float:
+    """
+    This function is expected to provide a 3x speedup over the normal numpy version.
+    """
+    return np.linalg.cond(A)

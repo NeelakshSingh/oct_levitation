@@ -60,9 +60,9 @@ data_base_folder = os.path.join(data_base_folder, experiment_subfolder)
 # For now this will use the param. But ideally we should get the rigid body name from the data stored by the
 # experiment recorder.
 dipole_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
-data_base_folder = os.path.join(data_base_folder, dipole_body.name)
+# data_base_folder = os.path.join(data_base_folder, dipole_body.name)
 
-node_loginfo(f"Using data base folder: {data_base_folder}. Using dipole body: {dipole_body.name}")
+node_loginfo(f"Using data base folder: {data_base_folder}.")
 
 def get_latest_dated_folder(base_folder):
     """
@@ -122,7 +122,7 @@ if plotting.DISABLE_PLT_SHOW and display_plots:
 INKSCAPE_PATH = rospy.get_param("experiment_analysis/inkscape_path", default="/usr/bin/inkscape")
 SAVE_PLOTS = rospy.get_param("experiment_analysis/save_plots", default=True)
 SAVE_PLOTS_AS_EMF = rospy.get_param("experiment_analysis/save_plots_as_emf", default=True)
-HARDWARE_CONNECTED = rospy.get_param("experiment_analysis/hardware_connected")
+HARDWARE_CONNECTED = rospy.get_param("~hardware_connected")
 
 ACTIVE_COILS = rospy.get_param("experiment_analysis/active_coils", default=[0, 1, 2, 3, 4, 5, 6, 7])
 ACTIVE_DRIVERS = rospy.get_param("experiment_analysis/active_drivers", default=[0, 1, 2, 3, 4, 5, 6, 7])
@@ -181,7 +181,7 @@ if sim or not HARDWARE_CONNECTED:
     # We need to fake the dataset for a few quantities
     tnb_mns_system_state_dict = {}
     tnb_mns_system_state_dict['time'] = data[time_sync_topic]['time'].to_numpy()
-    for i in range(8):
+    for i in range(N_DRIVERS):
         tnb_mns_system_state_dict[f"dclink_voltages_{i}"] = np.zeros(len(time))
         tnb_mns_system_state_dict[f"currents_reg_{i}"] = np.zeros(len(time))
 
@@ -216,7 +216,7 @@ if not DISABLE_PLOTS:
     current_plt_save = None
     system_state_df = data['_tnb_mns_driver_system_state']
     des_currents_df = data['_tnb_mns_driver_des_currents_reg']
-    if rospy.get_param("experiment_analysis/plot_raw_ecb_data", default=False):
+    if rospy.get_param("experiment_analysis/plot_raw_ecb_data", default=False) and not sim and HARDWARE_CONNECTED:
         system_state_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_system_state.csv"))
         des_currents_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_des_currents_reg.csv"))
         t0 = system_state_df['time'].to_numpy()[0]

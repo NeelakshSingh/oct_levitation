@@ -94,6 +94,8 @@ class ControlSessionNodeBase:
 
         self.publish_desired_com_wrenches = rospy.get_param("~log_desired_com_wrench", False)
         self.metadata_topic = rospy.get_param("~metadata_pub_topic", "control_session/metadata")
+        self.cond_pub = rospy.Publisher("control_session/jma_condition", VectorStamped, queue_size=1)
+        self.cond_msg = VectorStamped()
 
         self.metadata_pub = rospy.Publisher(self.metadata_topic, ControllerDetails, latch=True, queue_size=1)
         self.metadata_msg : ControllerDetails = ControllerDetails()
@@ -216,9 +218,13 @@ class ControlSessionNodeBase:
         dipole = self.rigid_body_dipole.dipole_list[0]
         A = self.mpem_model.getActuationMatrix(position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
-        # M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
-        M = geometry.magnetic_interaction_inertial_force_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
+        M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
         JMA = M @ A
+
+        self.cond_msg.header.stamp = rospy.Time.now()
+        self.cond_msg.vector = [numerical.numba_cond(JMA)]
+
+        self.cond_pub.publish(self.cond_msg)
 
         computed_currents = numerical.numba_pinv(JMA) @ w_com
         if self.sim_mode:
