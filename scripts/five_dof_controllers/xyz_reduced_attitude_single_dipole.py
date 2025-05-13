@@ -22,7 +22,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 2e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8e-3]) # for horizontal attachment
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -65,7 +65,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                 method='zoh')
         
-        Qz = np.diag([1.0, 1.0])
+        Qz = np.diag([10.0, 1.0])
         Rz = 0.1
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
 
@@ -228,12 +228,12 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_x = -self.K_x @ x_error
         u_y = -self.K_y @ y_error
 
-        # F_z = u_z[0, 0] * sft_coeff
-        # F_x = u_x[0, 0]
-        # F_y = u_y[0, 0]
-        F_z = 0.0
-        F_x = 0.0
-        F_y = 0.0
+        F_z = u_z[0, 0] * sft_coeff
+        F_x = u_x[0, 0]
+        F_y = u_y[0, 0]
+        # F_z = 0.0
+        # F_x = 0.0
+        # F_y = 0.0
 
         omega_tilde = self.E @ omega
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
