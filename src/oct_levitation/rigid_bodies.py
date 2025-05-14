@@ -440,3 +440,34 @@ Onyx50x5DiscCenterRingDipole_1N42 = MultiDipoleRigidBody(
 )
 
 register_rigid_body(Onyx50x5DiscCenterRingDipole_1N42)
+
+Onyx50x5AugmentedDiscCenterRingDipole_1N42 = MultiDipoleRigidBody(
+    name="onyx_disc_50x5_15gms_augmented_disc_1N42",
+    mass_properties = MassProperties(18e-3,
+                                     np.array([[1.50992900e-05, -1.45310000e-07, -6.66800000e-08], # DO NOT USE THIS
+                                               [-1.45310000e-07, 1.34681400e-05, -1.11140000e-07],
+                                               [-6.66800000e-08, -1.11140000e-07, 2.42827100e-05]]),
+                                     np.array([0.14, -0.33, -0.11])*1e-3, # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=3.12e-06,
+                                         Py=3.32069e-06,
+                                         Pz=6.175e-06 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/onyx_disc_50x5_augmented_disc/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/onyx_disc_50x5_augmented_disc/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), RingMagnet10x4x5_N42) # Because these are attached north down, axis is along north fashion.
+            ]
+        )
+    ]
+)
+
+register_rigid_body(Onyx50x5AugmentedDiscCenterRingDipole_1N42)

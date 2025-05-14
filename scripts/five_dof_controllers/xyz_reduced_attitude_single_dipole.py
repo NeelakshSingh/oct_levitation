@@ -95,7 +95,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
 
         self.Ki_lin = 1.0
-        self.Ki_ang = 30
+        self.Ki_ang = 60
 
         integrator_params = rospy.get_param("oct_levitation/integrator_params")
 
@@ -103,6 +103,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.switch_off_integrator_on_convergence = integrator_params["switch_off_on_convergence"]
         self.__integrator_enable = np.ones(5)
         self.__convergence_time = np.zeros(5)
+        self.__integrator_converged = False
         self.__integrator_convergence_check_time = integrator_params['convergence_check_time']
         self.integrator_start_time = integrator_params['start_time']
         self.integrator_end_time = integrator_params['end_time']
@@ -265,30 +266,36 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                 self.disturbance_rpxyz[0] += self.Ki_ang * reduced_attitude_error[0] * self.dt * self.__integrator_enable[0]
                 self.disturbance_rpxyz[1] += self.Ki_ang * reduced_attitude_error[1] * self.dt * self.__integrator_enable[1]
                 
-                if self.switch_off_integrator_on_convergence:
-                    if abs(z_error[0, 0]) < self.__pos_error_tol:
+                if self.switch_off_integrator_on_convergence and not self.__integrator_converged:
+                    if abs(z_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[4]:
                         self.__convergence_time[4] += self.dt
                         if self.__convergence_time[4] > self.__integrator_convergence_check_time:
-                            self.__integrator_enable[4] = 0.0
-                    if abs(x_error[0, 0]) < self.__pos_error_tol:
+                            rospy.logwarn_once("Z convergence achieved, stopping Z integrator.")
+                            self.__integrator_enable[4] = 0
+                    if abs(x_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[2]:
                         self.__convergence_time[2] += self.dt
                         if self.__convergence_time[2] > self.__integrator_convergence_check_time:
-                            self.__integrator_enable[2] = 0.0
-                    if abs(y_error[0, 0]) < self.__pos_error_tol:
+                            rospy.logwarn_once("X convergence achieved, stopping X integrator.")
+                            self.__integrator_enable[2] = 0
+                    if abs(y_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[3]:
                         self.__convergence_time[3] += self.dt
                         if self.__convergence_time[3] > self.__integrator_convergence_check_time:
-                            self.__integrator_enable[3] = 0.0
-                    if abs(reduced_attitude_error[0]) < self.__att_error_tol:
+                            rospy.logwarn_once("Y convergence achieved, stopping Y integrator.")
+                            self.__integrator_enable[3] = 0
+                    if abs(reduced_attitude_error[0]) < self.__att_error_tol and self.__integrator_enable[0]:
                         self.__convergence_time[0] += self.dt
                         if self.__convergence_time[0] > self.__integrator_convergence_check_time:
-                            self.__integrator_enable[0] = 0.0
-                    if abs(reduced_attitude_error[1]) < self.__att_error_tol:
+                            rospy.logwarn_once("Reduced attitude Nx convergence achieved, stopping RA integrator.")
+                            self.__integrator_enable[0] = 0
+                    if abs(reduced_attitude_error[1]) < self.__att_error_tol and self.__integrator_enable[1]:
                         self.__convergence_time[1] += self.dt
                         if self.__convergence_time[1] > self.__integrator_convergence_check_time:
-                            self.__integrator_enable[1] = 0.0
+                            rospy.logwarn_once("Reduced attitude Ny convergence achieved, stopping RA integrator.")
+                            self.__integrator_enable[1] = 0
 
                     if np.sum(self.__integrator_enable) == 0:
-                        rospy.logwarn_once("Convergence achieved, stopping integrator.")
+                        self.__integrator_converged = True
+                        rospy.logwarn_once("All convergence achieved.")
 
         u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] # Gravity compensation
         u_x = self.K_x @ x_error + self.disturbance_rpxyz[3]
