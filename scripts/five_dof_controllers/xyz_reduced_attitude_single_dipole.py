@@ -101,7 +101,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         self.use_integrator = integrator_params["use_integrator"]
         self.switch_off_integrator_on_convergence = integrator_params["switch_off_on_convergence"]
-        self.__integrator_enable = np.ones(5)
+        self.__integrator_enable = np.asarray(integrator_params['integrator_enable_rpxyz'], dtype=int)
         self.__convergence_time = np.zeros(5)
         self.__integrator_converged = False
         self.__integrator_convergence_check_time = integrator_params['convergence_check_time']
