@@ -4,6 +4,7 @@ import rospkg
 import rospy
 import pandas as pd
 import subprocess
+import yaml
 
 import oct_levitation.plotting as plotting
 import oct_levitation.processing_utils as utils
@@ -59,7 +60,6 @@ data_base_folder = os.path.join(data_base_folder, experiment_subfolder)
 
 # For now this will use the param. But ideally we should get the rigid body name from the data stored by the
 # experiment recorder.
-dipole_body = REGISTERED_BODIES[rospy.get_param("oct_levitation/rigid_body")]
 # data_base_folder = os.path.join(data_base_folder, dipole_body.name)
 
 node_loginfo(f"Using data base folder: {data_base_folder}.")
@@ -100,6 +100,21 @@ if expt_dir is not None:
     node_loginfo(f"Using default experiment folder: {expt_dir}")
 else:
     raise FileNotFoundError(f"No dated experiment folder found in {data_base_folder}. Please specify a folder name using the --experiment_folder argument if using a different name format than experiment_recorder.")
+
+try:
+    with open(os.path.join(expt_dir, "rosparam_dump.yaml"), 'r') as f:
+        rosparam_dump = yaml.safe_load(f)
+        dipole_name = rosparam_dump['oct_levitation']['rigid_body']
+        rospy.loginfo(f"Using dipole name: {dipole_name}")
+        dipole_body = REGISTERED_BODIES[dipole_name]
+
+except FileNotFoundError:
+    rospy.logerr(f"Experiment folder does not contain rosparam dump, it seems that the experiment was not recorded properly.")
+    raise 
+
+except KeyError:
+    rospy.logerr(f"The rosparam dump did not contain the parameter for the rigid body name. Did you use the correct pipeline?")
+    raise
 
 plot_folder = os.path.join(expt_dir, "plots")
 os.makedirs(plot_folder, exist_ok=True)
@@ -220,8 +235,8 @@ if not DISABLE_PLOTS:
         system_state_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_system_state.csv"))
         des_currents_df = pd.read_csv(os.path.join(expt_dir, "_tnb_mns_driver_des_currents_reg.csv"))
         t0 = system_state_df['time'].to_numpy()[0]
-        system_state_df['time'] = system_state_df['time'].to_numpy() - t0
-        des_currents_df['time'] = des_currents_df['time'].to_numpy() - t0
+        system_state_df['time'] = (system_state_df['time'].to_numpy() - t0)/1e9
+        des_currents_df['time'] = (des_currents_df['time'].to_numpy() - t0)/1e9
         des_currents_df, system_state_df = utils.adjust_current_datasets_for_coil_subset(
             des_currents_df, system_state_df, ACTIVE_COILS, ACTIVE_DRIVERS, N_DRIVERS
         )

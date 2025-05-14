@@ -54,15 +54,17 @@ The output should be `99` if the changes have been applied correctly. If it is `
 To run the nodes with real-time priority, you can use the `chrt` command in the launch-prefix. For example, to run a node with `SCHED_FIFO` policy and a priority of 99, you can use the following command:
 
 ```bash
-chrt -f 99 roslaunch <package> <launchfile>
+chrt -f 99 rosrun <package> <node>
 ```
 
-Furthermore, you can bind a node to a specific CPU core using the `taskset` command. For example, to bind a node to CPU core 0, you can use the following command:
+Furthermore, you can bind a node to a specific CPU core using the `taskset` command. For example, to bind a node to CPU core 2, you can use the following command:
 
 ```bash
-taskset -c 0 chrt -f 99 roslaunch <package> <launchfile>
+taskset -c 2 chrt -f 99 rosrun <package> <node>
 ```
 
-Running taskset does not require root privileges in any user. In case you are setting the niceness instead the steps to give yourself permission to allow setting the niceness without root privileges are quite similar, just use `nice` instead of `rtprio` in `limits.conf`. You can then use the `nice` command with taskset in the launch-prefix to achieve the same effect.
+Running taskset does not require root privileges in any user. In the case where RT schedulers are not available, you can set a low niceness as mentioned earlier. The steps to give yourself permission to allow setting low niceness (which means making the programs less nice so it hogs all resources and doesn't give them to other programs) without root privileges are quite similar, just use `nice` instead of `rtprio` in `limits.conf`. You can then use the `nice` command with taskset in the launch-prefix to achieve the same effect.
 
 Important Note: Any `SCHED_FIFO` or `SCHED_RR` process, even with the lowest priority in these schedulers, will be higher in priority than the highest priority process within `SCHED_OTHER`. Running too many `SCHED_FIFO` or `SCHED_RR` processes can lead to starvation of other processes, so ideally don't run more than 2-3 such nodes, that too only if you have at least 5-6 CPU cores. 
+
+Note that all the experiments and results with levitation in this project so far have been achieved with SCHED_FIFO which is a hard real-time scheduler. With there being enough CPUs and clock speed it should be sufficient to achieve the same with SCHED_OTHER and the lowest niceness. However, this is not guaranteed.

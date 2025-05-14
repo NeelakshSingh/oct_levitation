@@ -5,6 +5,7 @@ import control as ct
 
 import oct_levitation.geometry_jit as geometry
 import oct_levitation.common as common
+import oct_levitation.numerical as numerical
 
 from oct_levitation.control_node import ControlSessionNodeBase
 from std_msgs.msg import String
@@ -22,7 +23,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 4.0e-3]) # for horizontal attachment
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -90,7 +91,29 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
 
-        self.mass = self.rigid_body_dipole.mass_properties.m
+        ##############################
+        ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
+
+        self.Ki_lin = 1.0
+        self.Ki_ang = 30
+
+        integrator_params = rospy.get_param("oct_levitation/integrator_params")
+
+        self.use_integrator = integrator_params["use_integrator"]
+        self.switch_off_integrator_on_convergence = integrator_params["switch_off_on_convergence"]
+        self.__integrator_enable = np.ones(5)
+        self.__convergence_time = np.zeros(5)
+        self.__integrator_convergence_check_time = integrator_params['convergence_check_time']
+        self.integrator_start_time = integrator_params['start_time']
+        self.integrator_end_time = integrator_params['end_time']
+        self.__pos_error_tol = integrator_params['position_error_tol']
+        self.__att_error_tol = integrator_params['reduced_attitude_error_tol']
+        self.disturbance_rpxyz = np.zeros(5)
+        self.experiment_start_time = None
+
+        ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
+        ##############################
+
 
         rospy.loginfo(remove_extra_spaces(f"""Control gains for Fx: {self.K_x}, 
         Fy: {self.K_y},
@@ -166,6 +189,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.velocity_msg = TwistStamped() # Empty message
         self.velocity_msg.header.stamp = rospy.Time.now()
         self.velocity_msg.header.frame_id = self.rigid_body_dipole.name
+        if self.experiment_start_time is None:
+            self.experiment_start_time = rospy.Time.now().to_sec()
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
 
@@ -199,6 +224,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
             self.y_dot = self.diff_alpha_y*(y_com - self.last_y) + self.diff_beta_y*self.y_dot
             omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
 
+            self.x_dot, self.y_dot, self.z_dot = numerical.numba_clip(np.array([self.x_dot, self.y_dot, self.z_dot]), -self.MAX_LINEAR_VELOCITY, self.MAX_LINEAR_VELOCITY)
+            omega = numerical.numba_clip(omega, -self.MAX_ANGULAR_VELOCITY, self.MAX_ANGULAR_VELOCITY)
+
             self.last_z = z_com
             self.last_x = x_com
             self.last_y = y_com
@@ -219,31 +247,61 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         r_x = np.array([[ref_x, 0.0]]).T
         r_y = np.array([[ref_y, 0.0]]).T
 
-        z_error = x_z - r_z # This error is in meters. We need it to be big enough in mm.
-        x_error = x_x - r_x
-        y_error = x_y - r_y
-        self.ez_integral += z_error[0, 0]*self.dt
+        z_error = r_z - x_z # This error is in meters. We need it to be big enough in mm.
+        x_error = r_x - x_x
+        y_error = r_y - x_y
 
-        u_z = -self.K_z @ z_error + self.mass*common.Constants.g # Gravity compensation
-        u_x = -self.K_x @ x_error
-        u_y = -self.K_y @ y_error
+        omega_tilde = self.E @ omega
+        Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
+        reduced_attitude_error = self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
+
+        # Calculating the integral action.
+        time_elapsed = rospy.Time.now().to_sec() - self.experiment_start_time
+        if self.use_integrator:
+            if time_elapsed > self.integrator_start_time and time_elapsed < self.integrator_end_time:
+                self.disturbance_rpxyz[4] += self.Ki_lin * z_error[0, 0] * self.dt * self.__integrator_enable[4]
+                self.disturbance_rpxyz[3] += self.Ki_lin * y_error[0, 0] * self.dt * self.__integrator_enable[3]
+                self.disturbance_rpxyz[2] += self.Ki_lin * x_error[0, 0] * self.dt * self.__integrator_enable[2]
+                self.disturbance_rpxyz[0] += self.Ki_ang * reduced_attitude_error[0] * self.dt * self.__integrator_enable[0]
+                self.disturbance_rpxyz[1] += self.Ki_ang * reduced_attitude_error[1] * self.dt * self.__integrator_enable[1]
+                
+                if self.switch_off_integrator_on_convergence:
+                    if abs(z_error[0, 0]) < self.__pos_error_tol:
+                        self.__convergence_time[4] += self.dt
+                        if self.__convergence_time[4] > self.__integrator_convergence_check_time:
+                            self.__integrator_enable[4] = 0.0
+                    if abs(x_error[0, 0]) < self.__pos_error_tol:
+                        self.__convergence_time[2] += self.dt
+                        if self.__convergence_time[2] > self.__integrator_convergence_check_time:
+                            self.__integrator_enable[2] = 0.0
+                    if abs(y_error[0, 0]) < self.__pos_error_tol:
+                        self.__convergence_time[3] += self.dt
+                        if self.__convergence_time[3] > self.__integrator_convergence_check_time:
+                            self.__integrator_enable[3] = 0.0
+                    if abs(reduced_attitude_error[0]) < self.__att_error_tol:
+                        self.__convergence_time[0] += self.dt
+                        if self.__convergence_time[0] > self.__integrator_convergence_check_time:
+                            self.__integrator_enable[0] = 0.0
+                    if abs(reduced_attitude_error[1]) < self.__att_error_tol:
+                        self.__convergence_time[1] += self.dt
+                        if self.__convergence_time[1] > self.__integrator_convergence_check_time:
+                            self.__integrator_enable[1] = 0.0
+
+                    if np.sum(self.__integrator_enable) == 0:
+                        rospy.logwarn_once("Convergence achieved, stopping integrator.")
+
+        u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] # Gravity compensation
+        u_x = self.K_x @ x_error + self.disturbance_rpxyz[3]
+        u_y = self.K_y @ y_error + self.disturbance_rpxyz[2]
 
         F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
-        # F_z = 0.0
-        # F_x = 0.0
-        # F_y = 0.0
-
-        omega_tilde = self.E @ omega
-        Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
-        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
+        
+        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
         # Local frame torque allocation
         Tau_x = u_RA[0]*self.Ixx
         Tau_y = u_RA[1]*self.Iyy
-
-        # Tau_x = 0.0
-        # Tau_y = 0.0
 
         w_des = np.array([Tau_x, Tau_y, F_x, F_y, F_z])
 
@@ -251,7 +309,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.torque = Vector3(*com_wrench_des[:3])
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
-        # Performing the simplified allocation for the two torques.
+        # Performing the simplified allocation instead of the summation of individual magnet contributions.
         des_currents = self.five_dof_wrench_allocation_single_dipole(position, quaternion, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents

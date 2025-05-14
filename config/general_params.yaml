@@ -1,5 +1,5 @@
 oct_levitation:
-  rigid_body: "greentec_do80_di67_Md10_2N42"
+  rigid_body: "onyx_disc_80x15_I20_2N42"
 
   cpp_impl:
     calfile: "mc3ao8s_md200_handp.yaml"

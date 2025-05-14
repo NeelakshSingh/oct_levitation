@@ -259,3 +259,13 @@ def numba_cond(A: np_t.NDArray) -> float:
     This function is expected to provide a 3x speedup over the normal numpy version.
     """
     return np.linalg.cond(A)
+
+numba_cond(np.eye(3)) # Force compilation on import.
+
+@numba.njit(cache=True)
+def numba_clip(a, a_min, a_max):
+    a = np.maximum(a, a_min)
+    a = np.minimum(a, a_max)
+    return a
+
+numba_clip(np.array([1, 2, 3]), 0, 2) # Force compilation on import.

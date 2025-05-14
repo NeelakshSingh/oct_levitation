@@ -85,6 +85,8 @@ class ControlSessionNodeBase:
             raise ValueError(msg)
         self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0])
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0.0, 0.0, 0.0])
+        self.MAX_LINEAR_VELOCITY = rospy.get_param("oct_levitation/max_linear_velocity")
+        self.MAX_ANGULAR_VELOCITY = rospy.get_param("oct_levitation/max_angular_velocity")
 
         self.ENABLE_STATE_ESTIMATOR = rospy.get_param("oct_levitation/delay_compensation_kf/enabled")
 

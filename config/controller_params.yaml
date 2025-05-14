@@ -7,6 +7,16 @@ oct_levitation:
   n_drivers: 9 # Number of coils supported by the system at the moment
   active_coils: [0, 1, 2, 3, 4, 5, 6, 7] # the ones which are actually used, according to the calibration file
   active_drivers: [0, 1, 2,  3, 4, 5,  7, 8] # the driver numbers which are connected to these to allocate correctly for the ECB
+  integrator_params:
+    use_integrator: true # Use integrator for some time
+    switch_off_on_convergence: true # Switch off integrator when the system converges
+    convergence_check_time: 2.0 # Stay at 1 second of convergence before switching off the integrator
+    position_error_tol: 0.0001
+    reduced_attitude_error_tol: 0.0001
+    start_time: 5.0
+    end_time: 1000.0
+  max_linear_velocity: 0.1 # Maximum velocity of the levitation system in m/s
+  max_angular_velocity: 3.490658503988659
 
   cpp_impl:
     omega_pd: 0.5
