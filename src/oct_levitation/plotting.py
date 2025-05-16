@@ -1,5 +1,3 @@
-import matplotlib.figure
-import matplotlib.axes
 import numpy as np
 import numpy.typing as np_t
 
