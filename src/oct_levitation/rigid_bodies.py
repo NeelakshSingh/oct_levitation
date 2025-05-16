@@ -471,3 +471,127 @@ Onyx50x5AugmentedDiscCenterRingDipole_1N42 = MultiDipoleRigidBody(
 )
 
 register_rigid_body(Onyx50x5AugmentedDiscCenterRingDipole_1N42)
+
+BronzefillRing12gm_1N52 = MultiDipoleRigidBody(
+    name="bronzefill_ring_12gms_1N52",
+    mass_properties = MassProperties(18e-3,
+                                     np.array([[2.15981000e-06, 4.84500000e-08, -2.91900000e-08],
+                                               [4.84500000e-08, 1.80943000e-06, 2.26000000e-08],
+                                               [-2.91900000e-08, 2.26000000e-08, 3.80802000e-06]]),
+                                     np.array([-0.00027000, 0.00021000, 0.00037000]), # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=2.163e-06,
+                                         Py=1.799e-06,
+                                         Pz=3.806e-06 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/bronzefill_ring_12gms_5_markers/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/bronzefill_ring_12gms_5_markers/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52) # Because these are attached north down, axis is along north fashion.
+            ]
+        )
+    ]
+)
+
+register_rigid_body(BronzefillRing12gm_1N52)
+
+BronzefillRing18gm_1N52 = MultiDipoleRigidBody(
+    name="bronzefill_ring_18gms_1N52",
+    mass_properties = MassProperties(2.23300000e-02,
+                                     np.array([[2.87424000e-06, -4.69300000e-08, -3.50000000e-08],
+                                               [-4.69300000e-08, 2.50478000e-06, -2.43700000e-08],
+                                               [-3.50000000e-08, -2.43700000e-08, 5.09348000e-06]]),
+                                    np.array([-0.00021000, -0.00015000, 0.00029000]), # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=2.877e-06,
+                                         Py=2.495e-06,
+                                         Pz=5.092e-06 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/bronzefill_ring_18gms_5_markers/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/bronzefill_ring_18gms_5_markers/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52) # Because these are attached north down, axis is along north fashion.
+            ]
+        )
+    ]
+)
+
+register_rigid_body(BronzefillRing18gm_1N52)
+
+BronzefillRing23gm_1N52 = MultiDipoleRigidBody(
+    name="bronzefill_ring_23gms_1N52",
+    mass_properties = MassProperties(2.74400000e-02,
+                                     np.array([[3.62441000e-06, -4.84400000e-08, -3.82500000e-08],
+                                               [-4.84400000e-08, 3.23312000e-06, -2.96100000e-08],
+                                               [-3.82500000e-08, -2.96100000e-08, 6.37649000e-06]]),
+                                     np.array([-0.00016000, -0.00013000, 0.00028000]), # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=3.627e-06,
+                                         Py=3.224e-06,
+                                         Pz=6.376e-06 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/bronzefill_ring_23gms_5_markers/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/bronzefill_ring_23gms_5_markers/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52) # Because these are attached north down, axis is along north fashion.
+            ]
+        )
+    ]
+)
+
+register_rigid_body(BronzefillRing23gm_1N52)
+
+BronzefillRing27gm_1N52 = MultiDipoleRigidBody(
+    name="bronzefill_ring_27gms_1N52",
+    mass_properties = MassProperties(3.05900000e-02,
+                                    np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
+                                              [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
+                                              [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
+                                    np.array([-0.00019000, -0.00015000, 0.00022000]), # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=6.211e-06,
+                                         Py=5.637e-06,
+                                         Pz=1.145e-05 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/bronzefill_ring_27gms_5_markers/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/bronzefill_ring_27gms_5_markers/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52) # Because these are attached north down, axis is along north fashion.
+            ]
+        )
+    ]
+)
+
+register_rigid_body(BronzefillRing27gm_1N52)
