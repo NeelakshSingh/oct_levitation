@@ -1,5 +1,5 @@
 oct_levitation:
-  rigid_body: "onyx_disc_50x5_15gms_augmented_disc_1N42"
+  rigid_body: "onyx_disc_80x15_I40_2N42"
 
   cpp_impl:
     calfile: "mc3ao8s_md200_handp.yaml"

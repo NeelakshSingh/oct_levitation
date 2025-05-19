@@ -218,6 +218,8 @@ class ControlSessionNodeBase:
         w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
         """
         dipole = self.rigid_body_dipole.dipole_list[0]
+        # A = self.mpem_model.getActuationMatrix(position + np.array([0.0, 0.0, 2.415e-3]))
+        # A = self.mpem_model.getActuationMatrix(position + np.array([0.0, 0.0, 1.715e-3]))
         A = self.mpem_model.getActuationMatrix(position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
         M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
