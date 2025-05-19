@@ -15,7 +15,7 @@ from tnb_mns_driver.msg import DesCurrentsReg
 from control_utils.msg import VectorStamped
 from std_msgs.msg import String
 from mag_manip import mag_manip
-from typing import List
+from typing import List, Tuple
 from scipy.linalg import block_diag
 
 from control_utils.general.utilities import init_system
@@ -120,6 +120,9 @@ class ControlSessionNodeBase:
         self.tracking_poses_on = rospy.get_param("oct_levitation/pose_tracking")
         self.LAST_PROFILE_TIME = rospy.Time(0)
 
+        self.INTEGRATOR_PARAMS = rospy.get_param("oct_levitation/integrator_params")
+        self.TRAJECTORY_PARAMS = rospy.get_param("oct_levitation/trajectory_params")
+
         ######## POST INIT CALL ########
         self.post_init()
         ######## POST INIT CALL ########
@@ -206,6 +209,14 @@ class ControlSessionNodeBase:
         file_path = os.path.abspath(file)
         self.metadata_msg.controller_name.data = os.path.basename(file_path)
         self.metadata_msg.controller_path.data = file_path
+
+    def trajectory_function(self, t: float) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        This function is used to generate the trajectory for the rigid body. It is called in the callback_control_logic
+        function. The trajectory function should return a 6D vector containing the desired position and orientation
+        of the rigid body in whatever representation and frames of reference the derived class requires.
+        """
+        raise NotImplementedError("The trajectory function has not been implemented yet.")
 
     def five_dof_wrench_allocation_single_dipole(self,
                                                  position: np.ndarray,

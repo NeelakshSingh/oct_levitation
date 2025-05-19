@@ -23,7 +23,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0e-3]) # for horizontal attachment
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -97,7 +97,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.Ki_lin = 1.0
         self.Ki_ang = 60
 
-        integrator_params = rospy.get_param("oct_levitation/integrator_params")
+        integrator_params = self.INTEGRATOR_PARAMS
 
         self.use_integrator = integrator_params["use_integrator"]
         self.switch_off_integrator_on_convergence = integrator_params["switch_off_on_convergence"]
@@ -111,6 +111,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.__att_error_tol = integrator_params['reduced_attitude_error_tol']
         self.disturbance_rpxyz = np.zeros(5)
         self.experiment_start_time = None
+
+        self.trajectory_start_time = self.TRAJECTORY_PARAMS['start_time']
 
         ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
         ##############################
@@ -185,6 +187,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                                linear_velocity: np.ndarray = None, 
                                angular_velocity: np.ndarray = None, 
                                sft_coeff: float = 1.0):
+        
+        
         self.desired_currents_msg = DesCurrentsReg() # Empty message
         self.com_wrench_msg = WrenchStamped() # Empty message
         self.velocity_msg = TwistStamped() # Empty message
@@ -192,6 +196,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.velocity_msg.header.frame_id = self.rigid_body_dipole.name
         if self.experiment_start_time is None:
             self.experiment_start_time = rospy.Time.now().to_sec()
+        time_elapsed = rospy.Time.now().to_sec() - self.experiment_start_time
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
 
@@ -204,9 +209,20 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # will fail for int arguments, in some cases this argument can be an int.
         desired_quaternion = np.asarray(geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform), dtype=np.float64)
 
-        ref_z = self.last_reference_tf_msg.transform.translation.z
-        ref_x = self.last_reference_tf_msg.transform.translation.x
-        ref_y = self.last_reference_tf_msg.transform.translation.y
+        # ref_z = self.last_reference_tf_msg.transform.translation.z
+        # ref_x = self.last_reference_tf_msg.transform.translation.x
+        # ref_y = self.last_reference_tf_msg.transform.translation.y
+
+        if time_elapsed > self.trajectory_start_time:
+            f = 0.2
+            ref_z = (2.0*np.sin(2*np.pi*time_elapsed*f) + 4.0)*1e-3
+            ref_z_dot = 2*np.pi*4.0*np.cos(2*np.pi*time_elapsed*f)*1e-3
+        else:
+            ref_z = self.INITIAL_DESIRED_POSITION[2]
+            ref_z_dot = 0.0
+
+        ref_x = 0.0
+        ref_y = 0.0
 
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
         R = geometry.rotation_matrix_from_quaternion(quaternion)
@@ -244,7 +260,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         x_x = np.array([[x_com, self.x_dot]]).T
         x_y = np.array([[y_com, self.y_dot]]).T
 
-        r_z = np.array([[ref_z, 0.0]]).T
+        r_z = np.array([[ref_z, ref_z_dot]]).T
         r_x = np.array([[ref_x, 0.0]]).T
         r_y = np.array([[ref_y, 0.0]]).T
 
@@ -257,7 +273,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         reduced_attitude_error = self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
 
         # Calculating the integral action.
-        time_elapsed = rospy.Time.now().to_sec() - self.experiment_start_time
         if self.use_integrator:
             if time_elapsed > self.integrator_start_time and time_elapsed < self.integrator_end_time:
                 self.disturbance_rpxyz[4] += self.Ki_lin * z_error[0, 0] * self.dt * self.__integrator_enable[4]
