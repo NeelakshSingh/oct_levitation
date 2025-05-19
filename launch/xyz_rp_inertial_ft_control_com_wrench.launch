@@ -1,0 +1,53 @@
+<launch>
+    <arg name="sim"/>
+    <arg name="description" />
+    <arg name="hardware_connected" default="false"/>
+    <arg name="rtprio_controller" default="true"/>
+
+    <arg name="record_data" default="true"/>
+    <arg name="enable_reference_pose" default="false"/>
+    <arg name="run_rviz" default="false"/>
+    <arg name="run_rqt_multiplot" default="false"/>
+    <arg name="data_subfolder" default="xyz_normal_control"/>
+       
+    <group if="$(arg rtprio_controller)">
+        <node pkg="oct_levitation" name="xyz_rp_inertial_ft_single_dipole_control" type="xyz_rp_inertial_ft_single_dipole.py" output="screen" launch-prefix="taskset -c 3 chrt -f 90">
+            <param name="sim_mode" value="$(arg sim)"/>
+            <param name="hardware_connected" value="$(arg hardware_connected)"/>
+            <param name="data_subfolder" value="$(arg data_subfolder)"/>
+            <param name="experiment_description" value="$(arg description)"/>
+            <param name="rtprio_controller" value="$(arg rtprio_controller)"/>
+        </node>
+    </group>
+
+    <group unless="$(arg rtprio_controller)">
+        <node pkg="oct_levitation" name="xyz_rp_inertial_ft_single_dipole_control" type="xyz_rp_inertial_ft_single_dipole.py" output="screen">
+            <param name="sim_mode" value="$(arg sim)"/>
+            <param name="hardware_connected" value="$(arg hardware_connected)"/>
+            <param name="data_subfolder" value="$(arg data_subfolder)"/>
+            <param name="experiment_description" value="$(arg description)"/>
+            <param name="rtprio_controller" value="$(arg rtprio_controller)"/>
+        </node>
+    </group>
+
+    <node pkg="oct_levitation" name="vicon_delay_meas" type="delay_measurement.py" output="screen">
+        <param name="topic" value="vicon/onyx_disc_80x15/Origin"/>
+    </node>
+
+    <node pkg="oct_levitation" name="driver_delay_meas" type="delay_measurement.py" output="screen">
+        <param name="topic" value="tnb_mns_driver/des_currents_reg"/>
+    </node>
+     
+    <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
+    <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">
+        <arg name="sim" value="$(arg sim)"/>
+        <arg name="data_subfolder" value="$(arg data_subfolder)"/>
+        <arg name="record_data" value="$(arg record_data)"/>
+        <arg name="hardware_connected" value="$(arg hardware_connected)"/>
+        <arg name="enable_reference_pose" value="$(arg enable_reference_pose)"/>
+        <arg name="run_rviz" value="$(arg run_rviz)"/>
+        <arg name="run_rqt_multiplot" value="$(arg run_rqt_multiplot)"/>
+        <arg name="rtprio_nodes" value="$(arg rtprio_controller)"/>
+    </include>
+    
+</launch>

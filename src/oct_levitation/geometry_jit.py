@@ -757,8 +757,7 @@ def magnetic_interaction_inertial_force_torque(local_dipole_moment: np.ndarray,
         np.ndarray: The magnetic interaction matrix of the dipole mapping world frame fields and gradients to world frame forces
         and world frame torques.
     """
-    R = rotation_matrix_from_quaternion(quaternion)
-    dipole_moment = R @ local_dipole_moment
+    dipole_moment = rotate_vector_from_quaternion(quaternion, local_dipole_moment)
     M_F = magnetic_interaction_grad5_to_force(dipole_moment)
     M_Tau = get_skew_symmetric_matrix(dipole_moment)
     M = np.zeros((6, 8))
