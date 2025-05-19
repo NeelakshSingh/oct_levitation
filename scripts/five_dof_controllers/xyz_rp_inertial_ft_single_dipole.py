@@ -193,7 +193,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
             self.z_dot = (z_com - self.last_z)/self.dt
             self.x_dot = (x_com - self.last_x)/self.dt
             self.y_dot = (y_com - self.last_y)/self.dt
-            omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
+            omega = geometry.angular_velocity_world_frame_from_rotation_matrix(R, self.R_dot)
             self.roll_dot = omega[0]
             self.pitch_dot = omega[1]
 
@@ -245,7 +245,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.five_dof_wrench_allocation_single_dipole(position, quaternion, w_des)
+        des_currents = self.five_dof_inertial_wrench_allocation_single_dipole(position, quaternion, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 

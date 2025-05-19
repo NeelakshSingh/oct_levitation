@@ -132,8 +132,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.z_dot = 0.0
         self.x_dot = 0.0
         self.y_dot = 0.0
-        self.roll_dot = 0.0
-        self.pitch_dot = 0.0
+        self.angle_x_dot = 0.0
+        self.angle_y_dot = 0.0
         self.last_R = np.eye(3)
 
         self.R_dot = np.zeros((3,3))
@@ -171,6 +171,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         y_com = position[1]
         z_com = position[2]
 
+        angle_x, angle_y = geometry.get_normal_angles_from_quaternion(quaternion)
+
         ### Reference for tracking
 
         ref_z = 0.0
@@ -193,9 +195,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
             self.z_dot = (z_com - self.last_z)/self.dt
             self.x_dot = (x_com - self.last_x)/self.dt
             self.y_dot = (y_com - self.last_y)/self.dt
-            omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
-            self.roll_dot = omega[0]
-            self.pitch_dot = omega[1]
+            omega = geometry.angular_velocity_world_frame_from_rotation_matrix(R, self.R_dot)
+            self.angle_x_dot = omega[0]
+            self.angle_y_dot = omega[1]
 
             self.last_z = z_com
             self.last_x = x_com
@@ -204,33 +206,31 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         else:
             self.x_dot, self.y_dot, self.z_dot = linear_velocity
-            self.roll_dot, self.pitch_dot, _ = angular_velocity
+            self.angle_x_dot, self.angle_y_dot, _ = angular_velocity
 
         x_z = np.array([[z_com, self.z_dot]]).T
         x_x = np.array([[x_com, self.x_dot]]).T
         x_y = np.array([[y_com, self.y_dot]]).T
-        x_roll = np.array([[rpy[0], self.roll_dot]]).T
-        x_pitch = np.array([[rpy[1], self.pitch_dot]]).T
+        x_angle_x = np.array([[angle_x, self.angle_x_dot]]).T
+        x_angle_y = np.array([[angle_y, self.angle_y_dot]]).T
 
         r_z = np.array([[ref_z, 0.0]]).T
         r_x = np.array([[ref_x, 0.0]]).T
         r_y = np.array([[ref_y, 0.0]]).T
-        r_roll = np.array([[ref_rpy[0], 0.0]]).T
-        r_pitch = np.array([[ref_rpy[1], 0.0]]).T
+        r_angle_x = np.array([[ref_rpy[0], 0.0]]).T
+        r_angle_y = np.array([[ref_rpy[1], 0.0]]).T
 
         z_error = r_z - x_z
         x_error = r_x - x_x
         y_error = r_y - x_y
-        roll_error = r_roll - x_roll
-        pitch_error = r_pitch - x_pitch
+        angle_x_error = r_angle_x - x_angle_x
+        angle_y_error = r_angle_y - x_angle_y
 
-        # u_z = self.K_lin @ z_error + (self.mass + 8e-3)*common.Constants.g # Gravity compensation
-        # u_z = self.K_lin @ z_error + (self.mass + 8e-3)*common.Constants.g # Gravity compensation
         u_z = self.K_lin @ z_error + self.mass*common.Constants.g # Gravity compensation
         u_x = self.K_lin @ x_error
         u_y = self.K_lin @ y_error
-        u_roll = self.K_ang @ roll_error
-        u_pitch = self.K_ang @ pitch_error
+        u_roll = self.K_ang @ angle_x_error
+        u_pitch = self.K_ang @ angle_y_error
 
         F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]
@@ -245,7 +245,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.com_wrench_msg.wrench.force = Vector3(*com_wrench_des[3:])
 
         # Performing the simplified allocation for the two torques.
-        des_currents = self.five_dof_wrench_allocation_single_dipole(position, quaternion, w_des)
+        des_currents = self.five_dof_inertial_wrench_allocation_single_dipole(position, quaternion, w_des)
 
         self.desired_currents_msg.des_currents_reg = des_currents
 
