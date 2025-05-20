@@ -23,7 +23,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_POSITION = np.array([5.0e-3, 5.0e-3, 10.0e-3]) # for horizontal attachment
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -37,7 +37,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.estimated_velocity_publisher = rospy.Publisher("control_session/finite_difference_velocity", TwistStamped, queue_size=1)
             
         #############################
-        ### Z CONTROL DLQR DESIGN ###
+        ### Z CONTROL DLQR DESIGN (Same for X and Y) ###
         self.mass = self.rigid_body_dipole.mass_properties.m
         self.k_lin_z = 0 # Friction damping parameter, to be tuned. Originally because of the rod.
         
@@ -59,23 +59,23 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Bz_norm = np.linalg.inv(Tzx) @ Bz @ Tzu
         Cz_norm = np.linalg.inv(Tzy) @ Cz @ Tzx
 
-        # Az_norm = Az
-        # Bz_norm = Bz
-        # Cz_norm = Cz
-
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                 method='zoh')
         
-        Qz = np.diag([10.0, 1.0])
+        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
         Rz = 0.1
+        Ry = 0.1
+        Rx = 0.1
         Kz_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qz, Rz)
+        Ky_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qy, Ry)
+        Kx_norm, S, E = ct.dlqr(Az_d_norm, Bz_d_norm, Qx, Rx)
 
         # Denormalize the control gains.
         self.K_z = np.asarray(Tzu @ Kz_norm @ np.linalg.inv(Tzx))      
-
-        # Since X and Y have the same dynamics, we use the same gains.
-        self.K_x = np.copy(self.K_z)
-        self.K_y = np.copy(self.K_z)
+        self.K_y = np.asarray(Tzu @ Ky_norm @ np.linalg.inv(Tzx))
+        self.K_x = np.asarray(Tzu @ Kx_norm @ np.linalg.inv(Tzx))
 
         ### Z CONTROL DLQR DESIGN ###
         #############################
@@ -85,8 +85,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
         self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
-        self.k_ra_p = 1250
-        self.K_ra_d = np.diag([1.0, 1.0])*150
+        self.k_ra_p = 1600
+        self.K_ra_d = np.diag([1.0, 1.0])*120
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
@@ -102,7 +102,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.use_integrator = integrator_params["use_integrator"]
         self.switch_off_integrator_on_convergence = integrator_params["switch_off_on_convergence"]
         self.__integrator_enable = np.asarray(integrator_params['integrator_enable_rpxyz'], dtype=int)
-        self.__indiv_integrator_converge_state = np.zeros(5, dtype=bool)
+        self.__indiv_integrator_converge_state = np.ones(5, dtype=bool)
+        self.__indiv_integrator_converge_state[self.__integrator_enable == 1] = False
         self.__convergence_time = np.zeros(5)
         self.__integrator_converged = False
         self.__integrator_convergence_check_time = integrator_params['convergence_check_time']
