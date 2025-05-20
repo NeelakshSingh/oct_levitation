@@ -280,7 +280,7 @@ register_rigid_body(Onyx80x15DiscCenterDiscDipoleI40_2RingMagnets)
 
 Onyx80x15DiscCenterDiscDipoleI40_2N52Discs = MultiDipoleRigidBody(
     name="onyx_disc_80x15_I40_2N52_discs",
-    mass_properties = MassProperties(3.6900000e-02,
+    mass_properties = MassProperties(3.7900000e-02,
                                      np.array([[1.50992900e-05, -1.45310000e-07, -6.66800000e-08],
                                                [-1.45310000e-07, 1.34681400e-05, -1.11140000e-07],
                                                [-6.66800000e-08, -1.11140000e-07, 2.42827100e-05]]),

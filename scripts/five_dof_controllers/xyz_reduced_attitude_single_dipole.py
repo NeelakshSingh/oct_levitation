@@ -275,7 +275,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                     if abs(z_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[4]:
                         self.__convergence_time[4] += self.dt
                         if self.__convergence_time[4] > self.__integrator_convergence_check_time:
-                            rospy.logwarn_once("Z convergence achieved.")
+                            rospy.logwarn_once(f"Z convergence achieved. Compensation force: {self.disturbance_rpxyz[4]}")
                             self.__indiv_integrator_converge_state[4] = True
                             if self.switch_off_integrator_on_convergence:
                                 rospy.logwarn_once("Stopping Z integrator.")
