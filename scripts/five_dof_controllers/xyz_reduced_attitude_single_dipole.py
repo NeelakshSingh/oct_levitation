@@ -102,6 +102,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.use_integrator = integrator_params["use_integrator"]
         self.switch_off_integrator_on_convergence = integrator_params["switch_off_on_convergence"]
         self.__integrator_enable = np.asarray(integrator_params['integrator_enable_rpxyz'], dtype=int)
+        self.__indiv_integrator_converge_state = np.zeros(5, dtype=bool)
         self.__convergence_time = np.zeros(5)
         self.__integrator_converged = False
         self.__integrator_convergence_check_time = integrator_params['convergence_check_time']
@@ -110,7 +111,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.__pos_error_tol = integrator_params['position_error_tol']
         self.__att_error_tol = integrator_params['reduced_attitude_error_tol']
         self.disturbance_rpxyz = np.zeros(5)
-        self.experiment_start_time = None
 
         self.trajectory_start_time = self.TRAJECTORY_PARAMS['start_time']
 
@@ -179,6 +179,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.set_path_metadata(__file__)
 
         self.E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
+        self.pause_trajectory_tracking = True
         
     def callback_control_logic(self, 
                                position : np.ndarray, 
@@ -194,9 +195,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.velocity_msg = TwistStamped() # Empty message
         self.velocity_msg.header.stamp = rospy.Time.now()
         self.velocity_msg.header.frame_id = self.rigid_body_dipole.name
-        if self.experiment_start_time is None:
-            self.experiment_start_time = rospy.Time.now().to_sec()
-        time_elapsed = rospy.Time.now().to_sec() - self.experiment_start_time
+        
 
         self.com_wrench_msg.header.stamp = rospy.Time.now()
 
@@ -207,22 +206,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ### Reference for tracking
         # The following explicit type casting is required by numba jit versions. np.linalg.norm
         # will fail for int arguments, in some cases this argument can be an int.
-        desired_quaternion = np.asarray(geometry.numpy_quaternion_from_tf_msg(self.last_reference_tf_msg.transform), dtype=np.float64)
-
-        # ref_z = self.last_reference_tf_msg.transform.translation.z
-        # ref_x = self.last_reference_tf_msg.transform.translation.x
-        # ref_y = self.last_reference_tf_msg.transform.translation.y
-
-        if time_elapsed > self.trajectory_start_time:
-            f = 0.2
-            ref_z = (2.0*np.sin(2*np.pi*time_elapsed*f) + 4.0)*1e-3
-            ref_z_dot = 2*np.pi*4.0*np.cos(2*np.pi*time_elapsed*f)*1e-3
-        else:
-            ref_z = self.INITIAL_DESIRED_POSITION[2]
-            ref_z_dot = 0.0
-
-        ref_x = 0.0
-        ref_y = 0.0
+        desired_quaternion = self.LAST_REFERENCE_TRAJECTORY_POINT[2]
+        ref_x, ref_y, ref_z = self.LAST_REFERENCE_TRAJECTORY_POINT[0]
+        ref_x_dot, ref_y_dot, ref_z_dot = self.LAST_REFERENCE_TRAJECTORY_POINT[1]
+        ref_omega = self.LAST_REFERENCE_TRAJECTORY_POINT[3] # Assumed to be in the body frame.
 
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
         R = geometry.rotation_matrix_from_quaternion(quaternion)
@@ -261,55 +248,72 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         x_y = np.array([[y_com, self.y_dot]]).T
 
         r_z = np.array([[ref_z, ref_z_dot]]).T
-        r_x = np.array([[ref_x, 0.0]]).T
-        r_y = np.array([[ref_y, 0.0]]).T
+        r_x = np.array([[ref_x, ref_x_dot]]).T
+        r_y = np.array([[ref_y, ref_y_dot]]).T
 
         z_error = r_z - x_z # This error is in meters. We need it to be big enough in mm.
         x_error = r_x - x_x
         y_error = r_y - x_y
 
         omega_tilde = self.E @ omega
+        ref_omega_tilde = self.E @ ref_omega
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
         reduced_attitude_error = self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
 
         # Calculating the integral action.
         if self.use_integrator:
-            if time_elapsed > self.integrator_start_time and time_elapsed < self.integrator_end_time:
+            if self.time_elapsed > self.integrator_start_time and self.time_elapsed < self.integrator_end_time:
                 self.disturbance_rpxyz[4] += self.Ki_lin * z_error[0, 0] * self.dt * self.__integrator_enable[4]
                 self.disturbance_rpxyz[3] += self.Ki_lin * y_error[0, 0] * self.dt * self.__integrator_enable[3]
                 self.disturbance_rpxyz[2] += self.Ki_lin * x_error[0, 0] * self.dt * self.__integrator_enable[2]
                 self.disturbance_rpxyz[0] += self.Ki_ang * reduced_attitude_error[0] * self.dt * self.__integrator_enable[0]
                 self.disturbance_rpxyz[1] += self.Ki_ang * reduced_attitude_error[1] * self.dt * self.__integrator_enable[1]
                 
-                if self.switch_off_integrator_on_convergence and not self.__integrator_converged:
+                if not self.__integrator_converged:
                     if abs(z_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[4]:
                         self.__convergence_time[4] += self.dt
                         if self.__convergence_time[4] > self.__integrator_convergence_check_time:
-                            rospy.logwarn_once("Z convergence achieved, stopping Z integrator.")
-                            self.__integrator_enable[4] = 0
+                            rospy.logwarn_once("Z convergence achieved.")
+                            self.__indiv_integrator_converge_state[4] = True
+                            if self.switch_off_integrator_on_convergence:
+                                rospy.logwarn_once("Stopping Z integrator.")
+                                self.__integrator_enable[4] = 0
                     if abs(x_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[2]:
                         self.__convergence_time[2] += self.dt
                         if self.__convergence_time[2] > self.__integrator_convergence_check_time:
-                            rospy.logwarn_once("X convergence achieved, stopping X integrator.")
-                            self.__integrator_enable[2] = 0
+                            self.__indiv_integrator_converge_state[2] = True
+                            rospy.logwarn_once("X convergence achieved.")
+                            if self.switch_off_integrator_on_convergence:
+                                rospy.logwarn_once("Stopping X integrator.")
+                                self.__integrator_enable[2] = 0
                     if abs(y_error[0, 0]) < self.__pos_error_tol and self.__integrator_enable[3]:
                         self.__convergence_time[3] += self.dt
                         if self.__convergence_time[3] > self.__integrator_convergence_check_time:
-                            rospy.logwarn_once("Y convergence achieved, stopping Y integrator.")
-                            self.__integrator_enable[3] = 0
+                            self.__indiv_integrator_converge_state[3] = True
+                            rospy.logwarn_once("Y convergence achieved.")
+                            if self.switch_off_integrator_on_convergence:
+                                rospy.logwarn_once("Stopping Y integrator.")
+                                self.__integrator_enable[3] = 0
                     if abs(reduced_attitude_error[0]) < self.__att_error_tol and self.__integrator_enable[0]:
                         self.__convergence_time[0] += self.dt
                         if self.__convergence_time[0] > self.__integrator_convergence_check_time:
-                            rospy.logwarn_once("Reduced attitude Nx convergence achieved, stopping RA integrator.")
-                            self.__integrator_enable[0] = 0
+                            self.__indiv_integrator_converge_state[0] = True
+                            rospy.logwarn_once("Reduced attitude Nx convergence achieved.")
+                            if self.switch_off_integrator_on_convergence:
+                                rospy.logwarn_once("Stopping RA x integrator.")
+                                self.__integrator_enable[0] = 0
                     if abs(reduced_attitude_error[1]) < self.__att_error_tol and self.__integrator_enable[1]:
                         self.__convergence_time[1] += self.dt
                         if self.__convergence_time[1] > self.__integrator_convergence_check_time:
-                            rospy.logwarn_once("Reduced attitude Ny convergence achieved, stopping RA integrator.")
-                            self.__integrator_enable[1] = 0
+                            self.__indiv_integrator_converge_state[1] = True
+                            rospy.logwarn_once("Reduced attitude Ny convergence achieved.")
+                            if self.switch_off_integrator_on_convergence:
+                                rospy.logwarn_once("Stopping RA y integrator.")
+                                self.__integrator_enable[1] = 0
 
-                    if np.sum(self.__integrator_enable) == 0:
+                    if np.all(self.__indiv_integrator_converge_state):
                         self.__integrator_converged = True
+                        self.pause_trajectory_tracking = False
                         rospy.logwarn_once("All convergence achieved.")
 
         u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] # Gravity compensation
@@ -320,7 +324,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         F_x = u_x[0, 0]
         F_y = u_y[0, 0]
         
-        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
+        u_RA = self.K_ra_d @ (ref_omega_tilde - omega_tilde) + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
         # Local frame torque allocation
         Tau_x = u_RA[0]*self.Ixx
         Tau_y = u_RA[1]*self.Iyy

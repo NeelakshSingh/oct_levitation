@@ -3,13 +3,14 @@ import rospy
 import oct_levitation.mechanical as mechanical
 import oct_levitation.geometry_jit as geometry
 import oct_levitation.numerical as numerical
+import oct_levitation.trajectories as trajectories
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
 import tf2_ros
 import numpy as np
 import time
 import sys
 
-from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3, Pose, Twist
+from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3, Pose, Twist, TwistStamped
 from oct_levitation.msg import RigidBodyStateEstimate
 from tnb_mns_driver.msg import DesCurrentsReg
 from control_utils.msg import VectorStamped
@@ -117,11 +118,28 @@ class ControlSessionNodeBase:
         self.computation_time_sample = 0
         self.current_computation_time = 0
 
-        self.tracking_poses_on = rospy.get_param("oct_levitation/pose_tracking")
-        self.LAST_PROFILE_TIME = rospy.Time(0)
+        # self.LAST_PROFILE_TIME = rospy.Time(0) # Uncomment for profiling the code
 
         self.INTEGRATOR_PARAMS = rospy.get_param("oct_levitation/integrator_params")
         self.TRAJECTORY_PARAMS = rospy.get_param("oct_levitation/trajectory_params")
+        self.enable_trajectory_tracking = self.TRAJECTORY_PARAMS["enable_tracking"]
+        self.pause_trajectory_tracking = False
+        self.traj_params_start_time = self.TRAJECTORY_PARAMS["start_time"]
+        self.traj_params_end_time = self.TRAJECTORY_PARAMS["end_time"]
+        self.__TRAJ_FUNC = trajectories.REGISTERED_TRAJECTORIES[self.TRAJECTORY_PARAMS["trajectory_name"]]
+
+        if self.enable_trajectory_tracking:
+            # Will publish the trajectory in the world frame
+            self.reference_trajectory_pub = rospy.Publisher("control_session/reference_trajectory", TransformStamped, queue_size=10)
+            self.__reference_trajectory_msg = TransformStamped()
+            self.__reference_trajectory_msg.header.frame_id = self.world_frame
+            self.__reference_trajectory_msg.child_frame_id = self.rigid_body_dipole.pose_frame
+            self.reference_twist_pub = rospy.Publisher("control_session/reference_twist", TwistStamped, queue_size=10)
+            self.__reference_twist_msg = TwistStamped()
+            self.__reference_twist_msg.header.frame_id = self.rigid_body_dipole.pose_frame
+        
+        self.time_elapsed = None
+        self.experiment_start_time = None
 
         ######## POST INIT CALL ########
         self.post_init()
@@ -137,16 +155,11 @@ class ControlSessionNodeBase:
         # and important subscribers.
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
         self.state_est_sub_topic = self.tf_sub_topic + "/state_estimate"
-        self.tf_reference_sub_topic = self.tf_sub_topic + "_reference"        
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher = rospy.Publisher(self.rigid_body_dipole.com_wrench_topic,
                                                         WrenchStamped,
                                                         queue_size=1)
-        
-        if self.publish_desired_dipole_wrenches:
-            self.dipole_wrench_publishers = [rospy.Publisher(topic_name, WrenchStamped, queue_size= 1)
-                                             for topic_name in self.rigid_body_dipole.dipole_wrench_topic_list]
         
         ######## HARDWARE ACTIVATION START ########
         # if in simulation mode, override the hardware connected flag
@@ -175,15 +188,13 @@ class ControlSessionNodeBase:
                                                       self.state_est_sub_callback, queue_size=1)
         
         self.tf_reference_sub = None
-        self.last_reference_tf_msg = TransformStamped() # Empty message with zeros
         # Type casting to float to make sure JIT functions work with initial values.
         self.INITIAL_DESIRED_POSITION = np.asarray(self.INITIAL_DESIRED_POSITION, dtype=np.float64)
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.asarray(self.INITIAL_DESIRED_ORIENTATION_EXYZ, dtype=np.float64)
-        self.last_reference_tf_msg.transform.translation = Vector3(*self.INITIAL_DESIRED_POSITION)
-        self.last_reference_tf_msg.transform.rotation = Quaternion(*geometry.quaternion_from_euler_xyz(self.INITIAL_DESIRED_ORIENTATION_EXYZ))
-        if self.tracking_poses_on:
-            self.tf_reference_sub = rospy.Subscriber(self.tf_reference_sub_topic, TransformStamped,
-                                                     self.tf_reference_sub_callback, queue_size=1)
+        self.LAST_REFERENCE_TRAJECTORY_POINT = (self.INITIAL_DESIRED_POSITION,
+                                                np.zeros(3),
+                                                geometry.quaternion_from_euler_xyz(self.INITIAL_DESIRED_ORIENTATION_EXYZ),
+                                                np.zeros(3))
         
         self.control_gain_publisher.publish(self.control_gains_message)
 
@@ -342,9 +353,6 @@ class ControlSessionNodeBase:
             1. self.com_wrench_msg : WrenchStamped (if publish_desired_com_wrenches is True)
         """
         raise NotImplementedError("Control logic must be implemented")
-    
-    def tf_reference_sub_callback(self, tf_ref_msg: TransformStamped):
-        self.last_reference_tf_msg = tf_ref_msg
 
     def publish_topics(self):
         # Publishing all the mandatory messages. They are all
@@ -361,6 +369,16 @@ class ControlSessionNodeBase:
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher.publish(self.com_wrench_msg)
+        
+        if self.enable_trajectory_tracking:
+            self.__reference_trajectory_msg.header.stamp = rospy.Time.now()
+            self.__reference_trajectory_msg.transform.translation = Vector3(*self.LAST_REFERENCE_TRAJECTORY_POINT[0])
+            self.__reference_trajectory_msg.transform.rotation = Quaternion(*self.LAST_REFERENCE_TRAJECTORY_POINT[2])
+            self.__reference_twist_msg.header.stamp = rospy.Time.now()
+            self.__reference_twist_msg.twist.linear = Vector3(*self.LAST_REFERENCE_TRAJECTORY_POINT[1])
+            self.__reference_twist_msg.twist.angular = Vector3(*self.LAST_REFERENCE_TRAJECTORY_POINT[3])
+            self.reference_trajectory_pub.publish(self.__reference_trajectory_msg)
+            self.reference_twist_pub.publish(self.__reference_twist_msg)
     
     def check_shutdown_rt(self):
         """
@@ -382,6 +400,26 @@ class ControlSessionNodeBase:
             sys.exit(0)
             return
         
+    def update_time(self):
+        if self.experiment_start_time is None:
+            self.experiment_start_time = rospy.Time.now().to_sec()
+        self.time_elapsed = rospy.Time.now().to_sec() - self.experiment_start_time
+
+    def update_trajectory(self):
+        if self.enable_trajectory_tracking:
+            if not self.pause_trajectory_tracking and \
+              self.time_elapsed >= self.traj_params_start_time and \
+              self.time_elapsed <= self.traj_params_end_time:
+                t = self.time_elapsed - self.traj_params_start_time
+                self.LAST_REFERENCE_TRAJECTORY_POINT = self.__TRAJ_FUNC(t)
+            else:
+                t = 0
+                position, _, quaternion, _ = self.__TRAJ_FUNC(t) # Always start at the initial point of the trajectory
+                self.LAST_REFERENCE_TRAJECTORY_POINT = (position, 
+                                                        np.zeros(3),
+                                                        quaternion,
+                                                        np.zeros(3))
+        
     def tfsub_callback(self, tf_msg: TransformStamped):
         """
         Used when the state estimator is not used. Direct vicon feedback is used.
@@ -395,6 +433,8 @@ class ControlSessionNodeBase:
         #     self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
         self.check_shutdown_rt()
+        self.update_time()
+        self.update_trajectory()
         coeff = 1
         if self.__SOFT_START:
             coeff = self.soft_starter(1/self.CONTROL_RATE)
@@ -428,6 +468,8 @@ class ControlSessionNodeBase:
         #     self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
         self.check_shutdown_rt()
+        self.update_time()
+        self.update_trajectory()
         coeff = 1
         if self.__SOFT_START:
             coeff = self.soft_starter(1/self.CONTROL_RATE)

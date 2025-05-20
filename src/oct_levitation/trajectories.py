@@ -18,9 +18,17 @@ VelocityArray1D = np_t.NDArray[np.float64]
 AngularVelocityArray1D = np_t.NDArray[np.float64]
 RPYRatesArray1D = np_t.NDArray[np.float64]
 
-TrajectoryFunction = Callable[[TimeFloat, Any], Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]]
+TrajectoryPoint = Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]
+TrajectoryFunction = Callable[[TimeFloat, Any], TrajectoryPoint]
 
 REGISTERED_TRAJECTORIES : Dict[str, TrajectoryFunction] = {}
+
+"""
+Import notes and conventions:
+-> All finally registered trajectory functions should preferably just take time as a single parameter. This will keep things easier.
+-> All the trajectories should preferably be defined in the inertial frame, but the angular velocities description can be in the body frame and may even be rotation prameter rates.
+-> All the trajectory functions should return the pose and the desired twist of the object for a complete description.
+"""
 
 def register_trajectory(name: str, trajectory_func: TrajectoryFunction) -> None:
     """
@@ -99,7 +107,7 @@ def sine_z_trajectory_quaternion(t: float, amplitude: float, frequency: float, c
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 sine_z_trajectory_quaternion(0.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("sine_z_trajectory_quaternion_a4c4f12", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=1.0, center=4.0e-3))
+register_trajectory("sine_z_trajectory_quaternion_a4c4f0.5", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=1.0, center=4.0e-3))
 
 @numba.njit(cache=True)
 def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float, b_hz: float, delta: float,
