@@ -1559,7 +1559,7 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
     reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Convert reference quaternions to Euler angles using `euler_xyz_from_quaternion`
-    reference_eulers = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
+    reference_eulers = np.array([geometry_jit.euler_xyz_from_quaternion(q) for q in reference_orientations])
 
     # Create figure and 3D axis
     fig = plt.figure(figsize=(12, 8))
@@ -1589,13 +1589,13 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
 
     # Add reference pose frames (non-constant)
     for i in range(0, len(time), frame_interval):  # plot frames every 10% of time
-        reference_T_0f = geometry.transformation_matrix_from_euler_xyz(reference_eulers[i], reference_positions[i])
+        reference_T_0f = geometry_jit.transformation_matrix_from_euler_xyz(reference_eulers[i], reference_positions[i])
         plot_coordinate_frame(ax, reference_T_0f, size=frame_size, linewidth=1.5, name='Reference Pose', xscale=1, yscale=1, zscale=1,
                               x_style='r--', y_style='g--', z_style='b--')
 
     # Add coordinate frames at selected positions in the actual path
     for i in range(0, len(time), frame_interval):  # plot frames every 10% of time
-        actual_T_0f = geometry.transformation_matrix_from_quaternion(actual_poses.iloc[i, 4:8], actual_poses.iloc[i, 1:4])
+        actual_T_0f = geometry_jit.transformation_matrix_from_quaternion(actual_poses.iloc[i, 4:8].to_numpy(), actual_poses.iloc[i, 1:4].to_numpy())
         plot_coordinate_frame(ax, actual_T_0f, size=frame_size, linewidth=1.5, name=None)
 
     ax.set_xlabel('X (mm)')

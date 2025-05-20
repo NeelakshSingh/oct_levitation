@@ -209,7 +209,6 @@ catkin_install_python(PROGRAMS
   scripts/five_dof_controllers/xyz_reduced_attitude_single_dipole.py
 
   # Utilities
-  scripts/utils/dynamics_simulator.py
   scripts/utils/joy_setpoint.py
   scripts/utils/fft_noise_analysis.py
   scripts/utils/euler_pose_converter.py

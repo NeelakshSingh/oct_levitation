@@ -21,6 +21,8 @@ def register_rigid_body(rigid_body: MultiDipoleRigidBody):
     """
     Register a rigid body in the global dictionary.
     """
+    if rigid_body.name in REGISTERED_BODIES:
+        raise ValueError(f"Rigid body '{rigid_body.name}' is already registered.")
     REGISTERED_BODIES[rigid_body.name] = rigid_body
 
 ##############################################

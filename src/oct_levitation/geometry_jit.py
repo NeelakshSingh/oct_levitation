@@ -410,8 +410,7 @@ def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
             [  np.sin(x) * np.sin(z) - np.cos(x) * np.sin(y) * np.cos(z),  np.sin(x) * np.cos(z) + np.cos(x) * np.sin(y) * np.sin(z),   np.cos(x) * np.cos(y)  ]
         ])
 
-# Force compilation
-rotation_matrix_from_euler_xyz(np.zeros(3))
+rotation_matrix_from_euler_xyz(np.zeros(3)) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
 def transformation_matrix_from_euler_xyz(euler: np.ndarray, p: np.ndarray) -> np.ndarray:
@@ -677,9 +676,8 @@ def inertial_reduced_attitude_from_quaternion(q: np.ndarray, b: np.ndarray) -> n
     This function computes the inertial reduced attitude representation from the current pose
     quaternion for a body fixed vector b expressed in the body frame.
     """
-    R = rotation_matrix_from_quaternion(q)
     b = b/np.linalg.norm(b, 2) # Reduced attitude should always be a unit vector representing a direction
-    Lambda = R @ b
+    Lambda = rotate_vector_from_quaternion(q, b)
     return Lambda
 
 inertial_reduced_attitude_from_quaternion(IDENTITY_QUATERNION, np.array([0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import
@@ -706,6 +704,26 @@ def inertial_reduced_attitude_from_rotation_matrix(R: np.ndarray, b: np.ndarray)
     return Lambda
 
 inertial_reduced_attitude_from_rotation_matrix(np.eye(3), np.array([0.0, 0.0, 1.0]) * 0.45) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def inertial_reduced_attitude_from_euler_xyz(euler: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    This function computes the inertial reduced attitude representation from the current pose
+    euler angles for a body fixed vector b expressed in the body frame.
+
+    Parameters
+    ----------
+        euler: 3x1 array in the form [roll, pitch, yaw]
+        b: 3x1 array representing the body fixed vector to represent the reduced attitude.
+
+    Returns
+    -------
+        Lambda: 3x1 array representing the inertial reduced attitude.
+    """
+    R = rotation_matrix_from_euler_xyz(euler)
+    return inertial_reduced_attitude_from_rotation_matrix(R, b)
+
+inertial_reduced_attitude_from_euler_xyz(np.zeros(3), np.array([0.0, 0.0, 1.0])) # Force compilation for expected argument type signature in import
 
 #############################################
 # Magnetic Interaction Matrix Calculations
