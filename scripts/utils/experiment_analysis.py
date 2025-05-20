@@ -214,7 +214,8 @@ if not sim:
     )
 
 pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
-reference_pose_topic = pose_topic + "_reference"
+# reference_pose_topic = pose_topic + "_reference"
+reference_pose_topic = topic_name_to_bagpyext_name("/control_session/reference_pose")
 com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
 
 calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")

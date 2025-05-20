@@ -130,7 +130,7 @@ class ControlSessionNodeBase:
 
         if self.enable_trajectory_tracking:
             # Will publish the trajectory in the world frame
-            self.reference_trajectory_pub = rospy.Publisher("control_session/reference_trajectory", TransformStamped, queue_size=10)
+            self.reference_trajectory_pub = rospy.Publisher("control_session/reference_pose", TransformStamped, queue_size=10)
             self.__reference_trajectory_msg = TransformStamped()
             self.__reference_trajectory_msg.header.frame_id = self.world_frame
             self.__reference_trajectory_msg.child_frame_id = self.rigid_body_dipole.pose_frame
@@ -240,9 +240,9 @@ class ControlSessionNodeBase:
         w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
         """
         dipole = self.rigid_body_dipole.dipole_list[0]
-        # A = self.mpem_model.getActuationMatrix(position + np.array([0.0, 0.0, 2.415e-3]))
+        A = self.mpem_model.getActuationMatrix(position + np.array([0.0, 0.0, 2.415e-3]))
         # A = self.mpem_model.getActuationMatrix(position + np.array([0.0, 0.0, 1.715e-3]))
-        A = self.mpem_model.getActuationMatrix(position)
+        # A = self.mpem_model.getActuationMatrix(position)
         A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
         M = geometry.magnetic_interaction_force_local_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
         JMA = M @ A

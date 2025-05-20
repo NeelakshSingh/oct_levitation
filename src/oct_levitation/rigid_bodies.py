@@ -278,6 +278,38 @@ Onyx80x15DiscCenterDiscDipoleI40_2RingMagnets = MultiDipoleRigidBody(
 
 register_rigid_body(Onyx80x15DiscCenterDiscDipoleI40_2RingMagnets)
 
+Onyx80x15DiscCenterDiscDipoleI40_2N52Discs = MultiDipoleRigidBody(
+    name="onyx_disc_80x15_I40_2N52_discs",
+    mass_properties = MassProperties(3.6900000e-02,
+                                     np.array([[1.50992900e-05, -1.45310000e-07, -6.66800000e-08],
+                                               [-1.45310000e-07, 1.34681400e-05, -1.11140000e-07],
+                                               [-6.66800000e-08, -1.11140000e-07, 2.42827100e-05]]),
+                                     np.array([-0.00012000, -0.00021000, 0.00027000]),
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=1.0744494403816636e-05,
+                                         Py=1.0744494403816636e-05,
+                                         Pz=2.42815800e-05
+                                     )),
+    pose_frame = "vicon/onyx_disc_80x15/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/onyx_disc_80x15/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+            ]
+        )
+    ]
+)
+
+register_rigid_body(Onyx80x15DiscCenterDiscDipoleI40_2N52Discs)
+
 Onyx80x15DiscCenterDiscDipoleI40_4RingMagnets = MultiDipoleRigidBody(
     name="onyx_disc_80x15_I40_4N42",
     mass_properties = MassProperties(4.17e-2,

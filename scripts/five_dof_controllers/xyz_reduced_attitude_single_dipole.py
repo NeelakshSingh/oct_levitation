@@ -23,7 +23,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 0.0e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0e-3]) # for horizontal attachment
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -85,8 +85,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
         self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
-        self.k_ra_p = 150
-        self.K_ra_d = np.diag([1.0, 1.0])*70
+        self.k_ra_p = 1250
+        self.K_ra_d = np.diag([1.0, 1.0])*150
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
@@ -179,7 +179,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.set_path_metadata(__file__)
 
         self.E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
-        self.pause_trajectory_tracking = True
+        self.pause_trajectory_tracking = False
+        if self.use_integrator: self.pause_trajectory_tracking = True
         
     def callback_control_logic(self, 
                                position : np.ndarray, 
