@@ -12,7 +12,6 @@ oct_levitation:
     switch_off_on_convergence: false # Switch off integrator when the system converges
     check_convergence: false # Check convergence
     integrator_enable_rpxyz: [1, 1, 1, 1, 1]
-    setpoint_difference_version: false
     convergence_check_time: 2.0 # Stay at 1 second of convergence before switching off the integrator
     position_error_tol: 0.0002
     reduced_attitude_error_tol: 0.005

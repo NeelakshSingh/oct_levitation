@@ -81,6 +81,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         # Qx = np.diag([30.0, 10.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         # Qy = np.diag([30.0, 10.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+
+        #### Jasan Levitator V1 2N52
+        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         Rz = 0.1
         Ry = 0.1
@@ -94,7 +98,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.K_y = np.asarray(Tzu @ Ky_norm @ np.linalg.inv(Tzx))
         self.K_x = np.asarray(Tzu @ Kx_norm @ np.linalg.inv(Tzx))
 
-        self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
 
         ### Z CONTROL DLQR DESIGN ###
         #############################
@@ -116,6 +119,11 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
+        # # scale = 1.50
+        # self.k_ra_p = 350 * scale
+        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
+
+        #### Jasan Levitator V12 N52  Tuning.
         scale = 1.0
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
@@ -126,11 +134,11 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ##############################
         ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
 
-        # self.Ki_lin = 1.0
-        # self.Ki_ang = 60.0
+        self.Ki_lin = 1.0
+        self.Ki_ang = 60.0
 
-        self.Ki_lin = 5.0
-        self.Ki_ang = 350.0
+        # self.Ki_lin = 5.0
+        # self.Ki_ang = 350.0
 
         integrator_params = self.INTEGRATOR_PARAMS
 
@@ -147,7 +155,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.__integrator_check_convergence = integrator_params['check_convergence']
         self.__pos_error_tol = integrator_params['position_error_tol']
         self.__att_error_tol = integrator_params['reduced_attitude_error_tol']
-        self.__integrator_setpoint_difference_version = integrator_params['setpoint_difference_version']
         self.disturbance_rpxyz = np.zeros(5)
 
         self.trajectory_start_time = self.TRAJECTORY_PARAMS['start_time']
@@ -355,26 +362,10 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                         self.pause_trajectory_tracking = False
                         rospy.logwarn_once("All convergence achieved.")
 
-        if not self.__integrator_setpoint_difference_version:
-            u_x = self.K_x @ x_error + self.disturbance_rpxyz[2]
-            u_y = self.K_y @ y_error + self.disturbance_rpxyz[3]
-            u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] + self.f_z_ff # Gravity compensation
-            u_RA = self.K_ra_d @ (ref_omega_tilde - omega_tilde) + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
-        
-        else:
-            r_x_tilde = np.array([[self.disturbance_rpxyz[2], 0]]).T
-            r_y_tilde = np.array([[self.disturbance_rpxyz[3], 0]]).T
-            r_z_tilde = np.array([[self.disturbance_rpxyz[4], 0]]).T
-
-            # z_error_tilde = r_z_tilde - x_z
-            # x_error_tilde = r_x_tilde - x_x
-            # y_error_tilde = r_y_tilde - x_y
-
-            u_z = -self.K_z @ x_z + self.mass*common.Constants.g + self.f_z_ff + self.disturbance_rpxyz[4] # Gravity compensation
-            u_x = -self.K_x @ x_x + self.disturbance_rpxyz[2]
-            u_y = -self.K_y @ x_y + self.disturbance_rpxyz[3]
-            ra_setpoint_error = self.E @ R.T @ geometry.numba_cross(Lambda, np.array([0.0, 0.0, 1.0]))
-            u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * ra_setpoint_error + self.disturbance_rpxyz[:2]
+        u_x = self.K_x @ x_error + self.disturbance_rpxyz[2]
+        u_y = self.K_y @ y_error + self.disturbance_rpxyz[3]
+        u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] + self.f_z_ff # Gravity compensation
+        u_RA = self.K_ra_d @ (ref_omega_tilde - omega_tilde) + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
 
         F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]
