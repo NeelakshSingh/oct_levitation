@@ -113,16 +113,18 @@ register_trajectory("sine_z_trajectory_quaternion_a10c20f0.5", partial(sine_z_tr
 
 @numba.njit(cache=True)
 def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float, b_hz: float, delta: float,
-                                       z_ref: float = 0.0) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
+                                       center: np.ndarray = np.zeros(3)) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
     x = A * np.sin(2 * np.pi * a_hz * t + delta)
     y = B * np.sin(2 * np.pi * b_hz * t)
-    z = z_ref
     x_dot = 2 * np.pi * a_hz * A * np.cos(2 * np.pi * a_hz * t + delta)
     y_dot = 2 * np.pi * b_hz * B * np.cos(2 * np.pi * b_hz * t)
     z_dot = 0.0
-    xyz = np.array([x, y, z])
+    xyz = np.array([x, y, 0.0]) + center
     velocity = np.array([x_dot, y_dot, z_dot])
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 xy_lissajous_trajectory_quaternion(0.0, 1.0e-3, 1.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("xy_circle_quaternion_radius5_fhz0.5", partial(xy_lissajous_trajectory_quaternion, A=5.0e-3, a_hz=0.5, B=5.0e-3, b_hz=0.5, delta=np.pi/2))
+register_trajectory("xy_circle_quaternion_r5_fhz0.5_cz4", partial(xy_lissajous_trajectory_quaternion, A=5.0e-3, a_hz=0.5, B=5.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 4.0e-3])))
+register_trajectory("xy_circle_quaternion_r10_fhz0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
+register_trajectory("xy_circle_quaternion_r10_fhz1.0_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=1.0, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
+register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.5_fy1_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))

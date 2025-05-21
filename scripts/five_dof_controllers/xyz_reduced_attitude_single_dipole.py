@@ -110,7 +110,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_ra_d = np.diag([1.0, 1.0])*100 * scale
 
         #### Bronzefill 27gms with integrator compensation.
-        scale = 1.65
+        # scale = 1.65 # Almost starts noise amplification at this value.
+        scale = 1.2
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
