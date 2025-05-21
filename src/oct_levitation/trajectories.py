@@ -89,7 +89,7 @@ def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float =
     plotting.DISABLE_PLT_SHOW = True
     plotting.plot_poses_variable_reference(actual_pose_df, ref_pose_df)
     if plot_3d_path:
-        plotting.plot_3d_poses_with_arrows_variable_reference(actual_pose_df, ref_pose_df, frame_size=1e-4)
+        plotting.plot_3d_poses_with_arrows_constant_reference(ref_pose_df, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), frame_size=0.5)
     plt.show()
 
 #################################
@@ -107,7 +107,9 @@ def sine_z_trajectory_quaternion(t: float, amplitude: float, frequency: float, c
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 sine_z_trajectory_quaternion(0.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("sine_z_trajectory_quaternion_a4c4f0.5", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=1.0, center=4.0e-3))
+register_trajectory("sine_z_trajectory_quaternion_a4c4f0.5", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=0.5, center=4.0e-3))
+register_trajectory("sine_z_trajectory_quaternion_a10c10f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=10.0e-3))
+register_trajectory("sine_z_trajectory_quaternion_a10c20f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=20.0e-3))
 
 @numba.njit(cache=True)
 def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float, b_hz: float, delta: float,
@@ -123,4 +125,4 @@ def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 xy_lissajous_trajectory_quaternion(0.0, 1.0e-3, 1.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("xy_circle_quaternion_radius10_fhz1", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=1.0, B=10.0e-3, b_hz=1.0, delta=0.0))
+register_trajectory("xy_circle_quaternion_radius5_fhz0.5", partial(xy_lissajous_trajectory_quaternion, A=5.0e-3, a_hz=0.5, B=5.0e-3, b_hz=0.5, delta=np.pi/2))

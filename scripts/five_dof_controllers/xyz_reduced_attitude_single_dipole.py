@@ -67,8 +67,14 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
-        Qz = np.diag([5.0, 5.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        Qx = np.diag([5.0, 5.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        #### Bronzefill 27gms without integrator compensation.
+        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+
+        #### Bronzefill 27gms with integrator compensation.
+        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         Qy = np.diag([5.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
         Rz = 0.1
@@ -83,6 +89,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.K_y = np.asarray(Tzu @ Ky_norm @ np.linalg.inv(Tzx))
         self.K_x = np.asarray(Tzu @ Kx_norm @ np.linalg.inv(Tzx))
 
+        self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+
         ### Z CONTROL DLQR DESIGN ###
         #############################
 
@@ -91,11 +99,20 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
         self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
+
+        #### I40 Onyx 80x15 2 N52.
         # self.k_ra_p = 1600 # I40 Onyx 80x15 2 N52. Tunings for that object.
         # self.K_ra_d = np.diag([1.0, 1.0])*120 # I40 Onyx 80x15 2 N52. Tunings for that object.
-        scale = 1.4
-        self.k_ra_p = 650 * scale
-        self.K_ra_d = np.diag([1.0, 1.0])*100 * scale
+
+        #### Bronzefill 27gms without integrator compensation.
+        # scale = 1.0
+        # self.k_ra_p = 650 * scale
+        # self.K_ra_d = np.diag([1.0, 1.0])*100 * scale
+
+        #### Bronzefill 27gms with integrator compensation.
+        scale = 1.65
+        self.k_ra_p = 350 * scale
+        self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
@@ -293,7 +310,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                         self.__convergence_time[2] += self.dt
                         if self.__convergence_time[2] > self.__integrator_convergence_check_time:
                             self.__indiv_integrator_converge_state[2] = True
-                            rospy.logwarn_once("X convergence achieved.")
+                            rospy.logwarn_once(f"X convergence achieved. Compensation force: {self.disturbance_rpxyz[2]}")
                             if self.switch_off_integrator_on_convergence:
                                 rospy.logwarn_once("Stopping X integrator.")
                                 self.__integrator_enable[2] = 0
@@ -301,7 +318,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                         self.__convergence_time[3] += self.dt
                         if self.__convergence_time[3] > self.__integrator_convergence_check_time:
                             self.__indiv_integrator_converge_state[3] = True
-                            rospy.logwarn_once("Y convergence achieved.")
+                            rospy.logwarn_once(f"Y convergence achieved. Compensation force: {self.disturbance_rpxyz[3]}")
                             if self.switch_off_integrator_on_convergence:
                                 rospy.logwarn_once("Stopping Y integrator.")
                                 self.__integrator_enable[3] = 0
@@ -309,7 +326,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                         self.__convergence_time[0] += self.dt
                         if self.__convergence_time[0] > self.__integrator_convergence_check_time:
                             self.__indiv_integrator_converge_state[0] = True
-                            rospy.logwarn_once("Reduced attitude Nx convergence achieved.")
+                            rospy.logwarn_once(f"Reduced attitude Nx convergence achieved. Compensation torque: {self.disturbance_rpxyz[0]}")
                             if self.switch_off_integrator_on_convergence:
                                 rospy.logwarn_once("Stopping RA x integrator.")
                                 self.__integrator_enable[0] = 0
@@ -317,7 +334,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                         self.__convergence_time[1] += self.dt
                         if self.__convergence_time[1] > self.__integrator_convergence_check_time:
                             self.__indiv_integrator_converge_state[1] = True
-                            rospy.logwarn_once("Reduced attitude Ny convergence achieved.")
+                            rospy.logwarn_once(f"Reduced attitude Ny convergence achieved. Compensation torque: {self.disturbance_rpxyz[1]}")
                             if self.switch_off_integrator_on_convergence:
                                 rospy.logwarn_once("Stopping RA y integrator.")
                                 self.__integrator_enable[1] = 0
@@ -327,7 +344,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
                         self.pause_trajectory_tracking = False
                         rospy.logwarn_once("All convergence achieved.")
 
-        u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] # Gravity compensation
+        u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] + self.f_z_ff # Gravity compensation
         u_x = self.K_x @ x_error + self.disturbance_rpxyz[3]
         u_y = self.K_y @ y_error + self.disturbance_rpxyz[2]
 

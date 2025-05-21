@@ -124,6 +124,7 @@ class ControlSessionNodeBase:
         self.TRAJECTORY_PARAMS = rospy.get_param("oct_levitation/trajectory_params")
         self.enable_trajectory_tracking = self.TRAJECTORY_PARAMS["enable_tracking"]
         self.pause_trajectory_tracking = False
+        self.trajectory_pause_time = 0.0
         self.traj_params_start_time = self.TRAJECTORY_PARAMS["start_time"]
         self.traj_params_end_time = self.TRAJECTORY_PARAMS["end_time"]
         self.__TRAJ_FUNC = trajectories.REGISTERED_TRAJECTORIES[self.TRAJECTORY_PARAMS["trajectory_name"]]
@@ -410,9 +411,13 @@ class ControlSessionNodeBase:
             if not self.pause_trajectory_tracking and \
               self.time_elapsed >= self.traj_params_start_time and \
               self.time_elapsed <= self.traj_params_end_time:
-                t = self.time_elapsed - self.traj_params_start_time
+                t = self.time_elapsed - self.traj_params_start_time - self.trajectory_pause_time
                 self.LAST_REFERENCE_TRAJECTORY_POINT = self.__TRAJ_FUNC(t)
             else:
+                if self.pause_trajectory_tracking:
+                    self.trajectory_pause_time = self.time_elapsed
+                    self.traj_params_end_time += self.time_elapsed # Simple addition works because this pause is just a simple one time trigger
+                    self.traj_params_start_time += self.time_elapsed
                 t = 0
                 position, _, quaternion, _ = self.__TRAJ_FUNC(t) # Always start at the initial point of the trajectory
                 self.LAST_REFERENCE_TRAJECTORY_POINT = (position, 
