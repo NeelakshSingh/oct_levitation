@@ -9,8 +9,10 @@ oct_levitation:
   
   integrator_params:
     use_integrator: false # Use integrator for some time
-    switch_off_on_convergence: true # Switch off integrator when the system converges
-    integrator_enable_rpxyz: [0, 0, 0, 0, 1]
+    switch_off_on_convergence: false # Switch off integrator when the system converges
+    check_convergence: false # Check convergence
+    integrator_enable_rpxyz: [1, 1, 1, 1, 1]
+    setpoint_difference_version: false
     convergence_check_time: 2.0 # Stay at 1 second of convergence before switching off the integrator
     position_error_tol: 0.0002
     reduced_attitude_error_tol: 0.005
@@ -21,10 +23,10 @@ oct_levitation:
   max_angular_velocity: 3.490658503988659
 
   trajectory_params:
-    enable_tracking: true # Enabling tracking will also add a publisher to publish the reference pose
+    enable_tracking: false # Enabling tracking will also add a publisher to publish the reference pose
     start_time: 10.0
     end_time: 1000.0
-    trajectory_name: "xy_infty_lissajous_quaternion_amp10_fx0.5_fy1_cz10" # Should be a registered trajectory under the framework described in trajectories.py
+    trajectory_name: "xy_infty_lissajous_quaternion_amp10_fx0.25_fy0.5_cz10" # Should be a registered trajectory under the framework described in trajectories.py
 
   cpp_impl:
     omega_pd: 0.5
