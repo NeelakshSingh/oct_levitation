@@ -23,7 +23,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([5.0e-3, 5.0e-3, 10.0e-3]) # for horizontal attachment
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0])*1.0e-3
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
@@ -62,9 +62,15 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                 method='zoh')
         
-        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        ## Onyx 80x15 I40 2N52 Object's Tuning
+        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+
+        Qz = np.diag([5.0, 5.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        Qx = np.diag([5.0, 5.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        Qy = np.diag([5.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+
         Rz = 0.1
         Ry = 0.1
         Rx = 0.1
@@ -85,8 +91,11 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         
         self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
         self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
-        self.k_ra_p = 1600
-        self.K_ra_d = np.diag([1.0, 1.0])*120
+        # self.k_ra_p = 1600 # I40 Onyx 80x15 2 N52. Tunings for that object.
+        # self.K_ra_d = np.diag([1.0, 1.0])*120 # I40 Onyx 80x15 2 N52. Tunings for that object.
+        scale = 1.4
+        self.k_ra_p = 650 * scale
+        self.K_ra_d = np.diag([1.0, 1.0])*100 * scale
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################

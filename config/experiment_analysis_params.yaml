@@ -37,9 +37,9 @@ experiment_analysis:
   enable_utility_plots: true
 
   const_pose_reference_mm_deg:
-    x: 5.0 # mm
-    y: 5.0 # mm
-    z: 10.0 # mm
+    x: 0.0 # mm
+    y: 0.0 # mm
+    z: 8.0 # mm
     roll: 0.0 # deg
     pitch: 0.0 # deg
     yaw: 0.0 # deg

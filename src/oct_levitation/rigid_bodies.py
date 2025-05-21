@@ -25,6 +25,15 @@ def register_rigid_body(rigid_body: MultiDipoleRigidBody):
         raise ValueError(f"Rigid body '{rigid_body.name}' is already registered.")
     REGISTERED_BODIES[rigid_body.name] = rigid_body
 
+def list_registered_bodies() -> List[str]:
+    """
+    List all registered rigid body names.
+    
+    Returns:
+        List[str]: A list of registered rigid body names.
+    """
+    return list(REGISTERED_BODIES.keys())
+
 ##############################################
 # MATERIALS #
 ##############################################
@@ -601,7 +610,7 @@ register_rigid_body(BronzefillRing23gm_1N52)
 
 BronzefillRing27gm_1N52 = MultiDipoleRigidBody(
     name="bronzefill_ring_27gms_1N52",
-    mass_properties = MassProperties(29.6e-3,
+    mass_properties = MassProperties(29.5e-3,
                                     np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
                                               [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
                                               [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
@@ -629,3 +638,35 @@ BronzefillRing27gm_1N52 = MultiDipoleRigidBody(
 )
 
 register_rigid_body(BronzefillRing27gm_1N52)
+
+BronzefillRing27gm_2N52 = MultiDipoleRigidBody(
+    name="bronzefill_ring_27gms_2N52",
+    mass_properties = MassProperties(32.4e-3,
+                                    np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
+                                              [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
+                                              [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
+                                    np.array([-0.00019000, -0.00015000, 0.00022000]), # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=6.211e-06,
+                                         Py=5.637e-06,
+                                         Pz=1.145e-05 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/bronzefill_ring_27gms_3_markers/Origin",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/bronzefill_ring_27gms_3_markers/Origin",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+            ]
+        )
+    ]
+)
+
+register_rigid_body(BronzefillRing27gm_2N52)
