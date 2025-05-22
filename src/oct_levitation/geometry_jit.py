@@ -476,10 +476,67 @@ def euler_xyz_rate_to_local_angular_velocity_map_matrix(euler: np.ndarray) -> np
         ])
 
 @numba.njit(cache=True)
-def local_angular_velocities_from_euler_xyz_rate(euler: np.ndarray, euler_rate: np.ndarray) -> np.ndarray:
-    return euler_xyz_rate_to_local_angular_velocity_map_matrix(euler) @ euler_rate
+def euler_xyz_rate_to_inertial_angular_velocity_map_matrix(euler: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        euler: 3x1 array in the form [roll, pitch, yaw]
+    
+    Returns
+    -------
+        Ei_exyz: 3x3 matrix that maps the body frame angular velocity to the Euler XYZ rates.
+    """
+    # If you are referring to the robot dynamics lecture notes, the expression there relates the
+    # world frame angular velocity, this map here is for the local frame angular velocity to the
+    # Euler XYZ rates.
+    x, y, _ = euler
+    return np.array([
+        [1, 0        , np.sin(y)             ],
+        [0, np.cos(x), -np.sin(x) * np.cos(y)],
+        [0, np.sin(x),  np.cos(x) * np.cos(y)]
+    ])
 
-local_angular_velocities_from_euler_xyz_rate(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+euler_xyz_rate_to_inertial_angular_velocity_map_matrix(np.zeros(3)) # Force compilation for expected type signature in import
+
+@numba.njit(cache = True)
+def inertial_angular_velocity_to_euler_xyz_rate_map_matrix(euler: np.ndarray) -> np.ndarray:
+    """
+    Parameters
+    ----------
+        euler: 3x1 array in the form [roll, pitch, yaw]
+    
+    Returns
+    -------
+        Ei_exyz_inv: 3x3 matrix that maps the Euler XYZ rates to the body frame angular velocity.
+    """
+    x, y, _ = euler
+    return np.array([
+        [1, np.sin(x) * np.tan(y) , -np.cos(x) * np.tan(y)],
+        [0, np.cos(x)             , np.sin(x)             ],
+        [0, -np.sin(x) / np.cos(y), np.cos(x) / np.cos(y) ]
+    ])
+
+euler_xyz_rate_to_inertial_angular_velocity_map_matrix(np.zeros(3)) # Force compilation for expected type signature in import
+
+@numba.njit(cache=True)
+def euler_xyz_rate_to_local_angular_velocity(euler_rate: np.ndarray, euler: np.ndarray) -> np.ndarray:
+    return euler_xyz_rate_to_local_angular_velocity_map_matrix(euler) @ euler_rate
+euler_xyz_rate_to_local_angular_velocity(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def local_angular_velocity_to_euler_xyz_rate(angular_velocity: np.ndarray, euler: np.ndarray) -> np.ndarray:
+    return local_angular_velocity_to_euler_xyz_rate_map_matrix(euler) @ angular_velocity
+local_angular_velocity_to_euler_xyz_rate(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def euler_xyz_rate_to_inertial_angular_velocity(euler_rate: np.ndarray, euler: np.ndarray) -> np.ndarray:
+    return euler_xyz_rate_to_inertial_angular_velocity_map_matrix(euler) @ euler_rate
+euler_xyz_rate_to_inertial_angular_velocity(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def inertial_angular_velocity_to_euler_xyz_rate(angular_velocity: np.ndarray, euler: np.ndarray) -> np.ndarray:
+    return inertial_angular_velocity_to_euler_xyz_rate_map_matrix(euler) @ angular_velocity
+inertial_angular_velocity_to_euler_xyz_rate(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
 def quaternion_from_rotation_matrix(R):
