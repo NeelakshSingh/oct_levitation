@@ -25,7 +25,7 @@ oct_levitation:
     enable_tracking: false # Enabling tracking will also add a publisher to publish the reference pose
     start_time: 10.0
     end_time: 1000.0
-    trajectory_name: "xy_infty_lissajous_quaternion_amp10_fx0.25_fy0.5_cz10" # Should be a registered trajectory under the framework described in trajectories.py
+    trajectory_name: "rp_circle_quaternion_rp45deg_fhz0.1_cz10" # Should be a registered trajectory under the framework described in trajectories.py
 
   cpp_impl:
     omega_pd: 0.5

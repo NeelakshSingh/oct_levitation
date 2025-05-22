@@ -673,7 +673,7 @@ register_rigid_body(BronzefillRing27gm_2N52)
 
 JasanLevitator_V1_2N52 = MultiDipoleRigidBody(
     name="jasan_levitator_v1_2N52",
-    mass_properties = MassProperties(32.4e-3,
+    mass_properties = MassProperties(33.9e-3,
                                     np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
                                               [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
                                               [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
@@ -695,6 +695,7 @@ JasanLevitator_V1_2N52 = MultiDipoleRigidBody(
             frame_name="vicon/levitator_jasan/Root",
             magnet_stack=[
                 (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
                 (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
             ]
         )

@@ -167,3 +167,4 @@ def rp_lissajous_trajectory_quaternion(t: float, r_ang_amp: float, r_hz: float, 
 rp_lissajous_trajectory_quaternion(0.0, 1.0, 1.0, 1.0, 1.0, 0.0) # Force compilation on import for expected type signature
 
 register_trajectory("rp_circle_quaternion_rp45deg_fhz0.5_cz10", partial(rp_lissajous_trajectory_quaternion, r_ang_amp=np.deg2rad(45.0), r_hz=0.5, p_ang_amp=np.deg2rad(45.0), p_hz=0.5, delta=np.pi/2, position=np.array([0.0, 0.0, 10.0e-3])))
+register_trajectory("rp_circle_quaternion_rp45deg_fhz0.1_cz10", partial(rp_lissajous_trajectory_quaternion, r_ang_amp=np.deg2rad(45.0), r_hz=0.1, p_ang_amp=np.deg2rad(45.0), p_hz=0.1, delta=np.pi/2, position=np.array([0.0, 0.0, 10.0e-3])))

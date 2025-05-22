@@ -24,7 +24,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
         self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0])*1.0e-3
-        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 45.0, 0.0]))
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
         self.dt = 1/self.control_rate
@@ -73,10 +73,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
         #### Bronzefill 27gms with integrator compensation.
-        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([22.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         # Qx = np.diag([30.0, 10.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
@@ -84,6 +83,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
 
         #### Jasan Levitator V1 2N52
+        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
         self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         Rz = 0.1
@@ -119,7 +121,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
-        # # scale = 1.50
+        # scale = 1.50
         # self.k_ra_p = 350 * scale
         # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
@@ -255,10 +257,12 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         desired_quaternion = self.LAST_REFERENCE_TRAJECTORY_POINT[2]
         ref_x, ref_y, ref_z = self.LAST_REFERENCE_TRAJECTORY_POINT[0]
         ref_x_dot, ref_y_dot, ref_z_dot = self.LAST_REFERENCE_TRAJECTORY_POINT[1]
-        ref_omega = self.LAST_REFERENCE_TRAJECTORY_POINT[3] # Assumed to be in the body frame.
+        ref_omega_inertial = self.LAST_REFERENCE_TRAJECTORY_POINT[3] # Assumed to be in the body frame.
 
         Lambda_d = geometry.inertial_reduced_attitude_from_quaternion(desired_quaternion, b=np.array([0.0, 0.0, 1.0]))
         R = geometry.rotation_matrix_from_quaternion(quaternion)
+
+        ref_omega_local = R @ ref_omega_inertial
 
         if linear_velocity is None or angular_velocity is None:
             if self.__first_reading:
@@ -302,7 +306,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         y_error = r_y - x_y
 
         omega_tilde = self.E @ omega
-        ref_omega_tilde = self.E @ ref_omega
+        ref_omega_tilde = self.E @ ref_omega_local
         Lambda = geometry.inertial_reduced_attitude_from_rotation_matrix(R, b=np.array([0.0, 0.0, 1.0]))
         reduced_attitude_error = self.E @ R.T @ geometry.numba_cross(Lambda, Lambda_d)
 
@@ -365,7 +369,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_x = self.K_x @ x_error + self.disturbance_rpxyz[2]
         u_y = self.K_y @ y_error + self.disturbance_rpxyz[3]
         u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] + self.f_z_ff # Gravity compensation
-        u_RA = self.K_ra_d @ (ref_omega_tilde - omega_tilde) + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
+        u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
+        # u_RA = self.K_ra_d @ (ref_omega_tilde - omega_tilde) + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
 
         F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]
