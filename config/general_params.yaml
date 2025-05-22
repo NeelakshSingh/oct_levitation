@@ -1,6 +1,6 @@
 oct_levitation:
-  # rigid_body: "bronzefill_ring_27gms_2N52"
-  rigid_body: "jasan_levitator_v1_2N52"
+  rigid_body: "bronzefill_ring_27gms_2N52"
+  # rigid_body: "jasan_levitator_v1_5N52"
 
   cpp_impl:
     calfile: "mc3ao8s_md200_handp.yaml"

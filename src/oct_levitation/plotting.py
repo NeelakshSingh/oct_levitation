@@ -1542,7 +1542,8 @@ def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_p
     return fig, axs
 
 def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
-                                                     save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
+                                                 plot_reference_arrows: bool = False, plot_reference_frames: bool = True,
+                                                     save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **traj_kwargs):
     """
     Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
     Reference poses are taken from the provided DataFrame and are non-constant.
@@ -1566,10 +1567,10 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
     ax = fig.add_subplot(111, projection='3d')
 
     # Plot actual positions, CONVERTED TO mm
-    ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
+    ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path', **traj_kwargs)
 
     # Plot reference positions (non-constant)
-    ax.plot(reference_positions[:, 0]*1000, reference_positions[:, 1]*1000, reference_positions[:, 2]*1000, color='red', linestyle='--', label='Reference Path')
+    ax.plot(reference_positions[:, 0]*1000, reference_positions[:, 1]*1000, reference_positions[:, 2]*1000, color='red', linestyle='--', label='Reference Path', **traj_kwargs)
 
     # Plot arrows for actual positions to indicate direction of forward progress
     for i in range(arrow_interval, len(time), arrow_interval):
@@ -1579,19 +1580,21 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
                   actual_positions[i, 2] - actual_positions[i-1, 2], 
                   color='black', arrow_length_ratio=0.1)
 
-    # Plot arrows for reference positions to indicate direction of forward progress
-    for i in range(arrow_interval, len(time), arrow_interval):
-        ax.quiver(reference_positions[i-1, 0], reference_positions[i-1, 1], reference_positions[i-1, 2],
-                  reference_positions[i, 0] - reference_positions[i-1, 0], 
-                  reference_positions[i, 1] - reference_positions[i-1, 1], 
-                  reference_positions[i, 2] - reference_positions[i-1, 2], 
-                  color='red', linestyle='--', arrow_length_ratio=0.1)
+    if plot_reference_arrows:
+        # Plot arrows for reference positions to indicate direction of forward progress
+        for i in range(arrow_interval, len(time), arrow_interval):
+            ax.quiver(reference_positions[i-1, 0], reference_positions[i-1, 1], reference_positions[i-1, 2],
+                    reference_positions[i, 0] - reference_positions[i-1, 0], 
+                    reference_positions[i, 1] - reference_positions[i-1, 1], 
+                    reference_positions[i, 2] - reference_positions[i-1, 2], 
+                    color='red', linestyle='--', arrow_length_ratio=0.1)
 
     # Add reference pose frames (non-constant)
-    for i in range(0, len(time), frame_interval):  # plot frames every 10% of time
-        reference_T_0f = geometry_jit.transformation_matrix_from_euler_xyz(reference_eulers[i], reference_positions[i])
-        plot_coordinate_frame(ax, reference_T_0f, size=frame_size, linewidth=1.5, name='Reference Pose', xscale=1, yscale=1, zscale=1,
-                              x_style='r--', y_style='g--', z_style='b--')
+    if plot_reference_frames:
+        for i in range(0, len(time), frame_interval):  # plot frames every 10% of time
+            reference_T_0f = geometry_jit.transformation_matrix_from_euler_xyz(reference_eulers[i], reference_positions[i])
+            plot_coordinate_frame(ax, reference_T_0f, size=frame_size, linewidth=1.5, name='Reference Pose', xscale=1, yscale=1, zscale=1,
+                                x_style='r--', y_style='g--', z_style='b--')
 
     # Add coordinate frames at selected positions in the actual path
     for i in range(0, len(time), frame_interval):  # plot frames every 10% of time

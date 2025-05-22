@@ -214,8 +214,10 @@ if not sim:
     )
 
 pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
-# reference_pose_topic = pose_topic + "_reference"
 reference_pose_topic = topic_name_to_bagpyext_name("/control_session/reference_pose")
+if reference_pose_topic not in data.keys():
+    time_varying_reference = False
+    rospy.logwarn(f"Reference pose topic {reference_pose_topic} not found in the dataset. Disabling time varying reference.")
 com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
 
 calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
@@ -260,20 +262,42 @@ if not DISABLE_PLOTS:
     ## Plotting pose
     if rospy.get_param("experiment_analysis/enable_pose_plots"):
         pose_save = None
+        pose_3d_plot_options = rospy.get_param("experiment_analysis/pose_3d_plot_params", default={})
         if SAVE_PLOTS:
             pose_save = os.path.join(plot_folder, "des_actual_pose.svg")
+            pose_save_3d = os.path.join(plot_folder, "des_actual_pose_3d.svg")
         if time_varying_reference:
             plotting.plot_poses_variable_reference(data[pose_topic],
                                                 data[reference_pose_topic],
                                                 save_as=pose_save,
                                                 save_as_emf=SAVE_PLOTS_AS_EMF,
                                                 inkscape_path=INKSCAPE_PATH)
+            
+            plotting.plot_3d_poses_with_arrows_variable_reference(data[pose_topic],
+                                                                  data[reference_pose_topic],
+                                                                  arrow_interval=pose_3d_plot_options['arrow_interval'],
+                                                                  frame_size=pose_3d_plot_options['frame_size'],
+                                                                  frame_interval=pose_3d_plot_options['frame_interval'],
+                                                                  plot_reference_arrows=pose_3d_plot_options['plot_reference_arrows'],
+                                                                  plot_reference_frames=pose_3d_plot_options['plot_reference_frames'],
+                                                                  save_as=pose_save_3d,
+                                                                  save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                                  inkscape_path=INKSCAPE_PATH)
         else:
             plotting.plot_poses_constant_reference(data[pose_topic],
                                                 const_reference_pose,
                                                 save_as=pose_save,
                                                 save_as_emf=SAVE_PLOTS_AS_EMF,
                                                 inkscape_path=INKSCAPE_PATH)
+
+            plotting.plot_3d_poses_with_arrows_constant_reference(data[pose_topic],
+                                                                const_reference_pose,
+                                                                arrow_interval=pose_3d_plot_options['arrow_interval'],
+                                                                frame_size=pose_3d_plot_options['frame_size'],
+                                                                frame_interval=pose_3d_plot_options['frame_interval'],
+                                                                save_as=pose_save_3d,
+                                                                save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                                inkscape_path=INKSCAPE_PATH)
         
         velocity_save = None
         if SAVE_PLOTS:

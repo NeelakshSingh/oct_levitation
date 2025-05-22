@@ -66,6 +66,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
 
         #### Bronzefill 27gms without integrator compensation.
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
@@ -73,20 +74,16 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
         #### Bronzefill 27gms with integrator compensation.
+        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        Qy = np.diag([10.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+
+        #### Jasan Levitator V1 2N52
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-
-        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        # Qx = np.diag([30.0, 10.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([30.0, 10.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
-
-        #### Jasan Levitator V1 2N52
-        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
+        # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         Rz = 0.1
         Ry = 0.1
@@ -122,13 +119,15 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
         # scale = 1.50
-        # self.k_ra_p = 350 * scale
-        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
-
-        #### Jasan Levitator V12 N52  Tuning.
-        scale = 1.0
+        scale = 1.20
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
+
+        #### Jasan Levitator V12 N52  Tuning.
+        # scale = 1.0 # Works for magnet axis parallel to world Z axis.
+        # # scale = 0.5
+        # self.k_ra_p = 350 * scale
+        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
         ### REDUCED ATTITUDE CONTROL DESIGN ###
         #############################
@@ -370,7 +369,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         u_y = self.K_y @ y_error + self.disturbance_rpxyz[3]
         u_z = self.K_z @ z_error + self.mass*common.Constants.g + self.disturbance_rpxyz[4] + self.f_z_ff # Gravity compensation
         u_RA = -self.K_ra_d @ omega_tilde + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
-        # u_RA = self.K_ra_d @ (ref_omega_tilde - omega_tilde) + self.k_ra_p * reduced_attitude_error + self.disturbance_rpxyz[:2]
 
         F_z = u_z[0, 0] * sft_coeff
         F_x = u_x[0, 0]

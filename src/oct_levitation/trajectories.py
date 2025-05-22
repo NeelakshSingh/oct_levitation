@@ -58,7 +58,7 @@ def list_registered_trajectories() -> List[str]:
 Z_ALIGNED_INERTIAL_REDUCED_ATTITUDE = np.array([0.0, 0.0, 1.0])
 IDENTITY_QUATERNION = np.array([0.0, 0.0, 0.0, 1.0])
 
-def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float = 10.0, start: float = 0.0, step: float = 1e-2, plot_3d_path: bool = False) -> None:
+def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float = 10.0, start: float = 0.0, step: float = 1e-2, plot_3d_path: bool = False, frame_size: float = 1.0) -> None:
     """
     Plot the trajectory defined by the given function.
     
@@ -91,7 +91,7 @@ def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float =
     plotting.DISABLE_PLT_SHOW = True
     plotting.plot_poses_variable_reference(actual_pose_df, ref_pose_df)
     if plot_3d_path:
-        plotting.plot_3d_poses_with_arrows_constant_reference(ref_pose_df, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), frame_size=0.5)
+        plotting.plot_3d_poses_with_arrows_constant_reference(ref_pose_df, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), frame_size=frame_size)
     plt.show()
 
 #################################
@@ -115,9 +115,9 @@ register_trajectory("sine_z_trajectory_quaternion_a10c20f0.5", partial(sine_z_tr
 
 @numba.njit(cache=True)
 def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float, b_hz: float, delta: float,
-                                       center: np.ndarray = np.zeros(3)) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
-    x = A * np.sin(2 * np.pi * a_hz * t + delta)
-    y = B * np.sin(2 * np.pi * b_hz * t)
+                                       center: np.ndarray = np.zeros(3), shift: float = 0.0) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
+    x = A * np.sin(2 * np.pi * a_hz * t + delta + shift)
+    y = B * np.sin(2 * np.pi * b_hz * t + shift)
     x_dot = 2 * np.pi * a_hz * A * np.cos(2 * np.pi * a_hz * t + delta)
     y_dot = 2 * np.pi * b_hz * B * np.cos(2 * np.pi * b_hz * t)
     z_dot = 0.0
@@ -126,11 +126,12 @@ def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 xy_lissajous_trajectory_quaternion(0.0, 1.0e-3, 1.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("xy_circle_quaternion_r5_fhz0.5_cz4", partial(xy_lissajous_trajectory_quaternion, A=5.0e-3, a_hz=0.5, B=5.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 4.0e-3])))
-register_trajectory("xy_circle_quaternion_r10_fhz0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
-register_trajectory("xy_circle_quaternion_r10_fhz1.0_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=1.0, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
-register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.5_fy1_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
-register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.25_fy0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.25, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
+register_trajectory("xy_circle_quaternion_r5_fhz0.5_cz4", partial(xy_lissajous_trajectory_quaternion, A=5.0e-3, a_hz=0.5, B=5.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 4.0e-3]), shift=0.0))
+register_trajectory("xy_circle_quaternion_r10_fhz0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
+register_trajectory("xy_circle_quaternion_r10_fhz1.0_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=1.0, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
+register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.5_fy1_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
+register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.25_fy0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.25, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
+register_trajectory("xy_infty_lissajous_quaternion_ax20_ay10_fx0.25_fy0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=20.0e-3, a_hz=0.25, B=10.0e-3, b_hz=0.5, delta=0.0, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
 
 @numba.njit(cache=True)
 def rp_lissajous_trajectory_quaternion(t: float, r_ang_amp: float, r_hz: float, p_ang_amp: float, p_hz: float, delta: float,
@@ -167,4 +168,55 @@ def rp_lissajous_trajectory_quaternion(t: float, r_ang_amp: float, r_hz: float, 
 rp_lissajous_trajectory_quaternion(0.0, 1.0, 1.0, 1.0, 1.0, 0.0) # Force compilation on import for expected type signature
 
 register_trajectory("rp_circle_quaternion_rp45deg_fhz0.5_cz10", partial(rp_lissajous_trajectory_quaternion, r_ang_amp=np.deg2rad(45.0), r_hz=0.5, p_ang_amp=np.deg2rad(45.0), p_hz=0.5, delta=np.pi/2, position=np.array([0.0, 0.0, 10.0e-3])))
-register_trajectory("rp_circle_quaternion_rp45deg_fhz0.1_cz10", partial(rp_lissajous_trajectory_quaternion, r_ang_amp=np.deg2rad(45.0), r_hz=0.1, p_ang_amp=np.deg2rad(45.0), p_hz=0.1, delta=np.pi/2, position=np.array([0.0, 0.0, 10.0e-3])))
+register_trajectory("rp_circle_quaternion_rp45deg_fhz0.2_cz10", partial(rp_lissajous_trajectory_quaternion, r_ang_amp=np.deg2rad(45.0), r_hz=0.2, p_ang_amp=np.deg2rad(45.0), p_hz=0.2, delta=np.pi/2, position=np.array([0.0, 0.0, 10.0e-3])))
+
+@numba.njit(cache=True)
+def xyrp_lissajous_trajectory_quaternion(
+        t:float, x_amp: float, x_hz: float, y_amp: float, y_hz: float,
+        r_amp: float, r_hz: float, p_amp: float, p_hz: float,
+        center: np.ndarray = np.zeros(3), phi_x = 0.0, phi_y = 0.0, phi_r = 0.0, phi_p = 0.0
+    ) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
+        """
+        Generate a Lissajous trajectory in x, y, roll, and pitch angles.
+        """
+        x = x_amp * np.sin(2 * np.pi * x_hz * t + phi_x)
+        y = y_amp * np.sin(2 * np.pi * y_hz * t + phi_y)
+        r = r_amp * np.sin(2 * np.pi * r_hz * t + phi_r)
+        p = p_amp * np.sin(2 * np.pi * p_hz * t + phi_p)
+        
+        x_dot = 2 * np.pi * x_hz * x_amp * np.cos(2 * np.pi * x_hz * t + phi_x)
+        y_dot = 2 * np.pi * y_hz * y_amp * np.cos(2 * np.pi * y_hz * t + phi_y)
+        r_dot = 2 * np.pi * r_hz * r_amp * np.cos(2 * np.pi * r_hz * t + phi_r)
+        p_dot = 2 * np.pi * p_hz * p_amp * np.cos(2 * np.pi * p_hz * t + phi_p)
+
+        xyz = center + np.array([x, y, 0.0])
+        velocity = np.array([x_dot, y_dot, 0.0])
+        
+        euler = np.array([r, p, 0.0])
+        quat = geometry.quaternion_from_euler_xyz(euler)
+        euler_rates = np.array([r_dot, p_dot, 0.0])
+        
+        return xyz, velocity, quat, geometry.euler_xyz_rate_to_inertial_angular_velocity(euler_rates, euler)
+
+xyrp_lissajous_trajectory_quaternion(0.0, 1.0e-3, 1.0, 1.0e-3, 1.0, 0.0, 1.0e-3, 1.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
+
+register_trajectory("xyrp_lissajous_eight_T4_x20_y10_rp30_c0010",
+                    partial(xyrp_lissajous_trajectory_quaternion, 
+                            x_amp=10.0e-3, x_hz=0.5, y_amp=15.0e-3, y_hz=0.25,
+                            r_amp=np.deg2rad(30.0), r_hz=0.25, p_amp=np.deg2rad(30.0), p_hz=0.5,
+                            phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
+                            center=np.array([0.0, 0.0, 10.0e-3])))
+
+register_trajectory("xyrp_lissajous_eight_T4_x20_y10_rp15_c0010",
+                    partial(xyrp_lissajous_trajectory_quaternion, 
+                            x_amp=10.0e-3, x_hz=0.5, y_amp=15.0e-3, y_hz=0.25,
+                            r_amp=np.deg2rad(15.0), r_hz=0.25, p_amp=np.deg2rad(15.0), p_hz=0.5,
+                            phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
+                            center=np.array([0.0, 0.0, 10.0e-3])))
+
+register_trajectory("xyrp_lissajous_eight_T4_x20_y10_rp0_c0010",
+                    partial(xyrp_lissajous_trajectory_quaternion, 
+                            x_amp=10.0e-3, x_hz=0.5, y_amp=15.0e-3, y_hz=0.25,
+                            r_amp=0.0, r_hz=0.25, p_amp=0.0, p_hz=0.5,
+                            phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
+                            center=np.array([0.0, 0.0, 10.0e-3])))

@@ -13,8 +13,15 @@ experiment_analysis:
   display_plots_at_end: true # Show all plots at the end of the analysis instead of one by one. If true, show_after_each_plot is ignored. If both false, no plots are shown in interactive pane.
   save_plots: true # Saves as svg
   save_plots_as_emf: true # Needs save_plots to be true, and requires an inkscape installation.
-  time_varying_reference: true
+  time_varying_reference: true # In case the time varying reference topic is not found, then constant reference is used.
   observations_editor: "xterm -e nano" # Should be a shell command callable from terminal. This will be used to open up the editor for noting down observations.
+
+  pose_3d_plot_params:
+    arrow_interval: 100
+    frame_size: 1.0 # mm
+    frame_interval: 100
+    plot_reference_arrows: false
+    plot_reference_frames: true
 
   ft_plot_params:
     use_local_frame_for_torques: true

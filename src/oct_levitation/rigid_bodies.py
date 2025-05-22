@@ -671,8 +671,8 @@ BronzefillRing27gm_2N52 = MultiDipoleRigidBody(
 
 register_rigid_body(BronzefillRing27gm_2N52)
 
-JasanLevitator_V1_2N52 = MultiDipoleRigidBody(
-    name="jasan_levitator_v1_2N52",
+JasanLevitator_V1_3N52 = MultiDipoleRigidBody(
+    name="jasan_levitator_v1_3N52",
     mass_properties = MassProperties(33.9e-3,
                                     np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
                                               [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
@@ -694,12 +694,47 @@ JasanLevitator_V1_2N52 = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/levitator_jasan/Root",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 5e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
                 (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
-                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, -5e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
             ]
         )
     ]
 )
 
-register_rigid_body(JasanLevitator_V1_2N52)
+register_rigid_body(JasanLevitator_V1_3N52)
+
+JasanLevitator_V1_5N52 = MultiDipoleRigidBody(
+    name="jasan_levitator_v1_5N52",
+    mass_properties = MassProperties(41.9e-3,
+                                    np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
+                                              [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
+                                              [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
+                                    np.array([-0.00019000, -0.00015000, 0.00022000]), # DO NOT USE THIS, VERIFY FIRST
+                                     PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
+                                         Ix=np.array([1.0, 0.0, 0.0]),
+                                         Iy=np.array([0.0, 1.0, 0.0]),
+                                         Iz=np.array([0.0, 0.0, 1.0]),
+                                         Px=1.6639e-05,
+                                         Py=1.6639e-05,
+                                         Pz=1.145e-05 # This one is without including magnets and the markers since I don't use it. Recalculate if you need it.
+                                     )),
+    pose_frame = "vicon/levitator_jasan_v4/Root",
+    dipole_list = [
+        MagneticDipole(
+            name="CenterDiscDipole",
+            axis=np.array([0.0, 0.0, -1.0]), # South pole up dipole, set as a property for now. If required, one can calculate it from the individual magnets.
+            transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
+            frame_name="vicon/levitator_jasan_v4/Root",
+            magnet_stack=[
+                (Transform(Vector3(0.0, 0.0, 10e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 5e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 0.0), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, -5e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+                (Transform(Vector3(0.0, 0.0, -10e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
+            ]
+        )
+    ]
+)
+
+register_rigid_body(JasanLevitator_V1_5N52)

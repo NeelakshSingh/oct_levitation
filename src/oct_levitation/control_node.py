@@ -363,6 +363,7 @@ class ControlSessionNodeBase:
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")
+
         
         ### PUBLISH CURRENTS ACCORDING TO JASAN'S PROTOCOL ###
         self.desired_currents_msg.header.stamp = rospy.Time.now()
