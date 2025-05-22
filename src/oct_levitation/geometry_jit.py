@@ -136,7 +136,7 @@ def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
-        euler: 3x1 array of XYZ extrinsic euler angles in the form [roll, pitch, yaw]
+        euler: 3x1 array of XYZ intrinsic euler angles in the form [roll, pitch, yaw]
     
     Returns
     -------
@@ -198,7 +198,7 @@ def get_normal_angles_from_quaternion(q: np.ndarray) -> np.ndarray:
     -------
         v: 2 element array containing the angles of the local frame normal
            with the world XZ and YZ planes respectively. They seem to correspond to
-           ZYX extrinsic euler angles for zero yaw.
+           ZYX intrinsic euler angles for zero yaw.
     """
     n = get_normal_vector_from_quaternion(q)
     angle_y = np.arctan2(n[0], n[2])
@@ -394,7 +394,7 @@ def rotation_matrix_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: 3x1 array in the form [roll, pitch, yaw] of XYZ intrinsic euler angles.
     
     Returns
     -------
@@ -417,7 +417,7 @@ def transformation_matrix_from_euler_xyz(euler: np.ndarray, p: np.ndarray) -> np
     """
     Parameters
     ----------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: 3x1 array in the form [roll, pitch, yaw] of XYZ intrinsic euler angles.
         p: 3x1 array of translation in the form [x, y, z]
     
     Returns
@@ -437,11 +437,11 @@ def local_angular_velocity_to_euler_xyz_rate_map_matrix(euler: np.ndarray) -> np
     """
     Parameters
     ----------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: 3x1 array in the form [roll, pitch, yaw] of XYZ intrinsic euler angles.
     
     Returns
     -------
-        E_exyz_inv: 3x3 matrix that maps the body frame angular velocity to the Euler XYZ rates.
+        E_exyz_inv: 3x3 matrix that maps the body frame angular velocity to instrinsic Euler XYZ rates.
     """
     # If you are referring to the robot dynamics lecture notes, the expression there relates the
     # world frame angular velocity, this map here is for the local frame angular velocity to the
@@ -461,11 +461,11 @@ def euler_xyz_rate_to_local_angular_velocity_map_matrix(euler: np.ndarray) -> np
     """
     Parameters
     ----------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: 3x1 array in the form [roll, pitch, yaw] of XYZ intrinsic euler angles.
     
     Returns
     -------
-        E_exyz: 3x3 matrix that maps the Euler XYZ rates to the body frame angular velocity.
+        E_exyz: 3x3 matrix that maps the intrinsic Euler XYZ rates to the body frame angular velocity.
     """
     y = euler[1]
     z = euler[2]
@@ -480,11 +480,11 @@ def euler_xyz_rate_to_inertial_angular_velocity_map_matrix(euler: np.ndarray) ->
     """
     Parameters
     ----------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: 3x1 array in the form [roll, pitch, yaw] of XYZ intrinsic euler angles.
     
     Returns
     -------
-        Ei_exyz: 3x3 matrix that maps the body frame angular velocity to the Euler XYZ rates.
+        Ei_exyz: 3x3 matrix that maps the body frame angular velocity to the intrinsic Euler XYZ rates.
     """
     # If you are referring to the robot dynamics lecture notes, the expression there relates the
     # world frame angular velocity, this map here is for the local frame angular velocity to the
@@ -503,11 +503,11 @@ def inertial_angular_velocity_to_euler_xyz_rate_map_matrix(euler: np.ndarray) ->
     """
     Parameters
     ----------
-        euler: 3x1 array in the form [roll, pitch, yaw]
+        euler: intrinsic XYZ euler angle 3x1 array in the form [roll, pitch, yaw]
     
     Returns
     -------
-        Ei_exyz_inv: 3x3 matrix that maps the Euler XYZ rates to the body frame angular velocity.
+        Ei_exyz_inv: 3x3 matrix that maps intrinsic Euler XYZ rates to the body frame angular velocity.
     """
     x, y, _ = euler
     return np.array([
@@ -590,7 +590,7 @@ def euler_xyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
 
     Returns
     -------
-        euler: 3x1 array in the form [roll, pitch, yaw] for XYZ extrinsic euler angles.
+        euler: 3x1 array in the form [roll, pitch, yaw] for XYZ intrinsic euler angles.
     """
     euler = np.zeros(3)
     euler[0] = np.arctan2(-R[1, 2], R[2, 2])
@@ -603,7 +603,7 @@ euler_xyz_from_rotation_matrix(np.eye(3)) # Force compilation for expected argum
 @numba.njit(cache=True)
 def euler_xyz_from_quaternion(q: np.ndarray) -> np.ndarray:
     """
-    This function converts quaternion to XYZ extrinsic euler angles through an interconversion to the rotation matrix.
+    This function converts quaternion to XYZ intrinsic euler angles through an interconversion to the rotation matrix.
     I am sure there are better ways, but this is a straightforward method I chose to stick to (and a lot of other libraries do too).
     
     Parameters
@@ -621,11 +621,11 @@ euler_xyz_from_quaternion(IDENTITY_QUATERNION) # Force compilation for expected 
 @numba.njit(cache=True)
 def quaternion_from_euler_xyz(euler: np.ndarray) -> np.ndarray:
     """
-    This function concerts XYZ extrinsic euler angles to quaternion through an interconversion to the rotation matrix.
+    This function concerts XYZ intrinsic euler angles to quaternion through an interconversion to the rotation matrix.
     I am sure there are better ways, but this is a straightforward method I chose to stick to (and a lot of other libraries do too).
 
     Parameters:
-        euler (np.ndarray): The euler angles in the form [roll, pitch, yaw]
+        euler (np.ndarray): The euler angles in the form [roll, pitch, yaw] intrinsic euler angles in rad
     
     Returns:
         q: Quaternion in the form [x, y, z, w]
