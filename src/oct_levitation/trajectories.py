@@ -66,6 +66,7 @@ def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float =
         duration (float): Duration of the trajectory in seconds.
         start (float): Start time of the trajectory in seconds.
         step (float): Time step for plotting in seconds.
+        plot_3d_path (bool): Whether to plot the 3D path of the trajectory.
     """
     if callable(func_name):
         trajectory_func = func_name
