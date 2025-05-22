@@ -1,6 +1,7 @@
 import numpy as np
 import numba
 import oct_levitation.plotting as plotting
+import oct_levitation.geometry_jit as geometry
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -18,7 +19,7 @@ VelocityArray1D = np_t.NDArray[np.float64]
 AngularVelocityArray1D = np_t.NDArray[np.float64]
 RPYRatesArray1D = np_t.NDArray[np.float64]
 
-TrajectoryPoint = Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]
+TrajectoryPoint = Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, Union[AngularVelocityArray1D, RPYRatesArray1D]]
 TrajectoryFunction = Callable[[TimeFloat, Any], TrajectoryPoint]
 
 REGISTERED_TRAJECTORIES : Dict[str, TrajectoryFunction] = {}
@@ -51,7 +52,7 @@ def list_registered_trajectories() -> List[str]:
     """
     return list(REGISTERED_TRAJECTORIES.keys())
 #################################
-# Useful constants nad utility functions
+# Useful constants and utility functions
 #################################
 
 Z_ALIGNED_INERTIAL_REDUCED_ATTITUDE = np.array([0.0, 0.0, 1.0])
@@ -130,3 +131,39 @@ register_trajectory("xy_circle_quaternion_r10_fhz0.5_cz10", partial(xy_lissajous
 register_trajectory("xy_circle_quaternion_r10_fhz1.0_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=1.0, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
 register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.5_fy1_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
 register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.25_fy0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.25, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3])))
+
+@numba.njit(cache=True)
+def rp_lissajous_trajectory_quaternion(t: float, r_ang_amp: float, r_hz: float, p_ang_amp: float, p_hz: float, delta: float,
+                                       position: np.ndarray = np.zeros(3)) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
+    """
+    Generate a Lissajous trajectory in roll and pitch angles.
+
+    Args:
+        t (float): Time in seconds.
+        r_ang_amp (float): Roll angle amplitude in radians.
+        r_hz (float): Roll frequency in Hz.
+        p_ang_amp (float): Pitch angle amplitude in radians.
+        p_hz (float): Pitch frequency in Hz.
+        delta (float): Phase difference between roll and pitch angles in radians.
+        position (np.ndarray, optional): Initial position. Defaults to np.zeros(3).
+    
+    Returns:
+        Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]: 
+            - Position in the inertial frame.
+            - Velocity in the inertial frame.
+            - Quaternion representing the orientation.
+            - Angular velocity in the inertial frame.
+    """
+    r = r_ang_amp * np.sin(2 * np.pi * r_hz * t + delta)
+    p = p_ang_amp * np.sin(2 * np.pi * p_hz * t)
+    r_dot = 2 * np.pi * r_hz * r_ang_amp * np.cos(2 * np.pi * r_hz * t + delta)
+    p_dot = 2 * np.pi * p_hz * p_ang_amp * np.cos(2 * np.pi * p_hz * t)
+    
+    euler = np.array([r, p, 0.0])
+    quat = geometry.quaternion_from_euler_xyz(euler)
+    euler_rates = np.array([r_dot, p_dot, 0.0])
+    return position, np.zeros(3, np.float64), quat, geometry.euler_xyz_rate_to_inertial_angular_velocity(euler_rates, euler)
+
+rp_lissajous_trajectory_quaternion(0.0, 1.0, 1.0, 1.0, 1.0, 0.0) # Force compilation on import for expected type signature
+
+register_trajectory("rp_circle_quaternion_rp45deg_fhz0.5_cz10", partial(rp_lissajous_trajectory_quaternion, r_ang_amp=np.deg2rad(45.0), r_hz=0.5, p_ang_amp=np.deg2rad(45.0), p_hz=0.5, delta=np.pi/2, position=np.array([0.0, 0.0, 10.0e-3])))
