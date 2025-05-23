@@ -9,20 +9,23 @@ from typing import Tuple, Callable, Any, Dict, List, Union
 import numpy.typing as np_t
 
 from functools import partial
+from bisect import bisect_left
 
 PositionArray1D = np_t.NDArray[np.float64]
 QuaternionArray1D = np_t.NDArray[np.float64]
 RPYArray1D = np_t.NDArray[np.float64]
 TimeFloat = float
+StartTimeFloat = float
+DurationTimeFloat = float
 
 VelocityArray1D = np_t.NDArray[np.float64]
 AngularVelocityArray1D = np_t.NDArray[np.float64]
 RPYRatesArray1D = np_t.NDArray[np.float64]
 
 TrajectoryPoint = Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, Union[AngularVelocityArray1D, RPYRatesArray1D]]
-TrajectoryFunction = Callable[[TimeFloat, Any], TrajectoryPoint]
+TrajectoryCallable = Callable[[TimeFloat], TrajectoryPoint]
 
-REGISTERED_TRAJECTORIES : Dict[str, TrajectoryFunction] = {}
+REGISTERED_TRAJECTORIES : Dict[str, TrajectoryCallable] = {}
 
 """
 Import notes and conventions:
@@ -31,13 +34,13 @@ Import notes and conventions:
 -> All the trajectory functions should return the pose and the desired twist of the object for a complete description.
 """
 
-def register_trajectory(name: str, trajectory_func: TrajectoryFunction) -> None:
+def register_trajectory(name: str, trajectory_func: TrajectoryCallable) -> None:
     """
     Register a trajectory function with a name.
     
     Args:
         name (str): The name of the trajectory.
-        trajectory_func (TrajectoryFunction): The trajectory function to register.
+        trajectory_func (TrajectoryCallable): The trajectory function to register.
     """
     if name in REGISTERED_TRAJECTORIES:
         raise ValueError(f"Trajectory '{name}' is already registered.")
@@ -58,12 +61,12 @@ def list_registered_trajectories() -> List[str]:
 Z_ALIGNED_INERTIAL_REDUCED_ATTITUDE = np.array([0.0, 0.0, 1.0])
 IDENTITY_QUATERNION = np.array([0.0, 0.0, 0.0, 1.0])
 
-def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float = 10.0, start: float = 0.0, step: float = 1e-2, plot_3d_path: bool = False, frame_size: float = 1.0) -> None:
+def plot_trajectory(func_name: Union[str, TrajectoryCallable], duration: float = 10.0, start: float = 0.0, step: float = 1e-2, plot_3d_path: bool = False, frame_size: float = 1.0) -> None:
     """
     Plot the trajectory defined by the given function.
     
     Args:
-        trajectory_func (TrajectoryFunction): The trajectory function to plot.
+        trajectory_func (TrajectoryCallable): The trajectory function to plot.
         duration (float): Duration of the trajectory in seconds.
         start (float): Start time of the trajectory in seconds.
         step (float): Time step for plotting in seconds.
@@ -93,6 +96,173 @@ def plot_trajectory(func_name: Union[str, TrajectoryFunction], duration: float =
     if plot_3d_path:
         plotting.plot_3d_poses_with_arrows_constant_reference(ref_pose_df, np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), frame_size=frame_size)
     plt.show()
+
+class DiscreteTrajectory:
+    """
+    Class to represent a periodic discrete trajectory. The basic idea behind this class is very simple. It
+    stores the trajectory as an array of points and in each call just return the next point in the array.
+    By itself it cannot do much, but it will be paired with other functions which can discretize the trajectory
+    for a specific sampling time and period. One can also just inherit from this class and implement several
+    different discrete trajectories.
+    
+    Args:
+        trajectory_func (TrajectoryCallable): The trajectory function to use.
+        period (float): The period of the trajectory in seconds.
+        start (float): The start time of the trajectory in seconds.
+        step (float): The time step for the trajectory in seconds.
+    """
+    def __init__(self, step: float, loop: bool = False) -> None:
+        self.traj_array : List[TrajectoryPoint] = []
+        self.__count = 0
+        self.__last_traj_point = None
+        self.__len = 0
+        self.step = step
+        self.loop = loop
+
+    def insert_trajectory_point(self, point: TrajectoryPoint) -> None:
+        """
+        Insert a trajectory point into the array.
+        
+        Args:
+            point (TrajectoryPoint): The trajectory point to insert.
+        """
+        self.traj_array.append(point)
+        self.__last_traj_point = point
+        self.__len += 1
+
+    def __call__(self, t: float) -> TrajectoryPoint:
+        """
+        Get the next trajectory point based on the current time.
+        
+        Args:
+            t (float): The current time in seconds.
+        
+        Returns:
+            TrajectoryPoint: The next trajectory point.
+        """
+        if self.__len == 0:
+            raise ValueError("Trajectory array is empty.")
+        
+        if self.loop:
+            index = int(t / self.step) % self.__len
+            return self.traj_array[index]
+        else:
+            index = int(t / self.step)
+            if index >= self.__len: # Return the last point
+                index = self.__len - 1
+                return self.__last_traj_point[0], np.zeros(3, np.float64), self.__last_traj_point[2], np.zeros(3, np.float64)
+                
+def create_discretized_trajectory(func: TrajectoryCallable, start_time: float, end_time: float, step: float, loop: bool = False) -> DiscreteTrajectory:
+    """
+    Create a discretized trajectory using the given function.
+    
+    Args:
+        func (TrajectoryCallable): The trajectory function to use.
+        start_time (float): The start time of the trajectory in seconds.
+        end_time (float): The end time of the trajectory in seconds.
+        step (float): The time step for the trajectory in seconds.
+        loop (bool): Whether to loop the trajectory or not.
+    
+    Returns:
+        DiscreteTrajectory: The discretized trajectory.
+    """
+    traj = DiscreteTrajectory(step, loop)
+    t = start_time
+    while t <= end_time:
+        traj_point = func(t)
+        traj.insert_trajectory_point(traj_point)
+        t += step
+    return traj
+
+class ChainedTrajectory:
+    """
+    This class is used to chain several trajectories together. It is the user's job to make sure that their
+    endpoints match in case one wants them to be continuous. This class will not check for it. It is just a 
+    utility to allow connecting any number of trajectories and expose the same simple TrajectoryCallable
+    interface to the controllers.
+
+    Args:
+        trajectories (List[Tuple[TrajectoryCallable, StartTimeFloat, DurationTimeFloat]]): List of trajectory functions 
+            to chain along with the time relative to 0.0 for the trajectory's beginning and the duration of execution from 
+            when the trajectory is started in the chain. So StartTimeFloat of 1.0 seconds means the trajectory will start from 
+            its t=1.0 second mark according to its definition whenever it begins in the chain and will run for DurationTimeFloat seconds.
+            Trajectories are executed in the order they are added to the list.
+        
+        loop (bool): Whether to loop the chained trajectory or not.
+    """
+
+    ChainedTrajectoryElement = Tuple[TrajectoryCallable, StartTimeFloat, DurationTimeFloat]
+
+    def __init__(self, trajectories: List[ChainedTrajectoryElement], loop: bool = False) -> None:
+        self.trajectories = trajectories
+        self.__transition_times = np.cumsum(np.array([0] + [traj[2] for traj in trajectories])[:-1])
+        self.__endpoint_times = np.cumsum(np.array([traj[2] for traj in trajectories]))
+        self.__total_duration = self.__endpoint_times[-1]
+        self.__last_traj_point = trajectories[-1][0](trajectories[-1][1] + trajectories[-1][2]) # in case we don't loop
+        self.__len = len(trajectories)
+        self.__loop = loop
+
+        # I can exploit the fact that I am expecting the trajectories to be contiguously executed and not do any lookups unless needed.
+        self.__current_trajectory_idx = 0
+        
+        self.__current_TRAJ_FUNC : TrajectoryCallable = trajectories[0][0]
+        self.__current_traj_t0 : StartTimeFloat = trajectories[0][1]
+        self.__current_traj_start_time : TimeFloat = self.__transition_times[0]
+        self.__current_traj_end_time : TimeFloat = self.__endpoint_times[0]
+    
+    def update_current_trajectory_info(self, idx: int) -> None:
+        """
+        Update the current trajectory information based on the index.
+        
+        Args:
+            idx (int): The index of the current trajectory.
+        """
+        self.__current_TRAJ_FUNC = self.trajectories[idx][0]
+        self.__current_traj_t0 = self.trajectories[idx][1]
+        self.__current_traj_start_time = self.__transition_times[idx]
+        self.__current_traj_end_time = self.__endpoint_times[idx]
+    
+    def lookup_trajectory_idx(self, t: float) -> int:
+        """
+        Lookup the trajectory index based on the current time.
+        
+        Args:
+            t (float): The current time in seconds.
+        
+        Returns:
+            int: The index of the trajectory.
+        """
+        if self.__loop:
+            t = t % self.__total_duration
+        return bisect_left(self.__endpoint_times, t)
+    
+    def __call__(self, t: float) -> TrajectoryPoint:
+        """
+        Get the next trajectory point based on the current time.
+        
+        Args:
+            t (float): The current time in seconds.
+        
+        Returns:
+            TrajectoryPoint: The next trajectory point.
+        """
+        if self.__loop:
+            t = t % self.__total_duration
+        else:
+            if t > self.__total_duration:
+                return self.__last_traj_point[0], np.zeros(3, np.float64), self.__last_traj_point[2], np.zeros(3, np.float64)
+        
+        # Check if we need to update the trajectory index
+        if t >= self.__current_traj_end_time:
+            if t > self.__endpoint_times[self.__current_trajectory_idx + 1]:
+                # if we are already past the end of the next trajectory, better to check which one we are in
+                self.__current_trajectory_idx = self.lookup_trajectory_idx(t)
+            else: # exploting the fact that nominally the trajectories are contiguously executed
+                self.__current_trajectory_idx += 1 
+            
+            self.update_current_trajectory_info(self.__current_trajectory_idx)
+
+        return self.__current_TRAJ_FUNC(t - self.__current_traj_start_time + self.__current_traj_t0)
 
 #################################
 # Trajectory function definitions

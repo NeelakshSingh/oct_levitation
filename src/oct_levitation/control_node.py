@@ -127,7 +127,7 @@ class ControlSessionNodeBase:
         self.trajectory_pause_time = 0.0
         self.traj_params_start_time = self.TRAJECTORY_PARAMS["start_time"]
         self.traj_params_end_time = self.TRAJECTORY_PARAMS["end_time"]
-        self.__TRAJ_FUNC = trajectories.REGISTERED_TRAJECTORIES[self.TRAJECTORY_PARAMS["trajectory_name"]]
+        self.__TRAJ_FUNC : trajectories.TrajectoryCallable = trajectories.REGISTERED_TRAJECTORIES[self.TRAJECTORY_PARAMS["trajectory_name"]]
 
         if self.enable_trajectory_tracking:
             # Will publish the trajectory in the world frame
