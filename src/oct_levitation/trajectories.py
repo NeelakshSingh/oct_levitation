@@ -5,11 +5,12 @@ import oct_levitation.geometry_jit as geometry
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from typing import Tuple, Callable, Any, Dict, List, Union
+from typing import Tuple, Callable, Any, Dict, List, Union, Iterable
 import numpy.typing as np_t
 
 from functools import partial
 from bisect import bisect_left
+from enum import Enum
 
 PositionArray1D = np_t.NDArray[np.float64]
 QuaternionArray1D = np_t.NDArray[np.float64]
@@ -175,6 +176,25 @@ def create_discretized_trajectory(func: TrajectoryCallable, start_time: float, e
         t += step
     return traj
 
+class TrajectoryTransitions(Enum):
+    PAUSE_ON_PREV = 0
+    PAUSE_ON_NEXT = 1
+
+@numba.njit(cache=True)
+def const_pose_setpoint(t: float, position_setpoint: PositionArray1D, quaternion_setpoint: QuaternionArray1D) -> TrajectoryPoint:
+    """
+    Generate a constant pose setpoint trajectory.
+    
+    Args:
+        t (float): Time in seconds.
+        position_setpoint (PositionArray1D): Position setpoint in the inertial frame.
+        quaternion_setpoint (QuaternionArray1D): Quaternion setpoint representing the orientation.
+    
+    Returns:
+        TrajectoryPoint: The constant pose setpoint trajectory point.
+    """
+    return position_setpoint, np.zeros(3, np.float64), quaternion_setpoint, np.zeros(3, np.float64)
+
 class ChainedTrajectory:
     """
     This class is used to chain several trajectories together. It is the user's job to make sure that their
@@ -192,15 +212,45 @@ class ChainedTrajectory:
         loop (bool): Whether to loop the chained trajectory or not.
     """
 
-    ChainedTrajectoryElement = Tuple[TrajectoryCallable, StartTimeFloat, DurationTimeFloat]
+    ChainedTrajectoryElement = Tuple[Union[str, TrajectoryCallable, TrajectoryTransitions], StartTimeFloat, DurationTimeFloat]
 
-    def __init__(self, trajectories: List[ChainedTrajectoryElement], loop: bool = False) -> None:
+    def __init__(self, trajectories: Iterable[ChainedTrajectoryElement], loop: bool = False) -> None:
         self.trajectories = trajectories
+
+        ## Here we initialize all the callables. Transitions depend on callables and will be initialized in the next pass.
+        for i, traj_element in enumerate(trajectories): # First pass to retrieve all callables
+            traj_element = list(traj_element)
+            if len(traj_element) < 3: # To be enforced for options too
+                    raise ValueError(f"Trajectory element {i} must have at least 3 elements: (callable | name | transition, start_time, duration).")
+            if isinstance(traj_element, str) or callable(traj_element[0]):
+                if isinstance(traj_element[0], str):
+                    traj_element[0] = REGISTERED_TRAJECTORIES[traj_element[0]]
+            trajectories[i] = traj_element
+
+        self.__len = len(trajectories)
+
+        ## Second pass for implement transitions
+        for i, traj_element in enumerate(trajectories):
+            if isinstance(traj_element[0], TrajectoryTransitions):
+                if traj_element[0] == TrajectoryTransitions.PAUSE_ON_PREV:
+                    if i==0:
+                        raise ValueError(f"PAUSE_ON_PREV transition cannot be the first element.")
+                    prev_trajectory_endpoint = trajectories[i-1][0](trajectories[i-1][1] + trajectories[i-1][2])
+                    traj_element[0] = partial(const_pose_setpoint, position_setpoint=prev_trajectory_endpoint[0], quaternion_setpoint=prev_trajectory_endpoint[2])
+                elif traj_element[0] == TrajectoryTransitions.PAUSE_ON_NEXT:
+                    if i==self.__len-1:
+                        raise ValueError(f"PAUSE_ON_NEXT transition cannot be the last element.")
+                    next_trajectory_start = trajectories[i+1][0](trajectories[i+1][1])
+                    traj_element[0] = partial(const_pose_setpoint, position_setpoint=next_trajectory_start[0], quaternion_setpoint=next_trajectory_start[2])
+                else:
+                    raise ValueError(f"This trajectory transition doesn't seem to be implemented by the Chainer yet.")
+            
+            traj_element = tuple(traj_element) # make things immutable beyond this point to avoid accidental modifications.
+
         self.__transition_times = np.cumsum(np.array([0] + [traj[2] for traj in trajectories])[:-1])
         self.__endpoint_times = np.cumsum(np.array([traj[2] for traj in trajectories]))
         self.__total_duration = self.__endpoint_times[-1]
         self.__last_traj_point = trajectories[-1][0](trajectories[-1][1] + trajectories[-1][2]) # in case we don't loop
-        self.__len = len(trajectories)
         self.__loop = loop
 
         # I can exploit the fact that I am expecting the trajectories to be contiguously executed and not do any lookups unless needed.
@@ -442,7 +492,9 @@ register_trajectory("sample_periodic_z_linear_trajectory_discretized", # This sh
                     create_discretized_trajectory(
                         ChainedTrajectory([
                             (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 0.0]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), 0.0, 2.0),
-                            (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 0.0]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), 0.0, 2.0)
+                            (TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 2.0),
+                            (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 0.0]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), 0.0, 2.0),
+                            (TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 2.0),
                         ], loop=True),
-                        start_time=0.0, end_time=4.0, step=1e-3, loop=True
+                        start_time=0.0, end_time=8.0, step=1e-3, loop=True
                     ))
