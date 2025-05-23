@@ -474,16 +474,18 @@ def simple_linear_trajectory_quaternion(t: float, start_position: PositionArray1
             - Quaternion representing the orientation.
             - Angular velocity in the inertial frame.
     """
+    euler_rates = (end_euler_xyz - start_euler_xyz) / duration
+    velocity = (end_position - start_position) / duration
     if t < 0.0:
         t = 0.0
     if t > duration:
         t = duration
+        velocity = np.zeros(3, np.float64)
+        euler_rates = np.zeros(3, np.float64)
     alpha = t / duration
     position = (1.0 - alpha) * start_position + alpha * end_position
-    velocity = (end_position - start_position) / duration
     euler = (1.0 - alpha) * start_euler_xyz + alpha * end_euler_xyz
     quat = geometry.quaternion_from_euler_xyz(euler)
-    euler_rates = (end_euler_xyz - start_euler_xyz) / duration
     return position, velocity, quat, geometry.euler_xyz_rate_to_inertial_angular_velocity(euler_rates, euler)
 
 simple_linear_trajectory_quaternion(0.0, np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3), 1.0) # Force compilation on import for expected type signature
@@ -507,3 +509,118 @@ register_trajectory("sample_periodic_z_linear_trajectory_discretized", # This sh
                         ], loop=True),
                         start_time=0.0, end_time=8.0, step=1e-3, loop=True
                     ))
+
+###############################################
+## Some long chained trajectories for the paper
+###############################################
+
+demo_chain_list_1 = []
+pause_time = 2.0 # pause between trajectories
+linear_sweep_duration = 1.5
+
+# 1. Z rise from origin to 15 mm
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 0.0]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0, linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        pause_time
+    ]
+)
+
+# 2. Y sweep and back to 15 mm
+
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 15.0e-3]), end_position=np.array([0.0, 15.0e-3, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0,
+        linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        1.0
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 15.0e-3, 15.0e-3]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0,
+        linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        pause_time
+    ]
+)
+
+# 3. X sweep and back to 15 mm
+
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 15.0e-3]), end_position=np.array([15.0e-3, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0,
+        linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        1.0
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([15.0e-3, 0.0, 15.0e-3]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0,
+        linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        pause_time
+    ]
+)
+
+# 4. Z drop to origin
+
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 15.0e-3]), end_position=np.array([0.0, 0.0, 0.0]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0,
+        linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_PREV,
+        0.0,
+        pause_time
+    ]
+)
+
+### Create the chained trajectory
+demo_chain_1 = ChainedTrajectory(demo_chain_list_1, loop=True)
+
+register_trajectory("demo_chain_1", demo_chain_1)

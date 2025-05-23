@@ -23,9 +23,9 @@ oct_levitation:
 
   trajectory_params:
     enable_tracking: true # Enabling tracking will also add a publisher to publish the reference pose
-    start_time: 15.0
+    start_time: 10.0
     end_time: 1000.0
-    trajectory_name: "xyrp_lissajous_eight_T4_x20_y10_rp30_c0010" # Should be a registered trajectory under the framework described in trajectories.py
+    trajectory_name: "demo_chain_1" # Should be a registered trajectory under the framework described in trajectories.py
 
   cpp_impl:
     omega_pd: 0.5
