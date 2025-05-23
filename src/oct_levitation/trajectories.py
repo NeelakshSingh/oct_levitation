@@ -61,7 +61,7 @@ def list_registered_trajectories() -> List[str]:
 Z_ALIGNED_INERTIAL_REDUCED_ATTITUDE = np.array([0.0, 0.0, 1.0])
 IDENTITY_QUATERNION = np.array([0.0, 0.0, 0.0, 1.0])
 
-def plot_trajectory(func_name: Union[str, TrajectoryCallable], duration: float = 10.0, start: float = 0.0, step: float = 1e-2, plot_3d_path: bool = False, frame_size: float = 1.0) -> None:
+def plot_trajectory(func_name: Union[str, TrajectoryCallable], duration: float, start: float = 0.0, step: float = 1e-2, plot_3d_path: bool = False, frame_size: float = 1.0) -> None:
     """
     Plot the trajectory defined by the given function.
     
@@ -151,6 +151,7 @@ class DiscreteTrajectory:
             if index >= self.__len: # Return the last point
                 index = self.__len - 1
                 return self.__last_traj_point[0], np.zeros(3, np.float64), self.__last_traj_point[2], np.zeros(3, np.float64)
+            return self.traj_array[index]
                 
 def create_discretized_trajectory(func: TrajectoryCallable, start_time: float, end_time: float, step: float, loop: bool = False) -> DiscreteTrajectory:
     """
@@ -205,7 +206,7 @@ class ChainedTrajectory:
         # I can exploit the fact that I am expecting the trajectories to be contiguously executed and not do any lookups unless needed.
         self.__current_trajectory_idx = 0
         
-        self.__current_TRAJ_FUNC : TrajectoryCallable = trajectories[0][0]
+        self.__current_TRAJ_CALLABLE : TrajectoryCallable = trajectories[0][0]
         self.__current_traj_t0 : StartTimeFloat = trajectories[0][1]
         self.__current_traj_start_time : TimeFloat = self.__transition_times[0]
         self.__current_traj_end_time : TimeFloat = self.__endpoint_times[0]
@@ -217,7 +218,7 @@ class ChainedTrajectory:
         Args:
             idx (int): The index of the current trajectory.
         """
-        self.__current_TRAJ_FUNC = self.trajectories[idx][0]
+        self.__current_TRAJ_CALLABLE = self.trajectories[idx][0]
         self.__current_traj_t0 = self.trajectories[idx][1]
         self.__current_traj_start_time = self.__transition_times[idx]
         self.__current_traj_end_time = self.__endpoint_times[idx]
@@ -253,7 +254,11 @@ class ChainedTrajectory:
                 return self.__last_traj_point[0], np.zeros(3, np.float64), self.__last_traj_point[2], np.zeros(3, np.float64)
         
         # Check if we need to update the trajectory index
-        if t >= self.__current_traj_end_time:
+        if t < self.__current_traj_start_time:
+            self.__current_trajectory_idx = self.lookup_trajectory_idx(t)
+            self.update_current_trajectory_info(self.__current_trajectory_idx)
+
+        if t > self.__current_traj_end_time:
             if t > self.__endpoint_times[self.__current_trajectory_idx + 1]:
                 # if we are already past the end of the next trajectory, better to check which one we are in
                 self.__current_trajectory_idx = self.lookup_trajectory_idx(t)
@@ -262,7 +267,7 @@ class ChainedTrajectory:
             
             self.update_current_trajectory_info(self.__current_trajectory_idx)
 
-        return self.__current_TRAJ_FUNC(t - self.__current_traj_start_time + self.__current_traj_t0)
+        return self.__current_TRAJ_CALLABLE(t - self.__current_traj_start_time + self.__current_traj_t0)
 
 #################################
 # Trajectory function definitions
@@ -390,3 +395,45 @@ register_trajectory("xyrp_lissajous_eight_T4_x20_y10_rp0_c0010",
                             r_amp=0.0, r_hz=0.25, p_amp=0.0, p_hz=0.5,
                             phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
                             center=np.array([0.0, 0.0, 10.0e-3])))
+
+@numba.njit(cache=True)
+def simple_linear_trajectory_quaternion(t: float, start_position: PositionArray1D, end_position: PositionArray1D,
+                                        start_euler_xyz: RPYArray1D, end_euler_xyz: RPYArray1D, duration: float) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
+    """
+    Generate a simple linear trajectory in the inertial frame.
+    Args:
+        t (float): Time in seconds.
+        start_position (PositionArray1D): Starting position in the inertial frame.
+        end_position (PositionArray1D): Ending position in the inertial frame.
+        start_euler_xyz (RPYArray1D): Starting roll, pitch, yaw angles in radians.
+        end_euler_xyz (RPYArray1D): Ending roll, pitch, yaw angles in radians.
+        duration (float): Duration of the trajectory in seconds.
+    Returns:
+        Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]: 
+            - Position in the inertial frame.
+            - Velocity in the inertial frame.
+            - Quaternion representing the orientation.
+            - Angular velocity in the inertial frame.
+    """
+    if t < 0.0:
+        t = 0.0
+    if t > duration:
+        t = duration
+    alpha = t / duration
+    position = (1.0 - alpha) * start_position + alpha * end_position
+    velocity = (end_position - start_position) / duration
+    euler = (1.0 - alpha) * start_euler_xyz + alpha * end_euler_xyz
+    quat = geometry.quaternion_from_euler_xyz(euler)
+    euler_rates = (end_euler_xyz - start_euler_xyz) / duration
+    return position, velocity, quat, geometry.euler_xyz_rate_to_inertial_angular_velocity(euler_rates, euler)
+
+simple_linear_trajectory_quaternion(0.0, np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3), 1.0) # Force compilation on import for expected type signature
+
+# example chained trajectory tracing 10 cm in +Z then +Y then +X
+register_trajectory("sample_linear_chained_trajectory",
+                    ChainedTrajectory([
+                        (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 0.0]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0), 0.0, 5.0),
+                        (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 10.0e-3, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0), 0.0, 5.0),
+                        (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 10.0e-3, 10.0e-3]), end_position=np.array([10.0e-3, 10.0e-3, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0), 0.0, 5.0)
+                    ], loop=False)
+                    )
