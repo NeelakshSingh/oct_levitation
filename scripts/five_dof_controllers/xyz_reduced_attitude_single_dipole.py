@@ -23,7 +23,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0])*1.0e-3
+        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 10.0])*1.0e-3
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE

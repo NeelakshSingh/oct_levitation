@@ -22,7 +22,7 @@ oct_levitation:
   max_angular_velocity: 3.490658503988659
 
   trajectory_params:
-    enable_tracking: true # Enabling tracking will also add a publisher to publish the reference pose
+    enable_tracking: false # Enabling tracking will also add a publisher to publish the reference pose
     start_time: 10.0
     end_time: 1000.0
     trajectory_name: "demo_chain_1" # Should be a registered trajectory under the framework described in trajectories.py
