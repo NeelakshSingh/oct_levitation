@@ -437,3 +437,12 @@ register_trajectory("sample_linear_chained_trajectory",
                         (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 10.0e-3, 10.0e-3]), end_position=np.array([10.0e-3, 10.0e-3, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0), 0.0, 5.0)
                     ], loop=False)
                     )
+
+register_trajectory("sample_periodic_z_linear_trajectory_discretized", # This should give a periodic triangular trajectory
+                    create_discretized_trajectory(
+                        ChainedTrajectory([
+                            (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 0.0]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), 0.0, 2.0),
+                            (partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 0.0]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), 0.0, 2.0)
+                        ], loop=True),
+                        start_time=0.0, end_time=4.0, step=1e-3, loop=True
+                    ))
