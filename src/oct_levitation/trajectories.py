@@ -273,6 +273,15 @@ class ChainedTrajectory:
         self.__current_traj_start_time = self.__transition_times[idx]
         self.__current_traj_end_time = self.__endpoint_times[idx]
     
+    def get_chain_properties(self) -> Tuple[float, bool, int]:
+        """
+        Get the properties of the chained trajectory.
+        
+        Returns:
+            Tuple[float, bool, int]: A tuple containing the total duration, loop flag, and number of trajectories.
+        """
+        return self.__total_duration, self.__loop, self.__len
+    
     def lookup_trajectory_idx(self, t: float) -> int:
         """
         Lookup the trajectory index based on the current time.
