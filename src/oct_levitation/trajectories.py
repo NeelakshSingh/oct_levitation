@@ -398,6 +398,7 @@ sine_z_trajectory_quaternion(0.0, 1.0e-3, 1.0, 0.0) # Force compilation on impor
 register_trajectory("sine_z_trajectory_quaternion_a4c4f0.5", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=0.5, center=4.0e-3))
 register_trajectory("sine_z_trajectory_quaternion_a10c10f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=10.0e-3))
 register_trajectory("sine_z_trajectory_quaternion_a10c20f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=20.0e-3))
+register_trajectory("sine_z_trajectory_quaternion_a15c25f0.25", partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.25, center=25.0e-3))
 
 @numba.njit(cache=True)
 def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float, b_hz: float, delta: float,
