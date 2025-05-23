@@ -142,6 +142,7 @@ HARDWARE_CONNECTED = rospy.get_param("~hardware_connected")
 ACTIVE_COILS = rospy.get_param("experiment_analysis/active_coils", default=[0, 1, 2, 3, 4, 5, 6, 7])
 ACTIVE_DRIVERS = rospy.get_param("experiment_analysis/active_drivers", default=[0, 1, 2, 3, 4, 5, 6, 7])
 N_DRIVERS = rospy.get_param("experiment_analysis/n_drivers", default=9)
+RAISE_ERRORS_IN_EXCEPTION_CATCHERS = rospy.get_param("experiment_analysis/raise_errors_in_exception_catchers", default=False)
 if len(ACTIVE_DRIVERS) != len(ACTIVE_COILS):
     raise ValueError(f"Active drivers list: {ACTIVE_DRIVERS} does not match active coils list: {ACTIVE_COILS}")
 
@@ -273,22 +274,21 @@ if not DISABLE_PLOTS:
                                                 save_as_emf=SAVE_PLOTS_AS_EMF,
                                                 inkscape_path=INKSCAPE_PATH)
             
-            plotting.plot_3d_poses_with_arrows_variable_reference(data[pose_topic],
-                                                                  data[reference_pose_topic],
-                                                                  arrow_interval=pose_3d_plot_options['arrow_interval'],
-                                                                  frame_size=pose_3d_plot_options['frame_size'],
-                                                                  frame_interval=pose_3d_plot_options['frame_interval'],
-                                                                  plot_reference_arrows=pose_3d_plot_options['plot_reference_arrows'],
-                                                                  plot_reference_frames=pose_3d_plot_options['plot_reference_frames'],
-                                                                  save_as=pose_save_3d,
-                                                                  save_as_emf=SAVE_PLOTS_AS_EMF,
-                                                                  inkscape_path=INKSCAPE_PATH)
-        else:
-            plotting.plot_poses_constant_reference(data[pose_topic],
-                                                const_reference_pose,
-                                                save_as=pose_save,
-                                                save_as_emf=SAVE_PLOTS_AS_EMF,
-                                                inkscape_path=INKSCAPE_PATH)
+            try:
+                plotting.plot_3d_poses_with_arrows_variable_reference(data[pose_topic],
+                                                                    data[reference_pose_topic],
+                                                                    arrow_interval=pose_3d_plot_options['arrow_interval'],
+                                                                    frame_size=pose_3d_plot_options['frame_size'],
+                                                                    frame_interval=pose_3d_plot_options['frame_interval'],
+                                                                    plot_reference_arrows=pose_3d_plot_options['plot_reference_arrows'],
+                                                                    plot_reference_frames=pose_3d_plot_options['plot_reference_frames'],
+                                                                    save_as=pose_save_3d,
+                                                                    save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                                    inkscape_path=INKSCAPE_PATH)
+            except Exception as e:
+                node_logerr(f"Error plotting 3D poses with arrows: {e}")
+                if RAISE_ERRORS_IN_EXCEPTION_CATCHERS:
+                    raise e
 
             plotting.plot_3d_poses_with_arrows_constant_reference(data[pose_topic],
                                                                 const_reference_pose,

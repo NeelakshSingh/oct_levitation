@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from typing import Tuple, Callable, Any, Dict, List, Union, Iterable
+from copy import deepcopy
 import numpy.typing as np_t
 
 from functools import partial
@@ -104,7 +105,7 @@ class DiscreteTrajectory:
     stores the trajectory as an array of points and in each call just return the next point in the array.
     By itself it cannot do much, but it will be paired with other functions which can discretize the trajectory
     for a specific sampling time and period. One can also just inherit from this class and implement several
-    different discrete trajectories.
+    different discrete trajectories. It can be helpful to use this class to precompute the trajectory points.
     
     Args:
         trajectory_func (TrajectoryCallable): The trajectory function to use.
@@ -179,6 +180,7 @@ def create_discretized_trajectory(func: TrajectoryCallable, start_time: float, e
 class TrajectoryTransitions(Enum):
     PAUSE_ON_PREV = 0
     PAUSE_ON_NEXT = 1
+    LINEAR_TRANSITION = 2
 
 @numba.njit(cache=True)
 def const_pose_setpoint(t: float, position_setpoint: PositionArray1D, quaternion_setpoint: QuaternionArray1D) -> TrajectoryPoint:
@@ -194,6 +196,41 @@ def const_pose_setpoint(t: float, position_setpoint: PositionArray1D, quaternion
         TrajectoryPoint: The constant pose setpoint trajectory point.
     """
     return position_setpoint, np.zeros(3, np.float64), quaternion_setpoint, np.zeros(3, np.float64)
+
+@numba.njit(cache=True)
+def simple_linear_trajectory_quaternion(t: float, start_position: PositionArray1D, end_position: PositionArray1D,
+                                        start_euler_xyz: RPYArray1D, end_euler_xyz: RPYArray1D, duration: float) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
+    """
+    Generate a simple linear trajectory in the inertial frame.
+    Args:
+        t (float): Time in seconds.
+        start_position (PositionArray1D): Starting position in the inertial frame.
+        end_position (PositionArray1D): Ending position in the inertial frame.
+        start_euler_xyz (RPYArray1D): Starting roll, pitch, yaw angles in radians.
+        end_euler_xyz (RPYArray1D): Ending roll, pitch, yaw angles in radians.
+        duration (float): Duration of the trajectory in seconds.
+    Returns:
+        Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]: 
+            - Position in the inertial frame.
+            - Velocity in the inertial frame.
+            - Quaternion representing the orientation.
+            - Angular velocity in the inertial frame.
+    """
+    euler_rates = (end_euler_xyz - start_euler_xyz) / duration
+    velocity = (end_position - start_position) / duration
+    if t < 0.0:
+        t = 0.0
+    if t > duration:
+        t = duration
+        velocity = np.zeros(3, np.float64)
+        euler_rates = np.zeros(3, np.float64)
+    alpha = t / duration
+    position = (1.0 - alpha) * start_position + alpha * end_position
+    euler = (1.0 - alpha) * start_euler_xyz + alpha * end_euler_xyz
+    quat = geometry.quaternion_from_euler_xyz(euler)
+    return position, velocity, quat, geometry.euler_xyz_rate_to_inertial_angular_velocity(euler_rates, euler)
+
+simple_linear_trajectory_quaternion(0.0, np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3), 1.0) # Force compilation on import for expected type signature
 
 class ChainedTrajectory:
     """
@@ -215,49 +252,64 @@ class ChainedTrajectory:
     ChainedTrajectoryElement = Tuple[Union[str, TrajectoryCallable, TrajectoryTransitions], StartTimeFloat, DurationTimeFloat]
 
     def __init__(self, trajectories: Iterable[ChainedTrajectoryElement], loop: bool = False) -> None:
-        self.trajectories = trajectories
+        self.trajectories = deepcopy(trajectories)
 
         ## Here we initialize all the callables. Transitions depend on callables and will be initialized in the next pass.
-        for i, traj_element in enumerate(trajectories): # First pass to retrieve all callables
+        for i, traj_element in enumerate(self.trajectories): # First pass to retrieve all callables
             traj_element = list(traj_element)
             if len(traj_element) < 3: # To be enforced for options too
                     raise ValueError(f"Trajectory element {i} must have at least 3 elements: (callable | name | transition, start_time, duration).")
-            if isinstance(traj_element, str) or callable(traj_element[0]):
-                if isinstance(traj_element[0], str):
-                    traj_element[0] = REGISTERED_TRAJECTORIES[traj_element[0]]
-            trajectories[i] = traj_element
+            if isinstance(traj_element[0], str):
+                traj_element[0] = REGISTERED_TRAJECTORIES[traj_element[0]]
+            self.trajectories[i] = traj_element
 
-        self.__len = len(trajectories)
+        self.__len = len(self.trajectories)
 
-        ## Second pass for implement transitions
-        for i, traj_element in enumerate(trajectories):
+        ## Second pass for implement transitions. A LOT OF EDGE CASES ARE NOT HANDLED AT THE MOMENT. WHEN TRANSITIONS OCCUR
+        ## TOGETHER THERE ARE SEVERAL EDGE CASES AND RESOLVING THEM WILL NEED A VERY PROPER RULE BASED RESOLUTION. FOR NOW
+        ## THAT IS NOT DONE.
+        for i, traj_element in enumerate(self.trajectories):
             if isinstance(traj_element[0], TrajectoryTransitions):
                 if traj_element[0] == TrajectoryTransitions.PAUSE_ON_PREV:
                     if i==0:
                         raise ValueError(f"PAUSE_ON_PREV transition cannot be the first element.")
-                    prev_trajectory_endpoint = trajectories[i-1][0](trajectories[i-1][1] + trajectories[i-1][2])
+                    prev_trajectory_endpoint = self.trajectories[i-1][0](self.trajectories[i-1][1] + self.trajectories[i-1][2])
                     traj_element[0] = partial(const_pose_setpoint, position_setpoint=prev_trajectory_endpoint[0], quaternion_setpoint=prev_trajectory_endpoint[2])
                 elif traj_element[0] == TrajectoryTransitions.PAUSE_ON_NEXT:
                     if i==self.__len-1:
                         raise ValueError(f"PAUSE_ON_NEXT transition cannot be the last element.")
-                    next_trajectory_start = trajectories[i+1][0](trajectories[i+1][1])
+                    next_trajectory_start = self.trajectories[i+1][0](self.trajectories[i+1][1])
                     traj_element[0] = partial(const_pose_setpoint, position_setpoint=next_trajectory_start[0], quaternion_setpoint=next_trajectory_start[2])
+                elif traj_element[0] == TrajectoryTransitions.LINEAR_TRANSITION:
+                    if i==0 or i==self.__len-1:
+                        raise ValueError(f"LINEAR_TRANSITION transition cannot be the first or last element.")
+                    prev_trajectory_endpoint = self.trajectories[i-1][0](self.trajectories[i-1][1] + self.trajectories[i-1][2])
+                    next_trajectory_start = self.trajectories[i+1][0](self.trajectories[i+1][1])
+
+                    traj_element[0] = partial(simple_linear_trajectory_quaternion, 
+                                              start_position=prev_trajectory_endpoint[0],
+                                              end_position=next_trajectory_start[0],
+                                              start_euler_xyz=geometry.euler_xyz_from_quaternion(prev_trajectory_endpoint[2]),
+                                              end_euler_xyz=geometry.euler_xyz_from_quaternion(next_trajectory_start[2]),
+                                              duration=traj_element[2])
+                    traj_element[1] = 0.0 # The transition will start at t=0.0 always so ignore this arg from the user
                 else:
                     raise ValueError(f"This trajectory transition doesn't seem to be implemented by the Chainer yet.")
             
             traj_element = tuple(traj_element) # make things immutable beyond this point to avoid accidental modifications.
+            self.trajectories[i] = traj_element # replace with the tuple
 
-        self.__transition_times = np.cumsum(np.array([0] + [traj[2] for traj in trajectories])[:-1])
-        self.__endpoint_times = np.cumsum(np.array([traj[2] for traj in trajectories]))
+        self.__transition_times = np.cumsum(np.array([0] + [traj[2] for traj in self.trajectories])[:-1])
+        self.__endpoint_times = np.cumsum(np.array([traj[2] for traj in self.trajectories]))
         self.__total_duration = self.__endpoint_times[-1]
-        self.__last_traj_point = trajectories[-1][0](trajectories[-1][1] + trajectories[-1][2]) # in case we don't loop
+        self.__last_traj_point = self.trajectories[-1][0](self.trajectories[-1][1] + self.trajectories[-1][2]) # in case we don't loop
         self.__loop = loop
 
         # I can exploit the fact that I am expecting the trajectories to be contiguously executed and not do any lookups unless needed.
         self.__current_trajectory_idx = 0
         
-        self.__current_TRAJ_CALLABLE : TrajectoryCallable = trajectories[0][0]
-        self.__current_traj_t0 : StartTimeFloat = trajectories[0][1]
+        self.__current_TRAJ_CALLABLE : TrajectoryCallable = self.trajectories[0][0]
+        self.__current_traj_t0 : StartTimeFloat = self.trajectories[0][1]
         self.__current_traj_start_time : TimeFloat = self.__transition_times[0]
         self.__current_traj_end_time : TimeFloat = self.__endpoint_times[0]
     
@@ -455,41 +507,6 @@ register_trajectory("xyrp_lissajous_eight_T4_x20_y10_rp0_c0010",
                             phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
                             center=np.array([0.0, 0.0, 10.0e-3])))
 
-@numba.njit(cache=True)
-def simple_linear_trajectory_quaternion(t: float, start_position: PositionArray1D, end_position: PositionArray1D,
-                                        start_euler_xyz: RPYArray1D, end_euler_xyz: RPYArray1D, duration: float) -> Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]:
-    """
-    Generate a simple linear trajectory in the inertial frame.
-    Args:
-        t (float): Time in seconds.
-        start_position (PositionArray1D): Starting position in the inertial frame.
-        end_position (PositionArray1D): Ending position in the inertial frame.
-        start_euler_xyz (RPYArray1D): Starting roll, pitch, yaw angles in radians.
-        end_euler_xyz (RPYArray1D): Ending roll, pitch, yaw angles in radians.
-        duration (float): Duration of the trajectory in seconds.
-    Returns:
-        Tuple[PositionArray1D, VelocityArray1D, QuaternionArray1D, AngularVelocityArray1D]: 
-            - Position in the inertial frame.
-            - Velocity in the inertial frame.
-            - Quaternion representing the orientation.
-            - Angular velocity in the inertial frame.
-    """
-    euler_rates = (end_euler_xyz - start_euler_xyz) / duration
-    velocity = (end_position - start_position) / duration
-    if t < 0.0:
-        t = 0.0
-    if t > duration:
-        t = duration
-        velocity = np.zeros(3, np.float64)
-        euler_rates = np.zeros(3, np.float64)
-    alpha = t / duration
-    position = (1.0 - alpha) * start_position + alpha * end_position
-    euler = (1.0 - alpha) * start_euler_xyz + alpha * end_euler_xyz
-    quat = geometry.quaternion_from_euler_xyz(euler)
-    return position, velocity, quat, geometry.euler_xyz_rate_to_inertial_angular_velocity(euler_rates, euler)
-
-simple_linear_trajectory_quaternion(0.0, np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3), 1.0) # Force compilation on import for expected type signature
-
 # example chained trajectory tracing 10 cm in +Z then +Y then +X
 register_trajectory("sample_linear_chained_trajectory",
                     ChainedTrajectory([
@@ -521,7 +538,7 @@ linear_sweep_duration = 1.5
 # 1. Z rise from origin to 15 mm
 demo_chain_list_1.append(
     [
-        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 0.0]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
         0.0, linear_sweep_duration
     ]
 )
@@ -602,11 +619,122 @@ demo_chain_list_1.append(
     ]
 )
 
-# 4. Z drop to origin
+# 4. Z drop to start position of all demo curves
 
 demo_chain_list_1.append(
     [
-        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 15.0e-3]), end_position=np.array([0.0, 0.0, 0.0]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 15.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
+        0.0,
+        linear_sweep_duration
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION),
+        0.0,
+        pause_time
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.LINEAR_TRANSITION,
+        0.0, 3.0
+    ]
+)
+
+next_lissajous_traj_name = "rp_circle_quaternion_rp45deg_fhz0.2_cz10"
+next_lissajous_traj = REGISTERED_TRAJECTORIES[next_lissajous_traj_name]
+
+demo_chain_list_1.append(
+    [
+        partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=next_lissajous_traj(0.0)[2]),
+        0.0,
+        pause_time
+    ]
+)
+
+# 5.Just staying at a single place and tracking the orientation lissajous circle
+demo_chain_list_1.append(
+    [next_lissajous_traj, 0.0, 10.0]
+)
+
+demo_chain_list_1.append(
+    [TrajectoryTransitions.PAUSE_ON_PREV, 0.0, pause_time]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.LINEAR_TRANSITION,
+        0.0, 3.0
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION),
+        0.0,
+        pause_time
+    ]
+)
+
+# 6. Execute the lissajous infinity signs starting from origin
+demo_chain_list_1.append(
+    [
+        "xyrp_lissajous_eight_T4_x20_y10_rp0_c0010",
+        0.0,
+        4.0*4.0
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        pause_time
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        "xyrp_lissajous_eight_T4_x20_y10_rp15_c0010",
+        0.0,
+        4.0*4.0
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        pause_time
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        "xyrp_lissajous_eight_T4_x20_y10_rp30_c0010",
+        0.0,
+        4.0*4.0
+    ]
+)
+
+demo_chain_list_1.append(
+    [
+        TrajectoryTransitions.PAUSE_ON_NEXT,
+        0.0,
+        pause_time
+    ]
+)
+
+# TODO: Finally execute a 3D lissajous with roll and pitch as the last ultimate trajectory before ending for the final video.
+
+# END. Z drop to start point at the end of the episode
+
+demo_chain_list_1.append(
+    [
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 5.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration),
         0.0,
         linear_sweep_duration
     ]
