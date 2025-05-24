@@ -873,7 +873,7 @@ register_trajectory("setpoint_change_z_10mm",
                     )
 )
 
-register_trajectory("setpoint_change_r_45deg",
+register_trajectory("setpoint_change_r_30deg",
                     ChainedTrajectory(
                         [
                             [
@@ -884,7 +884,7 @@ register_trajectory("setpoint_change_r_45deg",
                                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
                             ],
                             [
-                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), 0.0, 0.0]))), 
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-30.0), 0.0, 0.0]))), 
                                 0.0, 2.0
                             ]
                         ],
@@ -892,7 +892,7 @@ register_trajectory("setpoint_change_r_45deg",
                     )
 )
 
-register_trajectory("setpoint_change_p_45deg",
+register_trajectory("setpoint_change_p_30deg",
                     ChainedTrajectory(
                         [
                             [
@@ -903,7 +903,7 @@ register_trajectory("setpoint_change_p_45deg",
                                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
                             ],
                             [
-                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([0.0, np.deg2rad(45.0), 0.0]))), 
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([0.0, np.deg2rad(-30.0), 0.0]))), 
                                 0.0, 2.0
                             ]
                         ],
@@ -911,7 +911,7 @@ register_trajectory("setpoint_change_p_45deg",
                     )
 )
 
-register_trajectory("setpoint_change_rp_45deg",
+register_trajectory("setpoint_change_rp_30deg",
                     ChainedTrajectory(
                         [
                             [
@@ -922,7 +922,7 @@ register_trajectory("setpoint_change_rp_45deg",
                                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
                             ],
                             [
-                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), np.deg2rad(45.0), 0.0]))), 
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-30.0), np.deg2rad(-30.0), 0.0]))), 
                                 0.0, 2.0
                             ]
                         ],
@@ -949,7 +949,7 @@ register_trajectory("setpoint_change_xy_10mm",
                     )
 )
 
-register_trajectory("setpoint_change_xy10mm_rp_45deg",
+register_trajectory("setpoint_change_xy10mm_rp_30deg",
                     ChainedTrajectory(
                         [
                             [
@@ -960,7 +960,7 @@ register_trajectory("setpoint_change_xy10mm_rp_45deg",
                                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
                             ],
                             [
-                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), np.deg2rad(45.0), 0.0]))), 
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-30.0), np.deg2rad(-30.0), 0.0]))), 
                                 0.0, 2.0
                             ]
                         ],
@@ -998,7 +998,7 @@ register_trajectory("setpoint_change_xyz10mm_rp45deg",
                                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
                             ],
                             [
-                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 20.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), np.deg2rad(45.0), 0.0]))), 
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 20.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-30.0), np.deg2rad(-30.0), 0.0]))), 
                                 0.0, 2.0
                             ]
                         ],

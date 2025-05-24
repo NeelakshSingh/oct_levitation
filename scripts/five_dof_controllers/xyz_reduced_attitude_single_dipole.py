@@ -81,7 +81,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         #### Greentec Pro Do80 Di67
         Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        Qx = np.diag([25.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
         self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
@@ -130,7 +130,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
         #### Greentec Pro Do80 Di67
-        scale = 1.5
+        scale = 1.45
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
@@ -151,7 +151,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         ### Greentec Pro Do80 Di67
         self.Ki_lin = 5.0
-        self.Ki_ang = 60.0
+        self.Ki_ang = 150.0
 
         integrator_params = self.INTEGRATOR_PARAMS
 
