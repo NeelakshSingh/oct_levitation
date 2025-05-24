@@ -76,8 +76,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #### Bronzefill 27gms with integrator compensation.
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([10.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+        # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+        # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         #### Greentec Pro Do80 Di67
         Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
@@ -124,8 +125,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
-        # scale = 1.50
-        # scale = 1.20 # This value is somewhat robust for trajectories.
+        # scale = 1.35
+        # # scale = 1.20 # This value is somewhat robust for trajectories.
         # self.k_ra_p = 350 * scale
         # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
@@ -146,12 +147,17 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ##############################
         ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
 
-        # self.Ki_lin = 1.0
-        # self.Ki_ang = 60.0
+        ### Bronzefill 27gms
+        # self.Ki_lin_x = 10.0
+        # self.Ki_lin_y = 10.0
+        # self.Ki_lin_z = 10.0
+        # self.Ki_ang = 100.0
 
         ### Greentec Pro Do80 Di67
-        self.Ki_lin = 5.0
-        self.Ki_ang = 150.0
+        self.Ki_lin_x = 10.0
+        self.Ki_lin_y = 10.0
+        self.Ki_lin_z = 10.0
+        self.Ki_ang = 100.0
 
         integrator_params = self.INTEGRATOR_PARAMS
 
@@ -323,9 +329,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Calculating the integral action.
         if self.use_integrator:
             if self.time_elapsed > self.integrator_start_time and self.time_elapsed < self.integrator_end_time:
-                self.disturbance_rpxyz[4] += self.Ki_lin * z_error[0, 0] * self.dt * self.__integrator_enable[4]
-                self.disturbance_rpxyz[3] += self.Ki_lin * y_error[0, 0] * self.dt * self.__integrator_enable[3]
-                self.disturbance_rpxyz[2] += self.Ki_lin * x_error[0, 0] * self.dt * self.__integrator_enable[2]
+                self.disturbance_rpxyz[4] += self.Ki_lin_x * z_error[0, 0] * self.dt * self.__integrator_enable[4]
+                self.disturbance_rpxyz[3] += self.Ki_lin_y * y_error[0, 0] * self.dt * self.__integrator_enable[3]
+                self.disturbance_rpxyz[2] += self.Ki_lin_z * x_error[0, 0] * self.dt * self.__integrator_enable[2]
                 self.disturbance_rpxyz[0] += self.Ki_ang * reduced_attitude_error[0] * self.dt * self.__integrator_enable[0]
                 self.disturbance_rpxyz[1] += self.Ki_ang * reduced_attitude_error[1] * self.dt * self.__integrator_enable[1]
                 

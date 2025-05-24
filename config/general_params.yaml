@@ -1,6 +1,6 @@
 oct_levitation:
   # rigid_body: "bronzefill_ring_27gms_2N52"
-  rigid_body: "greentec_do80_di67_Md10_2N52"
+  rigid_body: "greentec_do80_di67_Md10_6N52"
 
   cpp_impl:
     calfile: "mc3ao8s_md200_handp.yaml"

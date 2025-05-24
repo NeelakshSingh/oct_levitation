@@ -398,7 +398,7 @@ sine_z_trajectory_quaternion(0.0, 1.0e-3, 1.0, 0.0) # Force compilation on impor
 register_trajectory("sine_z_trajectory_quaternion_a4c4f0.5", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=0.5, center=4.0e-3))
 register_trajectory("sine_z_trajectory_quaternion_a10c10f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=10.0e-3))
 register_trajectory("sine_z_trajectory_quaternion_a10c20f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=20.0e-3))
-register_trajectory("sine_z_trajectory_quaternion_a15c25f0.25", partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.25, center=25.0e-3))
+register_trajectory("sine_z_trajectory_quaternion_a15c25f0.5", partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=25.0e-3))
 
 @numba.njit(cache=True)
 def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float, b_hz: float, delta: float,
@@ -533,8 +533,8 @@ register_trajectory("sample_periodic_z_linear_trajectory_discretized", # This sh
 ###############################################
 
 demo_chain_list_1 = []
-pause_time = 2.0 # pause between trajectories
-linear_sweep_duration = 2.0
+pause_time = 1.0 # pause between trajectories
+linear_sweep_duration = 1.0
 
 # 1. Z rise from origin to 15 mm
 demo_chain_list_1.append(
@@ -987,7 +987,7 @@ register_trajectory("setpoint_change_xyz_10mm",
                     )
 )
 
-register_trajectory("setpoint_change_xyz10mm_rp30deg",
+register_trajectory("setpoint_change_xyz5mm_rp30deg",
                     ChainedTrajectory(
                         [
                             [
@@ -998,10 +998,146 @@ register_trajectory("setpoint_change_xyz10mm_rp30deg",
                                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
                             ],
                             [
-                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 20.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-30.0), np.deg2rad(-30.0), 0.0]))), 
+                                partial(const_pose_setpoint, position_setpoint=np.array([5.0e-3, -5.0e-3, 15.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-15.0), np.deg2rad(-15.0), 0.0]))), 
                                 0.0, 2.0
                             ]
                         ],
                         loop=False
                     )
+)
+
+register_trajectory("setpoint_change_xyz5mm_rp30deg_2snaps",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([5.0e-3, -5.0e-3, 15.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(-30.0), np.deg2rad(-30.0), 0.0]))), 
+                                0.0, 2.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0e-3, 0.0e-3, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(0.0), np.deg2rad(0.0), 0.0]))), 
+                                0.0, 0.5
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([-5.0e-3, 5.0e-3, 15.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(30.0), np.deg2rad(30.0), 0.0]))), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("lissajous_infty_xy_rp0_quaternion",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 5.0
+                            ],
+                            [
+                                partial(xyrp_lissajous_trajectory_quaternion, 
+                                    x_amp=10.0e-3, x_hz=0.25/2, y_amp=15.0e-3, y_hz=0.125/2,
+                                    r_amp=0.0, r_hz=0.25, p_amp=0.0, p_hz=0.5,
+                                    phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
+                                    center=np.array([0.0, 0.0, 10.0e-3])),
+                                0.0,
+                                4.0*8.0*2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("lissajous_infty_xy_rp15_quaternion_8cycles",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                "xyrp_lissajous_eight_T4_x20_y10_rp15_c0010",
+                                0.0,
+                                4.0*8.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("lissajous_infty_xy_rp30_quaternion_8cycles",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                "xyrp_lissajous_eight_T4_x20_y10_rp30_c0010",
+                                0.0,
+                                4.0*8.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("simple_take_off_to_15mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), start_time=0.0, end_time=2.0, step=1e-3, loop=False))
+register_trajectory("simple_take_off_to_45mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 45.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=10.0), start_time=0.0, end_time=10.0, step=1e-3, loop=False))
+register_trajectory("simple_take_off_to_50mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 50.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=10.0), start_time=0.0, end_time=10.0, step=1e-3, loop=False))
+register_trajectory("simple_take_off_to_47mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 50.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=10.0), start_time=0.0, end_time=10.0, step=1e-3, loop=False))
+
+register_trajectory("z_boundary_pushing_sine_trajectory",
+                    ChainedTrajectory(
+        [
+            [
+                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 35.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0),
+                0.0, 5.0
+            ],
+            [
+                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 5.0 # time to remove ss error.
+            ],
+            [
+                partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=35.0e-3),
+                0.0,
+                2.0*6.0
+            ]
+        ],
+        loop=False
+    )
+)
+
+register_trajectory("z_boundary_too_much_pushing_sine_trajectory",
+                    ChainedTrajectory(
+        [
+            [
+                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 40.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0),
+                0.0, 5.0
+            ],
+            [
+                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 5.0 # time to remove ss error.
+            ],
+            [
+                partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=40.0e-3),
+                0.0,
+                2.0*6.0
+            ]
+        ],
+        loop=False
+    )
 )

@@ -289,7 +289,7 @@ if not DISABLE_PLOTS:
                 node_logerr(f"Error plotting 3D poses with arrows: {e}")
                 if RAISE_ERRORS_IN_EXCEPTION_CATCHERS:
                     raise e
-
+        else:
             plotting.plot_3d_poses_with_arrows_constant_reference(data[pose_topic],
                                                                 const_reference_pose,
                                                                 arrow_interval=pose_3d_plot_options['arrow_interval'],
