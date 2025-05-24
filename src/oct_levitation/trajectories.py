@@ -987,7 +987,7 @@ register_trajectory("setpoint_change_xyz_10mm",
                     )
 )
 
-register_trajectory("setpoint_change_xyz10mm_rp45deg",
+register_trajectory("setpoint_change_xyz10mm_rp30deg",
                     ChainedTrajectory(
                         [
                             [
