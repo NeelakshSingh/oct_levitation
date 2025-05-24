@@ -812,3 +812,196 @@ demo_chain_list_lower_end.append(
 register_trajectory("demo_chain_1", ChainedTrajectory(demo_chain_list_1, loop=True))
 register_trajectory("demo_chain_1_no_loop", ChainedTrajectory(demo_chain_list_1, loop=False))
 register_trajectory("demo_chain_1_no_loop_lower_z_endpoint", ChainedTrajectory(demo_chain_list_lower_end, loop=False))
+
+
+# ### Setpoiont change trajectories for measuring the step response of each dimension.
+
+register_trajectory("setpoint_change_x_10mm",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 0.0, 10.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_y_10mm",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 10.0e-3, 10.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_z_10mm",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 20.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_r_45deg",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), 0.0, 0.0]))), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_p_45deg",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([0.0, np.deg2rad(45.0), 0.0]))), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_rp_45deg",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), np.deg2rad(45.0), 0.0]))), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_xy_10mm",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 10.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_xy10mm_rp_45deg",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 10.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), np.deg2rad(45.0), 0.0]))), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_xyz_10mm",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 10.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
+
+register_trajectory("setpoint_change_xyz10mm_rp45deg",
+                    ChainedTrajectory(
+                        [
+                            [
+                                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 10.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0),
+                                0.0, 2.0
+                            ],
+                            [
+                                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 10.0
+                            ],
+                            [
+                                partial(const_pose_setpoint, position_setpoint=np.array([10.0e-3, 10.0e-3, 20.0e-3]), quaternion_setpoint=geometry.quaternion_from_euler_xyz(np.array([np.deg2rad(45.0), np.deg2rad(45.0), 0.0]))), 
+                                0.0, 2.0
+                            ]
+                        ],
+                        loop=False
+                    )
+)
