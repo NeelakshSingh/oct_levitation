@@ -25,7 +25,7 @@ oct_levitation:
     enable_tracking: true # Enabling tracking will also add a publisher to publish the reference pose
     start_time: 5.0
     end_time: 1000.0
-    trajectory_name: "simple_take_off_to_47mm_discretized" # Should be a registered trajectory under the framework described in trajectories.py
+    trajectory_name: "z_boundary_pushing_sine_trajectory" # Should be a registered trajectory under the framework described in trajectories.py
 
   cpp_impl:
     omega_pd: 0.5

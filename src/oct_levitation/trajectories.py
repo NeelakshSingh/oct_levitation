@@ -533,8 +533,8 @@ register_trajectory("sample_periodic_z_linear_trajectory_discretized", # This sh
 ###############################################
 
 demo_chain_list_1 = []
-pause_time = 1.0 # pause between trajectories
-linear_sweep_duration = 1.0
+pause_time = 2.0 # pause between trajectories
+linear_sweep_duration = 0.5
 
 # 1. Z rise from origin to 15 mm
 demo_chain_list_1.append(
@@ -729,6 +729,27 @@ demo_chain_list_1.append(
     ]
 )
 
+
+# demo_chain_list_1.append(
+#     [
+#         partial(xyrp_lissajous_trajectory_quaternion, 
+#             x_amp=10.0e-3, x_hz=1.0*1.2, y_amp=15.0e-3, y_hz=0.5*1.2,
+#             r_amp=0.0, r_hz=0.25, p_amp=0.0, p_hz=0.5,
+#             phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
+#             center=np.array([0.0, 0.0, 10.0e-3])),
+#         0.0,
+#         4.0*4.0/1.2
+#     ]
+# )
+
+# demo_chain_list_1.append(
+#     [
+#         TrajectoryTransitions.PAUSE_ON_NEXT,
+#         0.0,
+#         pause_time
+#     ]
+# )
+
 demo_chain_list_1.append(
     [
         "xyrp_lissajous_eight_T4_x20_y10_rp15_c0010",
@@ -741,7 +762,7 @@ demo_chain_list_1.append(
     [
         TrajectoryTransitions.PAUSE_ON_NEXT,
         0.0,
-        pause_time
+        pause_time*2.0
     ]
 )
 
@@ -794,9 +815,9 @@ demo_chain_list_lower_end.append(
 
 demo_chain_list_lower_end.append(
     [
-        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 30.0e-3]), end_position=np.array([0.0, 0.0, -15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration*3.0),
+        partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 30.0e-3]), end_position=np.array([0.0, 0.0, -15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=linear_sweep_duration*3.0*4.0),
         0.0,
-        linear_sweep_duration * 3.0
+        linear_sweep_duration * 3.0 * 4.0
     ]
 )
 
@@ -1045,12 +1066,12 @@ register_trajectory("lissajous_infty_xy_rp0_quaternion",
                             ],
                             [
                                 partial(xyrp_lissajous_trajectory_quaternion, 
-                                    x_amp=10.0e-3, x_hz=0.25/2, y_amp=15.0e-3, y_hz=0.125/2,
+                                    x_amp=10.0e-3, x_hz=1.0*1.5, y_amp=15.0e-3, y_hz=0.5*1.5,
                                     r_amp=0.0, r_hz=0.25, p_amp=0.0, p_hz=0.5,
                                     phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
                                     center=np.array([0.0, 0.0, 10.0e-3])),
                                 0.0,
-                                4.0*8.0*2.0
+                                4.0*8.0/1.5
                             ]
                         ],
                         loop=False
@@ -1106,16 +1127,23 @@ register_trajectory("z_boundary_pushing_sine_trajectory",
                     ChainedTrajectory(
         [
             [
-                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 35.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0),
+                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 28.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0),
                 0.0, 5.0
             ],
             [
                 TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 5.0 # time to remove ss error.
             ],
             [
-                partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=35.0e-3),
+                partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=28.0e-3),
                 0.0,
                 2.0*6.0
+            ],
+            [
+                TrajectoryTransitions.LINEAR_TRANSITION, 0.0, 3.0
+            ],
+            [
+                partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 43.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION),
+                0.0, 5.0
             ]
         ],
         loop=False

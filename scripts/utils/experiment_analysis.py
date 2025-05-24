@@ -5,6 +5,7 @@ import rospy
 import pandas as pd
 import subprocess
 import yaml
+import sys
 
 import oct_levitation.plotting as plotting
 import oct_levitation.processing_utils as utils
@@ -19,6 +20,8 @@ from datetime import datetime
 
 
 rospy.init_node('experiment_analysis_node', anonymous=True)
+
+rospy.on_shutdown(sys.exit)
 
 def node_loginfo(msg):
     rospy.loginfo(f"[oct_levitation/experiment_analysis] {msg}")

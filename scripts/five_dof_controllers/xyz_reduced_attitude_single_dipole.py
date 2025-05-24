@@ -74,17 +74,17 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
         #### Bronzefill 27gms with integrator compensation.
-        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        # # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
-        # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
+        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         #### Greentec Pro Do80 Di67
-        Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        Qx = np.diag([25.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
+        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        # Qx = np.diag([25.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         #### Jasan Levitator V1 2N52
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
@@ -125,15 +125,15 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
-        # scale = 1.35
-        # # scale = 1.20 # This value is somewhat robust for trajectories.
-        # self.k_ra_p = 350 * scale
-        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
-
-        #### Greentec Pro Do80 Di67
-        scale = 1.45
+        scale = 1.35
+        # scale = 1.30 # This value is somewhat robust for trajectories.
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
+
+        #### Greentec Pro Do80 Di67
+        # scale = 1.45
+        # self.k_ra_p = 350 * scale
+        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
         #### Jasan Levitator V12 N52  Tuning.
         # scale = 1.0 # Works for magnet axis parallel to world Z axis.
@@ -148,16 +148,16 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
 
         ### Bronzefill 27gms
-        # self.Ki_lin_x = 10.0
-        # self.Ki_lin_y = 10.0
-        # self.Ki_lin_z = 10.0
-        # self.Ki_ang = 100.0
-
-        ### Greentec Pro Do80 Di67
         self.Ki_lin_x = 10.0
         self.Ki_lin_y = 10.0
         self.Ki_lin_z = 10.0
         self.Ki_ang = 100.0
+
+        ### Greentec Pro Do80 Di67
+        # self.Ki_lin_x = 10.0
+        # self.Ki_lin_y = 10.0
+        # self.Ki_lin_z = 10.0
+        # self.Ki_ang = 100.0
 
         integrator_params = self.INTEGRATOR_PARAMS
 
