@@ -8,7 +8,7 @@ oct_levitation:
   active_drivers: [0, 1, 2,  3, 4, 5,  7, 8] # the driver numbers which are connected to these to allocate correctly for the ECB
   
   integrator_params:
-    use_integrator: true # Use integrator for some time
+    use_integrator: false # Use integrator for some time
     switch_off_on_convergence: false # Switch off integrator when the system converges
     check_convergence: false # Check convergence
     integrator_enable_rpxyz: [0, 0, 1, 1, 1]
@@ -22,7 +22,7 @@ oct_levitation:
   max_angular_velocity: 3.490658503988659
 
   trajectory_params:
-    enable_tracking: true # Enabling tracking will also add a publisher to publish the reference pose
+    enable_tracking: false # Enabling tracking will also add a publisher to publish the reference pose
     start_time: 5.0
     end_time: 1000.0
     trajectory_name: "z_boundary_pushing_sine_trajectory" # Should be a registered trajectory under the framework described in trajectories.py
