@@ -293,6 +293,12 @@ if not DISABLE_PLOTS:
                 if RAISE_ERRORS_IN_EXCEPTION_CATCHERS:
                     raise e
         else:
+            plotting.plot_poses_constant_reference(data[pose_topic],
+                                                const_reference_pose,
+                                                save_as=pose_save,
+                                                save_as_emf=SAVE_PLOTS_AS_EMF,
+                                                inkscape_path=INKSCAPE_PATH)
+            
             plotting.plot_3d_poses_with_arrows_constant_reference(data[pose_topic],
                                                                 const_reference_pose,
                                                                 arrow_interval=pose_3d_plot_options['arrow_interval'],

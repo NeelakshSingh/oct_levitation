@@ -1,6 +1,7 @@
 import numpy as np
 import numba
 import scipy.spatial.transform as scitf
+import oct_levitation.numerical as numerical
 
 from scipy.linalg import block_diag
 from functools import partial
@@ -16,6 +17,29 @@ def numba_cross(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     return np.cross(v, w)
 
 numba_cross(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
+
+@numba.njit(cache=True)
+def angle_between_vectors(v: np.ndarray, w: np.ndarray) -> float:
+    """
+    Computes the angle between two vectors in radians.
+    
+    Parameters
+    ----------
+        v: 3x1 array
+        w: 3x1 array
+    
+    Returns
+    -------
+        angle: float, angle in radians
+    """
+    v_norm = np.linalg.norm(v, 2)
+    w_norm = np.linalg.norm(w, 2)
+    if v_norm < EPSILON_TOLERANCE or w_norm < EPSILON_TOLERANCE:
+        return 0.0
+    cos_theta = numerical.numba_clip(np.dot(v, w) / (v_norm * w_norm), -1.0, 1.0)
+    return np.arccos(cos_theta)
+
+angle_between_vectors(np.zeros(3), np.zeros(3)) # Force compilation for expected argument type signature in import
 
 @numba.njit(cache=True)
 def check_if_unit_quaternion(q: np.ndarray):

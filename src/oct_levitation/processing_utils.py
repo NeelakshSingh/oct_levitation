@@ -7,7 +7,7 @@ import oct_levitation.ext.bagreader as bagpy
 
 import scipy.fft as scifft
 
-from typing import Dict, Tuple, List, Union, Callable, Any
+from typing import Dict, Tuple, List, Union, Callable, Any, Optional
 
 ###############################################
 # bagpyext based topic data extraction function.
@@ -237,11 +237,25 @@ def read_data(dwd, topics, interpolate_topic, input_type=None):
 
     return variables
 
-def read_data_pandas(dwd, topics, interpolate_topic):
+def read_data_pandas(dwd: os.PathLike, topics: List[str], interpolate_topic: Optional[str] = None) -> Tuple[Union[np.ndarray, None], Dict[str, pd.DataFrame]]:
+    """
+    Reads data from the CSV files and then stores them in a pandas DataFrame.
+
+    Parameters:
+        dwd (os.PathLike): Directory where the CSV files are stored.
+        topics (List[str]): List of topic names to read from the CSV files.
+        interpolate_topic (Optional[str]): The topic to use for interpolation. If None, no interpolation is performed, instead all the topics are cropped to the 
+            same time interval and the time vector is shifted to start at 0. It is recommended to use interpolation when all topics need to be synced to the same
+            time vector according to a certain topic, for e.g. the control input. However, sometimes the raw data is desired for pure analysis and plotting purposes.
+
+    Returns:
+        Tuple[Union[np.ndarray, None], Dict[str, pd.DataFrame]]: A tuple containing the time vector and a dictionary of DataFrames for each topic. The time vector
+            is only returned if interpolation is performed, otherwise it is None.
+    """
     #%% Import:
     print("------------------READ DATA---------------------")
 
-    dfs = {}
+    dfs : Dict[str, pd.DataFrame] = {}
     for topic in topics:
         dfs[topic] = pd.read_csv(os.path.join(dwd, topic + '.csv'), sep=',',header=0) # header = num. of rows to skip  
         
@@ -259,31 +273,38 @@ def read_data_pandas(dwd, topics, interpolate_topic):
         tmp_2 = (dfs[topic].time <= max_time)
         dfs[topic] = dfs[topic][tmp_1 & tmp_2]
 
-    time_a = dfs[interpolate_topic].time.values
-    time = time_a - time_a[0]
+    if interpolate_topic is not None:
+        time_a = dfs[interpolate_topic].time.values
+        time = time_a - time_a[0]
 
-    interp_dfs = {}
+        interp_dfs = {}
 
-    for topic in topics:
-        current_df: pd.DataFrame = dfs[topic]
-        i = 0
-        interp_df = pd.DataFrame()
-        interp_df["time"] = time
-        for col in current_df.columns:
-            if col == "time":
+        for topic in topics:
+            current_df: pd.DataFrame = dfs[topic]
+            i = 0
+            interp_df = pd.DataFrame()
+            interp_df["time"] = time
+            for col in current_df.columns:
+                if col == "time":
+                    i += 1
+                    continue
+                    # Check if the column's dtype is non-numeric
+                if not np.issubdtype(current_df[col].dtype, np.number):
+                    i += 1
+                    continue
+                interp_df[col] = np.interp(time_a, current_df.time.values, current_df.iloc[:, i])
                 i += 1
-                continue
-                # Check if the column's dtype is non-numeric
-            if not np.issubdtype(current_df[col].dtype, np.number):
-                i += 1
-                continue
-            interp_df[col] = np.interp(time_a, current_df.time.values, current_df.iloc[:, i])
-            i += 1
-        interp_dfs[topic] = interp_df
+            interp_dfs[topic] = interp_df
 
-    return time, interp_dfs
+        return time, interp_dfs
+    else:
+        # Perform simple time cropping and return everything as is.
+        for df in dfs.values():
+            df.time = df.time - min_time
+        # Unless interpolation is requested there is no need to return the time vector.
+        return None, dfs
 
-def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: str, topic_exclude_list: List[str] = [],
+def read_data_pandas_all(dwd: Union[str, os.PathLike], interpolate_topic: Optional[str] = None, topic_exclude_list: List[str] = [],
                          exclude_known_latched_topics: bool = True) -> Dict[str, pd.DataFrame]:
     print(f"Reading data from directory: {dwd}")
     latched_topic_suffixes = ["_control_gains", "_control_session_metadata"]

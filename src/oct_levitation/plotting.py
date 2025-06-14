@@ -28,6 +28,7 @@ import pynumdiff.smooth_finite_difference
 from typing import Optional, Tuple, List, Dict, Union, Any, Callable
 from warnings import warn
 from copy import deepcopy
+from dataclasses import dataclass
 
 try:
     from mayavi import mlab
@@ -253,11 +254,52 @@ def arrange_subplots(arrangement, x_share=None, y_share=None):
         fig.show()
     return fig, ax_grid
 
+@dataclass
+class AxisLabel:
+    title: Optional[str] = None
+    xlabel: Optional[str] = None
+    ylabel: Optional[str] = None
+
+@dataclass
+class PlotLabelConfig:
+    fig_title: Optional[str] = None
+    axes_labels: Optional[List[Optional[AxisLabel]]] = None
+
+def apply_labels_from_config(fig: Figure,
+                             ax_array: Union[plt.Axes, np.ndarray],
+                             label_config: PlotLabelConfig):
+    if label_config.fig_title:
+        fig.suptitle(label_config.fig_title)
+
+    # Flatten axes if it's a 2D array (like subplots(n, m))
+    # NOTE: Numpy has C style row major ordering, hence the flattening concatenates the rows end to end
+    if isinstance(ax_array, np.ndarray):
+        flat_axes = ax_array.flatten()
+    elif isinstance(ax_array, list):
+        flat_axes = ax_array
+    else:
+        flat_axes = [ax_array]
+
+    if label_config.axes_labels:
+        for i, axis_labels in enumerate(label_config.axes_labels):
+            if i >= len(flat_axes) or axis_labels is None:
+                continue
+            ax = flat_axes[i]
+            if axis_labels.title is not None:
+                ax.set_title(axis_labels.title)
+            if axis_labels.xlabel is not None:
+                ax.set_xlabel(axis_labels.xlabel)
+            if axis_labels.ylabel is not None:
+                ax.set_ylabel(axis_labels.ylabel)
+
+
 def apply_axes_properties(fig: Figure,
                           ax_array: Union[plt.Axes, AxesArray],
+                          label_config: Optional[PlotLabelConfig] = None,
                           save_as: str = None,
                           save_as_emf: bool = False,
-                          inkscape_path: str = INKSCAPE_PATH, 
+                          inkscape_path: str = INKSCAPE_PATH,
+                          save_kwargs: Optional[Dict[str, Any]] = {}, 
                           **kwargs) -> Tuple[Figure, Union[plt.Axes, List[plt.Axes]]]:
     """
     Applies various optional properties to the provided Matplotlib Axes, enabling customization 
@@ -270,6 +312,9 @@ def apply_axes_properties(fig: Figure,
         
         ax_array : Union[plt.Axes, List[plt.Axes]]
             A single Axes instance or a list of Axes instances to modify.
+
+        figsize : Tuple[float, float], optional
+            If provided, sets the figure size to the specified dimensions (width, height) in inches.
         
         save_as : str, optional
             If provided, saves the figure to the specified filename (supports formats like PNG, PDF, SVG).
@@ -279,6 +324,9 @@ def apply_axes_properties(fig: Figure,
 
         inkscape_path : str, default=INKSCAPE_PATH
             Path to Inkscape executable for EMF conversion.
+
+        save_kwargs : dict, optional
+            Additional keyword arguments for the `fig.savefig()` method, such as DPI or transparent background.
         
         **kwargs : dict
             Optional customization options:
@@ -302,7 +350,12 @@ def apply_axes_properties(fig: Figure,
             - `"aspect"` (str or float): Aspect ratio of the plot.
             - `"spines"` (dict): Modifies spines visibility (e.g., `{"top": False, "right": False}`).
             - `"facecolor"` (str): Sets figure background color.
-            - `"tight_layout"` (bool, default=True): Adjusts layout to prevent overlap.
+            - `"tight_layout"` (bool, default=True): Adjusts layout to prevent overlap. Accepts kwargs via `"kwargs.tight_layout_kwargs"` (dict).
+            - `"tight_layout_kwargs"` (dict): Additional parameters for `fig.tight_layout()`.
+
+            Optional customization options for Figure:
+            - figsize (tuple): Sets the figure size.
+            - fig_subplots_adjust_kwargs (dict): Additional parameters for `fig.subplots_adjust()`.
 
     Returns:
     --------
@@ -379,14 +432,32 @@ def apply_axes_properties(fig: Figure,
     if "facecolor" in kwargs:
         fig.patch.set_facecolor(kwargs["facecolor"])
 
-    if kwargs.get("tight_layout", True):
-        fig.tight_layout()
+    # Apply the figsize
+    if "figsize" in kwargs:
+        fig.set_size_inches(kwargs.get("figsize"))
 
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
+    if "fig_subplots_adjust_kwargs" in kwargs:
+        fig.subplots_adjust(**kwargs["fig_subplots_adjust_kwargs"])
+    
+    if label_config is not None:
+        apply_labels_from_config(fig, ax_array, label_config)
+
+    if kwargs.get("tight_layout", True):
+        fig.tight_layout(**kwargs.get("tight_layout_kwargs", {}))
+
+    if save_as:
+        name, ext = os.path.splitext(save_as)
+        save_format = ext[1:] if ext else 'png'  # Default to PNG if no extension
+        fig.savefig(save_as, format=save_format, **save_kwargs)
         if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+            emf_file = save_as.replace(ext, '.emf') # Replace the extension with .emf
+            # Now we need to check if the ext is a scalable format like SVG
+            if ext.lower() not in ['.svg', '.pdf']:
+                temp_file = name + '.svg'  # Save as SVG first
+                fig.savefig(temp_file, format='svg', **save_kwargs)
+                export_to_emf(temp_file, emf_file, inkscape_path=inkscape_path)
+            else:
+                export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
     
     if not DISABLE_PLT_SHOW:
         fig.show()
@@ -1334,7 +1405,6 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
     - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
     - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
     """
-    time = actual_poses['time'].values
     actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
     reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
@@ -1353,8 +1423,8 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
-        axs[0, i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
+        axs[0, i].plot(actual_poses['time'], actual_positions[:, i], label=f"Actual {axis}")
+        axs[0, i].plot(reference_poses['time'], reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
         axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[0, i].set_xlabel("Time (s)")
         axs[0, i].set_ylabel("Position (mm)")
@@ -1362,8 +1432,8 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
 
     # Euler angle plots
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
-        axs[1, i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[1, i].plot(actual_poses['time'], actual_euler[:, i], label=f"Actual {angle}")
+        axs[1, i].plot(reference_poses['time'], reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
         axs[1, i].set_title(angle)
         axs[1, i].set_xlabel("Time (s)")
         axs[1, i].set_ylabel("Angle (deg)")
@@ -2333,6 +2403,121 @@ def plot_actual_field_and_gradients(pose_df: pd.DataFrame, actual_currents_df: p
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
+
+def plot_actual_field_gradients_and_angle_bw_field_and_normal(
+                pose_df: pd.DataFrame,
+                actual_currents_df: pd.DataFrame,
+                calibrated_model: common.OctomagCalibratedModel,
+                normal_vector: np.ndarray = np.array([0.0, 0.0, 1.0]),
+                field_vectors_in_body_fixed_frame: bool = False,
+                normalize_quaternions: bool = True,
+                save_as: str = None,
+                save_as_emf: bool = False,
+                inkscape_path: str = INKSCAPE_PATH,
+                **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
+    """
+    Plots the 3 magnetic field components (Bx, By, Bz), all 5 gradient components together,
+    and the angle between the field vector and a specified normal vector (in degrees).
+    """
+    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
+    time = combined_actual['time']
+
+    field_keys = ['Bx', 'By', 'Bz']
+    gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
+    actual_values = {key: [] for key in field_keys + gradient_keys}
+    angle_degrees = []
+
+    for i in range(len(combined_actual)):
+        position = np.array([
+            combined_actual['transform.translation.x'].iloc[i],
+            combined_actual['transform.translation.y'].iloc[i],
+            combined_actual['transform.translation.z'].iloc[i]
+        ])
+        quaternion = np.array([
+            combined_actual['transform.rotation.x'].iloc[i],
+            combined_actual['transform.rotation.y'].iloc[i],
+            combined_actual['transform.rotation.z'].iloc[i],
+            combined_actual['transform.rotation.w'].iloc[i]
+        ])
+        if normalize_quaternions:
+            quaternion = quaternion / np.linalg.norm(quaternion)  # Normalize quaternion, somtimes it can be sligthly off because of interpolation
+        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
+        actual_field_grad = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents).flatten()
+
+        # Transform field vector to body frame if needed
+
+        # Store gradient components (always in inertial/world frame)
+        for j, key in enumerate(gradient_keys):
+            actual_values[key].append(actual_field_grad[3 + j] * 1000)  # Convert T/m to mT/m
+
+        # Compute angle in degrees between field and normal vector (transformed)
+        field_vector = actual_field_grad[:3]
+        normal_vector_inertial = geometry_jit.rotate_vector_from_quaternion(quaternion, normal_vector).flatten()
+        angle_rad = np.arccos(
+            np.clip(
+                np.dot(field_vector, normal_vector_inertial)/ (np.linalg.norm(field_vector) * np.linalg.norm(normal_vector_inertial) + geometry_jit.EPSILON_TOLERANCE),
+                -1.0, 1.0
+            )
+        )
+        angle_degrees.append(np.rad2deg(angle_rad))
+
+        if field_vectors_in_body_fixed_frame:
+            field_vector = geometry_jit.rotate_vector_from_quaternion(
+                geometry_jit.invert_quaternion(quaternion),
+                field_vector
+            )
+
+        # Store field components
+        for j, key in enumerate(field_keys):
+            actual_values[key].append(field_vector[j] * 1000)  # Convert T to mT
+
+    # Setup figure and axes
+    fig, axs = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+
+    # --- Field components in one subplot ---
+    field_linestyles = ['-', '--', '-.']
+    field_colors = ['tab:red', 'tab:green', 'tab:blue']
+
+    for i, key in enumerate(field_keys):
+        axs[0].plot(time, actual_values[key], label=key,
+                    linestyle=field_linestyles[i],
+                    color=field_colors[i], **kwargs)
+    axs[0].set_ylabel("Field [mT]")
+    axs[0].legend(loc='upper right')
+    axs[0].grid(True)
+
+    # --- Gradient components in one subplot ---
+    gradient_linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
+    gradient_colors = ['tab:purple', 'tab:orange', 'tab:brown', 'tab:gray', 'tab:pink']
+
+    for idx, key in enumerate(gradient_keys):
+        axs[1].plot(time, actual_values[key], label=key,
+                    linestyle=gradient_linestyles[idx],
+                    color=gradient_colors[idx], **kwargs)
+    axs[1].set_ylabel("Gradients [mT/m]")
+    axs[1].legend(loc='upper right')
+    axs[1].grid(True)
+
+    # --- Angle subplot ---
+    axs[2].plot(time, angle_degrees, linestyle='-', color='tab:cyan', label='Angle', **kwargs)
+    axs[2].set_ylabel("Angle [deg]")
+    axs[2].set_xlabel("Time [s]")
+    axs[2].grid(True)
+
+    fig.suptitle("Magnetic Field, Gradients, and Angle to Normal Vector")
+    fig.tight_layout(rect=[0, 0, 1, 0.97])  # Leave space for suptitle
+
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+
+    return fig, axs
+
 
 def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
                                         actual_currents_df: pd.DataFrame,
@@ -3413,7 +3598,7 @@ def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
     ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='vector_0', **kwargs)  # Blue
     ax.set_xlabel('Time')
     ax.set_ylabel('Vector 0')
-    ax.set_title('JMA Condition Plot')
+    ax.set_title('Allocation Condition Plot')
     ax.legend()
     ax.grid(True, linestyle='--', alpha=0.7)
 

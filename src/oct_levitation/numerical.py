@@ -2,8 +2,6 @@ import numpy as np
 import numpy.typing as np_t
 import numba
 
-import oct_levitation.geometry as geometry
-
 from typing import Union, Iterable
 
 ########################################
