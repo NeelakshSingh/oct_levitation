@@ -10,6 +10,7 @@ import oct_levitation.geometry as geometry
 import oct_levitation.geometry_jit as geometry_jit
 import oct_levitation.common as common
 import oct_levitation.mechanical as mechanical
+import tikzplotlib as tikzplt
 from oct_levitation.processing_utils import get_signal_fft
 from geometry_msgs.msg import Transform, Vector3, Quaternion
 import os
@@ -624,7 +625,7 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
+        axs[0, i].plot(time, actual_positions[:, i], label=f"Actual {axis}", **kwargs)
         axs[0, i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
         axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[0, i].set_xlabel("Time (s)")
@@ -633,7 +634,7 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
 
     # Euler angle plots
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
+        axs[1, i].plot(time, actual_euler[:, i], label=f"Actual {angle}", **kwargs)
         axs[1, i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
         axs[1, i].set_title(f"{angle} of Body Fixed Frame")
         axs[1, i].set_xlabel("Time (s)")
