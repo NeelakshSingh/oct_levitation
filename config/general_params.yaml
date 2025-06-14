@@ -1,6 +1,7 @@
 oct_levitation:
-  rigid_body: "bronzefill_ring_27gms_2N52"
-  # rigid_body: "jasan_levitator_v1_5N52"
+  # rigid_body: "bronzefill_ring_27gms_2N52" # Used for all trajectory tracking tests
+  rigid_body: "greentec_do80_di67_Md10_2N52" # Used for all regulation and step response tests
+  # rigid_body: "bronzefill_ring_27gms_4N52" # For Z boundary pushing
 
   cpp_impl:
     calfile: "mc3ao8s_md200_handp.yaml"

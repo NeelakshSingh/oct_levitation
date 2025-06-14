@@ -23,8 +23,8 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
     def post_init(self):
         self.tfsub_callback_style_control_loop = True
-        self.INITIAL_DESIRED_POSITION = np.array([0.0, 0.0, 8.0])*1.0e-3
-        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([0.0, 0.0, 0.0]))
+        self.INITIAL_DESIRED_POSITION = np.array([-5.0, 5.0, 10.0])*1.0e-3
+        self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.deg2rad(np.array([30.0, 30.0, 0.0]))
 
         self.control_rate = self.CONTROL_RATE
         self.dt = 1/self.control_rate
@@ -76,8 +76,15 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #### Bronzefill 27gms with integrator compensation.
         Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        Qy = np.diag([10.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+        Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
+        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
+
+        #### Greentec Pro Do80 Di67
+        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
+        # Qx = np.diag([25.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
+        # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
+        # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
         #### Jasan Levitator V1 2N52
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
@@ -118,10 +125,15 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
-        # scale = 1.50
-        scale = 1.20
+        scale = 1.35
+        # scale = 1.30 # This value is somewhat robust for trajectories.
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
+
+        #### Greentec Pro Do80 Di67
+        # scale = 1.45
+        # self.k_ra_p = 350 * scale
+        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
         #### Jasan Levitator V12 N52  Tuning.
         # scale = 1.0 # Works for magnet axis parallel to world Z axis.
@@ -135,11 +147,17 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         ##############################
         ### INTEGRAL ACTION DESIGN TO COMPENSATE FOR SS ERRORS ###
 
-        self.Ki_lin = 1.0
-        self.Ki_ang = 60.0
+        ### Bronzefill 27gms
+        self.Ki_lin_x = 10.0
+        self.Ki_lin_y = 10.0
+        self.Ki_lin_z = 10.0
+        self.Ki_ang = 100.0
 
-        # self.Ki_lin = 5.0
-        # self.Ki_ang = 350.0
+        ### Greentec Pro Do80 Di67
+        # self.Ki_lin_x = 10.0
+        # self.Ki_lin_y = 10.0
+        # self.Ki_lin_z = 10.0
+        # self.Ki_ang = 100.0
 
         integrator_params = self.INTEGRATOR_PARAMS
 
@@ -226,7 +244,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         self.E = np.hstack((np.eye(2), np.zeros((2, 1)))) # Just selects x and y components from a 3x1 vector
         self.pause_trajectory_tracking = False
-        if self.use_integrator and self.__integrator_check_convergence: self.pause_trajectory_tracking = True
         
     def callback_control_logic(self, 
                                position : np.ndarray, 
@@ -312,9 +329,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         # Calculating the integral action.
         if self.use_integrator:
             if self.time_elapsed > self.integrator_start_time and self.time_elapsed < self.integrator_end_time:
-                self.disturbance_rpxyz[4] += self.Ki_lin * z_error[0, 0] * self.dt * self.__integrator_enable[4]
-                self.disturbance_rpxyz[3] += self.Ki_lin * y_error[0, 0] * self.dt * self.__integrator_enable[3]
-                self.disturbance_rpxyz[2] += self.Ki_lin * x_error[0, 0] * self.dt * self.__integrator_enable[2]
+                self.disturbance_rpxyz[4] += self.Ki_lin_x * z_error[0, 0] * self.dt * self.__integrator_enable[4]
+                self.disturbance_rpxyz[3] += self.Ki_lin_y * y_error[0, 0] * self.dt * self.__integrator_enable[3]
+                self.disturbance_rpxyz[2] += self.Ki_lin_z * x_error[0, 0] * self.dt * self.__integrator_enable[2]
                 self.disturbance_rpxyz[0] += self.Ki_ang * reduced_attitude_error[0] * self.dt * self.__integrator_enable[0]
                 self.disturbance_rpxyz[1] += self.Ki_ang * reduced_attitude_error[1] * self.dt * self.__integrator_enable[1]
                 
@@ -362,7 +379,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
                     if np.all(self.__indiv_integrator_converge_state):
                         self.__integrator_converged = True
-                        self.pause_trajectory_tracking = False
                         rospy.logwarn_once("All convergence achieved.")
 
         u_x = self.K_x @ x_error + self.disturbance_rpxyz[2]

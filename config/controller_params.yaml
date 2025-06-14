@@ -11,21 +11,21 @@ oct_levitation:
     use_integrator: false # Use integrator for some time
     switch_off_on_convergence: false # Switch off integrator when the system converges
     check_convergence: false # Check convergence
-    integrator_enable_rpxyz: [1, 1, 1, 1, 1]
+    integrator_enable_rpxyz: [0, 0, 1, 1, 1]
     convergence_check_time: 2.0 # Stay at 1 second of convergence before switching off the integrator
     position_error_tol: 0.0002
     reduced_attitude_error_tol: 0.005
-    start_time: 10.0
+    start_time: 5.0
     end_time: 1000.0
   
   max_linear_velocity: 0.1 # Maximum velocity of the levitation system in m/s
   max_angular_velocity: 3.490658503988659
 
   trajectory_params:
-    enable_tracking: true # Enabling tracking will also add a publisher to publish the reference pose
-    start_time: 15.0
+    enable_tracking: false # Enabling tracking will also add a publisher to publish the reference pose
+    start_time: 5.0
     end_time: 1000.0
-    trajectory_name: "xyrp_lissajous_eight_T4_x20_y10_rp30_c0010" # Should be a registered trajectory under the framework described in trajectories.py
+    trajectory_name: "z_boundary_pushing_sine_trajectory" # Should be a registered trajectory under the framework described in trajectories.py
 
   cpp_impl:
     omega_pd: 0.5

@@ -15,6 +15,7 @@ experiment_analysis:
   save_plots_as_emf: true # Needs save_plots to be true, and requires an inkscape installation.
   time_varying_reference: true # In case the time varying reference topic is not found, then constant reference is used.
   observations_editor: "xterm -e nano" # Should be a shell command callable from terminal. This will be used to open up the editor for noting down observations.
+  raise_errors_in_exception_catchers: false
 
   pose_3d_plot_params:
     arrow_interval: 100
@@ -69,9 +70,9 @@ experiment_analysis:
         - "/control_session/jma_condition"
 
   filter_time_range:
-    enable: false # If true then specify the start and end times properly.
-    start: 22.0 # s, set to null for -inf
-    end: 36.0 # s, set to null for +inf
+    enable: true # If true then specify the start and end times properly.
+    start: 5.0 # s,
+    end: 90.0 # s,
 
   exclude_known_latched_topics: true # If true, then known latched topics are excluded from the analysis. This is useful for topics that are not needed for the analysis and may lead to errors in the reader if they are not excluded.
   # In case your own topic collides with the latched topic names (suffix matched) then set this to false and add erroring topics
