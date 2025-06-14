@@ -259,6 +259,13 @@ class AxisLabel:
     title: Optional[str] = None
     xlabel: Optional[str] = None
     ylabel: Optional[str] = None
+    legend_labels: Optional[List[str]] = None
+    legend_loc: Optional[str] = "best"
+
+    def __post_init__(self):
+        if self.legend_loc is None:
+            warn("legend_loc is None, setting to 'best'")
+            self.legend_loc = "best"
 
 @dataclass
 class PlotLabelConfig:
@@ -281,16 +288,32 @@ def apply_labels_from_config(fig: Figure,
         flat_axes = [ax_array]
 
     if label_config.axes_labels:
-        for i, axis_labels in enumerate(label_config.axes_labels):
-            if i >= len(flat_axes) or axis_labels is None:
+        for i, axis_label in enumerate(label_config.axes_labels):
+            if i >= len(flat_axes) or axis_label is None:
                 continue
             ax = flat_axes[i]
-            if axis_labels.title is not None:
-                ax.set_title(axis_labels.title)
-            if axis_labels.xlabel is not None:
-                ax.set_xlabel(axis_labels.xlabel)
-            if axis_labels.ylabel is not None:
-                ax.set_ylabel(axis_labels.ylabel)
+            if axis_label.title is not None:
+                ax.set_title(axis_label.title)
+            if axis_label.xlabel is not None:
+                ax.set_xlabel(axis_label.xlabel)
+            if axis_label.ylabel is not None:
+                ax.set_ylabel(axis_label.ylabel)
+
+            if axis_label.legend_labels is not None:
+                handles, _ = ax.get_legend_handles_labels()
+                if len(axis_label.legend_labels) == 0:
+                    ax.legend([], [])  # Remove legend
+                elif len(handles) == len(axis_label.legend_labels):
+                    ax.legend(handles, axis_label.legend_labels, loc=axis_label.legend_loc or "best")
+                else:
+                    warn(
+                        f"Legend labels count mismatch on axis titled '{axis_label.title}'. "
+                        f"Expected {len(handles)}, got {len(axis_label.legend_labels)}. Leaving legend unchanged."
+                    )
+                    ax.legend(loc=axis_label.legend_loc or "best")
+            elif axis_label.legend_loc is not None:
+                # Allow legend location override even without changing labels
+                ax.legend(loc=axis_label.legend_loc)
 
 
 def apply_axes_properties(fig: Figure,
