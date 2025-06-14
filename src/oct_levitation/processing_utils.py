@@ -13,6 +13,19 @@ from typing import Dict, Tuple, List, Union, Callable, Any, Optional
 # bagpyext based topic data extraction function.
 ###############################################
 
+def topic_name_to_bagpyext_name(topic_name: str) -> str:
+    """
+    Convert a ROS topic name to a CSV file name.
+    """
+    # Remove leading and trailing slashes
+    if topic_name.startswith("/"):
+        topic_name = topic_name[1:]
+    if topic_name.endswith("/"):
+        topic_name = topic_name[:-1]
+    
+    # Replace slashes with underscores
+    return "_" + topic_name.replace("/", "_")
+
 def extract_topic_data_csv_bagpy(dwd: Union[str, os.PathLike], logfunc: Callable[[str], Any] = print):
     """
     Extracts topic data from a bag file using bagpyext and saves it as CSV files. Adapted
@@ -357,29 +370,135 @@ def filter_dataframe_by_time_range(dataframe: pd.DataFrame,
 
     return filtered_df
 
+def crop_dataset_to_same_time_range(dataset: Dict[str, pd.DataFrame], 
+                                    time_vec: Optional[np.ndarray] = None,
+                                    time_column: str = "time") -> Dict[str, pd.DataFrame]:
+    topics = list(dataset.keys())
+    min_time = max([dataset[topic][time_column].values[0] for topic in topics])
+    max_time = min([dataset[topic][time_column].values[-1] for topic in topics])
+
+    if time_vec is not None:
+        # Crop the time vector to the same time interval
+        time_vec = time_vec[(time_vec >= min_time) & (time_vec <= max_time)]
+
+    # crop all the data to the same time interval min_time to max_time
+    print(f"Cropping all topics to the same time interval: {min_time} to {max_time}")
+    for topic in topics:
+        tmp_1 = (dataset[topic][time_column] >= min_time)
+        tmp_2 = (dataset[topic][time_column] <= max_time)
+        dataset[topic] = dataset[topic][tmp_1 & tmp_2]
+    return time_vec, dataset
+
 def filter_dataset_by_time_range(dataset: Dict[str, pd.DataFrame],
                                  time_vec: np.ndarray,
                                  t_start: float, 
                                  t_end: float, 
                                  renormalize_time: bool = False,
-                                 time_column: str = "time") -> Tuple[np.ndarray, Dict[str, pd.DataFrame]]:
+                                 time_column: str = "time",
+                                 crop_to_same_time: bool = True) -> Tuple[np.ndarray, Dict[str, pd.DataFrame]]:
     print(f"Filtering dataset with {len(dataset)} keys within time range {t_start} to {t_end}")
     filtered_dataset = {}
-    time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
-    print(f"Original time vector length: {len(time_vec)}, Filtered time vector length: {len(time_vec_filtered)}")
-    filtered_dataset = {}
-    time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
+    time_vec_filtered = None
+    if time_vec is not None:
+        time_vec_filtered = time_vec[np.logical_and(time_vec > t_start, time_vec < t_end)]
+        print(f"Original time vector length: {len(time_vec)}, Filtered time vector length: {len(time_vec_filtered)}")
     for key, item in dataset.items():
         filtered_dataset[key] = filter_dataframe_by_time_range(item, t_start, t_end, renormalize_time, time_column)
+
+    # crop all the data to the same time interval min_time to max_time
+    if crop_to_same_time:
+        time_vec_filtered, filtered_dataset = crop_dataset_to_same_time_range(filtered_dataset, time_vec_filtered)
     
+    print("-----------------------------------------------------------------------------------")
     return time_vec_filtered, filtered_dataset
 
-def downsample_dataframe(dataframe: pd.DataFrame,
-                         fs_new: float,
-                         time_column: str = "time") -> pd.DataFrame:
+def downsample_dataframe_by_seconds(df, t_sec: float, time_column: str = "time") -> pd.DataFrame:
+    df = df.sort_values(time_column).copy()
+    last_t = -t_sec
+    mask = []
+
+    for t in df[time_column]:
+        if t >= last_t + t_sec:
+            mask.append(True)
+            last_t = t
+        else:
+            mask.append(False)
     
-    return 
+    return df[mask].reset_index(drop=True)
     
+def downsample_dataframe_by_samples(df: pd.DataFrame, n_step:int) -> pd.DataFrame:
+    return df.iloc[::n_step].reset_index(drop=True)   
+
+def downsample_dataset_by_seconds(dataset: Dict[str, pd.DataFrame],
+                                  time_vec: Union[np.ndarray, None],
+                                  t_sec: float,
+                                  time_column: str = "time",
+                                  crop_to_same_time: bool = True) -> Dict[str, pd.DataFrame]:
+    """
+    Downsamples a dataset of DataFrames by a specified number of seconds.
+
+    Parameters:
+        dataset (Dict[str, pd.DataFrame]): The input dataset containing DataFrames.
+        time_vec (Union[np.ndarray, None]): The time vector associated with the dataset.
+        t_sec (float): The number of seconds to downsample by.
+        time_column (str): The name of the time column in the DataFrames.
+
+    Returns:
+        Dict[str, pd.DataFrame]: A new dataset with downsampled DataFrames.
+    """
+    print(f"Downsampling dataset with {len(dataset)} keys by {t_sec} seconds.")
+    downsampled_dataset = {}
+    for key, df in dataset.items():
+        downsampled_dataset[key] = downsample_dataframe_by_seconds(df, t_sec, time_column)
+
+    time_vec_downsampled = None
+    
+    if time_vec is not None:
+        time_vec_downsampled = downsample_dataframe_by_seconds(pd.DataFrame(time_vec, columns=[time_column]), t_sec, time_column)
+        time_vec_downsampled = time_vec_downsampled[time_column].values
+        print(f"Original time vector length: {len(time_vec)}, Downsampled time vector length: {len(time_vec_downsampled)}")
+
+    if crop_to_same_time:
+        time_vec_downsampled, downsampled_dataset = crop_dataset_to_same_time_range(downsampled_dataset, time_vec_downsampled)
+    
+    print("-----------------------------------------------------------------------------------")
+    return time_vec_downsampled, downsampled_dataset
+
+def downsample_dataset_by_samples(dataset: Dict[str, pd.DataFrame],
+                                  time_vec: Union[np.ndarray, None],
+                                  n_step: int,
+                                  time_column: str = "time",
+                                  crop_to_same_time: bool = True) -> Dict[str, pd.DataFrame]:
+    """
+    Downsamples a dataset of DataFrames by a specified number of samples.
+
+    Parameters:
+        dataset (Dict[str, pd.DataFrame]): The input dataset containing DataFrames.
+        time_vec (Union[np.ndarray, None]): The time vector associated with the dataset.
+        n_step (int): The number of samples to downsample by.
+        time_column (str): The name of the time column in the DataFrames.
+
+    Returns:
+        Dict[str, pd.DataFrame]: A new dataset with downsampled DataFrames.
+    """
+    print(f"Downsampling dataset with {len(dataset)} keys by {n_step} samples.")
+    downsampled_dataset = {}
+    for key, df in dataset.items():
+        downsampled_dataset[key] = downsample_dataframe_by_samples(df, n_step)
+
+    time_vec_downsampled = None
+    
+    if time_vec is not None:
+        time_vec_downsampled = downsample_dataframe_by_samples(pd.DataFrame(time_vec, columns=[time_column]), n_step, time_column)
+        time_vec_downsampled = time_vec_downsampled[time_column].values
+        print(f"Original time vector length: {len(time_vec)}, Downsampled time vector length: {len(time_vec_downsampled)}")
+
+    if crop_to_same_time:
+        print("Cropping downsampled dataset to the same time range.")
+        time_vec_downsampled, downsampled_dataset = crop_dataset_to_same_time_range(downsampled_dataset, time_vec_downsampled)
+    
+    print("-----------------------------------------------------------------------------------")
+    return time_vec_downsampled, downsampled_dataset
 
 def field_position_dataframe_from_des_currents_reg(pose_df: pd.DataFrame, current_df: pd.DataFrame, calibration_fn) -> pd.DataFrame:
     """

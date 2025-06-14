@@ -32,19 +32,6 @@ def node_logerr(msg):
 def node_logwarn(msg):
     rospy.logwarn(f"[oct_levitation/experiment_analysis] {msg}")
 
-def topic_name_to_bagpyext_name(topic_name: str) -> str:
-    """
-    Convert a ROS topic name to a CSV file name.
-    """
-    # Remove leading and trailing slashes
-    if topic_name.startswith("/"):
-        topic_name = topic_name[1:]
-    if topic_name.endswith("/"):
-        topic_name = topic_name[:-1]
-    
-    # Replace slashes with underscores
-    return "_" + topic_name.replace("/", "_")
-
 rospack = rospkg.RosPack()
 pkg_path = rospack.get_path('oct_levitation')
 data_base_folder = rospy.get_param('experiment_analysis/base_folder', "")
@@ -172,13 +159,13 @@ else:
     node_loginfo(f"Using time varying reference pose.")
 
 time_sync_topic = rospy.get_param("experiment_analysis/plot_time_sync_topic", default="tnb_mns_driver/des_currents_reg")
-time_sync_topic = topic_name_to_bagpyext_name(time_sync_topic)
+time_sync_topic = utils.topic_name_to_bagpyext_name(time_sync_topic)
 
 exclude_known_latched_topics = rospy.get_param("experiment_analysis/exclude_known_latched_topics", default=True)
 topics_exclusion_list = rospy.get_param("experiment_analysis/topics_exclusion_list", default=[])
 if len(topics_exclusion_list) > 0:
     for i, topic in enumerate(topics_exclusion_list):
-        topics_exclusion_list[i] = topic_name_to_bagpyext_name(topic)
+        topics_exclusion_list[i] = utils.topic_name_to_bagpyext_name(topic)
 
 time, data = utils.read_data_pandas_all(expt_dir, interpolate_topic=time_sync_topic, 
                                         topic_exclude_list=topics_exclusion_list, 
@@ -217,17 +204,17 @@ if not sim:
         data['_tnb_mns_driver_des_currents_reg'], data['_tnb_mns_driver_system_state'], ACTIVE_COILS, ACTIVE_DRIVERS, N_DRIVERS
     )
 
-pose_topic = topic_name_to_bagpyext_name(dipole_body.pose_frame)
-reference_pose_topic = topic_name_to_bagpyext_name("/control_session/reference_pose")
+pose_topic = utils.topic_name_to_bagpyext_name(dipole_body.pose_frame)
+reference_pose_topic = utils.topic_name_to_bagpyext_name("/control_session/reference_pose")
 if reference_pose_topic not in data.keys():
     time_varying_reference = False
     rospy.logwarn(f"Reference pose topic {reference_pose_topic} not found in the dataset. Disabling time varying reference.")
-com_wrench_topic = topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
+com_wrench_topic = utils.topic_name_to_bagpyext_name(dipole_body.com_wrench_topic)
 
 calib_file = rospy.get_param("experiment_analysis/octomag_calibration_file", default="mc3ao8s_md200_handp.yaml")
 calibration_model = common.OctomagCalibratedModel(calibration_type="legacy_yaml", 
                                                 calibration_file=calib_file)
-metadata_topic = pd.read_csv(os.path.join(expt_dir, topic_name_to_bagpyext_name("/control_session/metadata") + ".csv"))
+metadata_topic = pd.read_csv(os.path.join(expt_dir, utils.topic_name_to_bagpyext_name("/control_session/metadata") + ".csv"))
 experiment_type = os.path.splitext(metadata_topic['controller_name.data'][0])[0]
 
 DISABLE_PLOTS = rospy.get_param("~disable_plots", default=False)
@@ -394,7 +381,7 @@ if not DISABLE_PLOTS:
         if experiment_type not in topic_map.keys():
             node_logerr(f"Experiment folder {experiment_type} not found in condition number topic map.")
         for topic in topic_map[experiment_type]:
-            topic_bgpy_name = topic_name_to_bagpyext_name(topic)
+            topic_bgpy_name = utils.topic_name_to_bagpyext_name(topic)
             if topic_bgpy_name in data.keys():
                 cond_topic = topic_bgpy_name
                 break

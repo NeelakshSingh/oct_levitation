@@ -261,6 +261,7 @@ class AxisLabel:
     ylabel: Optional[str] = None
     legend_labels: Optional[List[str]] = None
     legend_loc: Optional[str] = "best"
+    remove_plot_idx: Union[int, List[int], None] = None # If provided, will remove the plot at this index from the axes completely
 
     def __post_init__(self):
         if self.legend_loc is None:
@@ -270,12 +271,16 @@ class AxisLabel:
 @dataclass
 class PlotLabelConfig:
     fig_title: Optional[str] = None
-    axes_labels: Optional[List[Optional[AxisLabel]]] = None
+    axes_labels: Optional[Union[AxisLabel, List[Optional[AxisLabel]]]] = None
+
+    def __post_init__(self):
+        if isinstance(self.axes_labels, AxisLabel):
+            self.axes_labels = [self.axes_labels]
 
 def apply_labels_from_config(fig: Figure,
                              ax_array: Union[plt.Axes, np.ndarray],
                              label_config: PlotLabelConfig):
-    if label_config.fig_title:
+    if label_config.fig_title is not None:
         fig.suptitle(label_config.fig_title)
 
     # Flatten axes if it's a 2D array (like subplots(n, m))
@@ -287,7 +292,7 @@ def apply_labels_from_config(fig: Figure,
     else:
         flat_axes = [ax_array]
 
-    if label_config.axes_labels:
+    if label_config.axes_labels is not None:
         for i, axis_label in enumerate(label_config.axes_labels):
             if i >= len(flat_axes) or axis_label is None:
                 continue
@@ -299,10 +304,21 @@ def apply_labels_from_config(fig: Figure,
             if axis_label.ylabel is not None:
                 ax.set_ylabel(axis_label.ylabel)
 
+            # Remove the plots first if specified and then apply the legend labels
+            if axis_label.remove_plot_idx is not None:
+                if isinstance(axis_label.remove_plot_idx, int):
+                    axis_label.remove_plot_idx = [axis_label.remove_plot_idx]
+                for idx in sorted(axis_label.remove_plot_idx, reverse=True):
+                    if 0 <= idx < len(ax.lines):
+                        ax.lines[idx].remove()
+                    else:
+                        warn(f"Index {idx} out of bounds for axis titled '{axis_label.title}'. Skipping removal.")
+
             if axis_label.legend_labels is not None:
                 handles, _ = ax.get_legend_handles_labels()
                 if len(axis_label.legend_labels) == 0:
-                    ax.legend([], [])  # Remove legend
+                    if ax.get_legend() is not None:
+                        ax.get_legend().remove()
                 elif len(handles) == len(axis_label.legend_labels):
                     ax.legend(handles, axis_label.legend_labels, loc=axis_label.legend_loc or "best")
                 else:
@@ -312,9 +328,10 @@ def apply_labels_from_config(fig: Figure,
                     )
                     ax.legend(loc=axis_label.legend_loc or "best")
             elif axis_label.legend_loc is not None:
-                # Allow legend location override even without changing labels
-                ax.legend(loc=axis_label.legend_loc)
-
+                if ax.get_legend() is not None:
+                    # Allow legend location override even without changing labels
+                    ax.legend(loc=axis_label.legend_loc)
+            
 
 def apply_axes_properties(fig: Figure,
                           ax_array: Union[plt.Axes, AxesArray],
@@ -2434,6 +2451,7 @@ def plot_actual_field_gradients_and_angle_bw_field_and_normal(
                 normal_vector: np.ndarray = np.array([0.0, 0.0, 1.0]),
                 field_vectors_in_body_fixed_frame: bool = False,
                 normalize_quaternions: bool = True,
+                use_different_linestyles: bool = True,
                 save_as: str = None,
                 save_as_emf: bool = False,
                 inkscape_path: str = INKSCAPE_PATH,
@@ -2441,6 +2459,8 @@ def plot_actual_field_gradients_and_angle_bw_field_and_normal(
     """
     Plots the 3 magnetic field components (Bx, By, Bz), all 5 gradient components together,
     and the angle between the field vector and a specified normal vector (in degrees).
+
+    Parts of this function were generated using ChatGPT based on the previous functions of similar kind.
     """
     combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
     time = combined_actual['time']
@@ -2498,7 +2518,10 @@ def plot_actual_field_gradients_and_angle_bw_field_and_normal(
     fig, axs = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
 
     # --- Field components in one subplot ---
-    field_linestyles = ['-', '--', '-.']
+    if use_different_linestyles:
+        field_linestyles = ['-', '--', '-.']
+    else:
+        field_linestyles = ['-'] * len(field_keys)
     field_colors = ['tab:red', 'tab:green', 'tab:blue']
 
     for i, key in enumerate(field_keys):
@@ -2510,7 +2533,10 @@ def plot_actual_field_gradients_and_angle_bw_field_and_normal(
     axs[0].grid(True)
 
     # --- Gradient components in one subplot ---
-    gradient_linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
+    if use_different_linestyles:
+        gradient_linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
+    else:
+        gradient_linestyles = ['-'] * len(gradient_keys)
     gradient_colors = ['tab:purple', 'tab:orange', 'tab:brown', 'tab:gray', 'tab:pink']
 
     for idx, key in enumerate(gradient_keys):
@@ -3618,11 +3644,10 @@ def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
                               **kwargs):
     
     fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='vector_0', **kwargs)  # Blue
+    ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='Allocation condition', **kwargs)  # Blue
     ax.set_xlabel('Time')
     ax.set_ylabel('Vector 0')
     ax.set_title('Allocation Condition Plot')
-    ax.legend()
     ax.grid(True, linestyle='--', alpha=0.7)
 
     fig.tight_layout()
