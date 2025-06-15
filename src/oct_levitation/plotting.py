@@ -259,9 +259,14 @@ class AxisLabel:
     title: Optional[str] = None
     xlabel: Optional[str] = None
     ylabel: Optional[str] = None
+    zlabel: Optional[str] = None # For 3D plots, zlabel can be used to set the z-axis label
+    xlimit: Optional[Tuple[float, float]] = None
+    ylimit: Optional[Tuple[float, float]] = None
+    zlimit: Optional[Tuple[float, float]] = None # For 3D plots, zlimit can be used to set the z-axis limits
     legend_labels: Optional[List[str]] = None
     legend_loc: Optional[str] = "best"
     remove_plot_idx: Union[int, List[int], None] = None # If provided, will remove the plot at this index from the axes completely
+    zorders: Optional[List[float]] = None  # New: zorder per line
 
     def __post_init__(self):
         if self.legend_loc is None:
@@ -303,6 +308,21 @@ def apply_labels_from_config(fig: Figure,
                 ax.set_xlabel(axis_label.xlabel)
             if axis_label.ylabel is not None:
                 ax.set_ylabel(axis_label.ylabel)
+            if axis_label.zlabel is not None:
+                if hasattr(ax, 'set_zlabel'):
+                    ax.set_zlabel(axis_label.zlabel)
+                else:
+                    warn(f"Axis titled '{axis_label.title}' does not support zlabel. Skipping zlabel assignment.")
+            
+            if axis_label.xlimit is not None:
+                ax.set_xlim(axis_label.xlimit)
+            if axis_label.ylimit is not None:
+                ax.set_ylim(axis_label.ylimit)
+            if axis_label.zlimit is not None:
+                if hasattr(ax, 'set_zlim'):
+                    ax.set_zlim(axis_label.zlimit)
+                else:
+                    warn(f"Axis titled '{axis_label.title}' does not support zlimit. Skipping zlimit assignment.")
 
             # Remove the plots first if specified and then apply the legend labels
             if axis_label.remove_plot_idx is not None:
@@ -313,6 +333,17 @@ def apply_labels_from_config(fig: Figure,
                         ax.lines[idx].remove()
                     else:
                         warn(f"Index {idx} out of bounds for axis titled '{axis_label.title}'. Skipping removal.")
+            
+            # Apply the zorders if specified
+            if axis_label.zorders is not None:
+                if len(axis_label.zorders) != len(ax.lines):
+                    warn(
+                        f"Z-order count mismatch on axis titled '{axis_label.title}'. "
+                        f"Expected {len(ax.lines)}, got {len(axis_label.zorders)}. Skipping zorder assignment."
+                    )
+                else:
+                    for line, z in zip(ax.lines, axis_label.zorders):
+                        line.set_zorder(z)
 
             if axis_label.legend_labels is not None:
                 handles, _ = ax.get_legend_handles_labels()
@@ -1732,6 +1763,61 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
         fig.show()
     return fig, ax
 
+def plot_3d_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
+                                     x_limit: tuple = None, y_limit: tuple = None, z_limit: tuple = None, 
+                                     save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **traj_kwargs):
+    """
+    Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
+    Reference poses are taken from the provided DataFrame and are non-constant.
+
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
+    - reference_poses (pd.DataFrame): DataFrame containing reference poses (positions and quaternions) with time.
+    - arrow_interval (int): Interval for plotting arrows indicating the direction of motion.
+    """
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert reference quaternions to Euler angles using `euler_xyz_from_quaternion`
+
+    # Create figure and 3D axis
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot actual positions, CONVERTED TO mm
+    ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path', **traj_kwargs)
+
+    # Plot reference positions (non-constant)
+    ax.plot(reference_positions[:, 0]*1000, reference_positions[:, 1]*1000, reference_positions[:, 2]*1000, color='red', label='Reference Path', **traj_kwargs)
+
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
+    ax.set_title("Actual Pose v/s Reference Pose of Body Fixed Frame")
+
+    # Show legend
+    ax.legend()
+
+    if x_limit is not None:
+        ax.set_xlim(x_limit)
+    if y_limit is not None:
+        ax.set_ylim(y_limit)
+    if z_limit is not None:
+        ax.set_zlim(z_limit)
+
+    # Show plot
+    fig.tight_layout()
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    return fig, ax
+
 def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, arrow_interval: int = 10, frame_size: float = 0.01, frame_interval: int = 10,
                                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
@@ -1886,7 +1972,7 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
     axs = axs.flatten()
     for i in range(8):
         axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='tab:blue', **kwargs)
-        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:green', linestyle=":", **kwargs)
+        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:green', **kwargs)
         axs[i].set_title(f'Currents in Coil {i+1}')
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Current (A)")
