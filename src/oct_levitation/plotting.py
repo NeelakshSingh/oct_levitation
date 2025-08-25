@@ -45,6 +45,7 @@ DISABLE_PLT_SHOW = False
 ### NOTE: An older version of mayavi i.e. 4.7.2 is used for this library, the docs for which
 ### are no longer available on the original website. Consider using the wayback machine:
 ### https://web.archive.org/web/20210220173347/https://docs.enthought.com/mayavi/mayavi/index.html
+### Actually, just change all 3D plotting functions to use plotly instead.
 
 """
 NOTE: I would like to thank ChatGPT for coming up with some really good ideas for extending this
@@ -282,7 +283,7 @@ class PlotLabelConfig:
         if isinstance(self.axes_labels, AxisLabel):
             self.axes_labels = [self.axes_labels]
 
-def apply_labels_from_config(fig: Figure,
+def apply_axes_config(fig: Figure,
                              ax_array: Union[plt.Axes, np.ndarray],
                              label_config: PlotLabelConfig):
     if label_config.fig_title is not None:
@@ -511,7 +512,7 @@ def apply_axes_properties(fig: Figure,
         fig.subplots_adjust(**kwargs["fig_subplots_adjust_kwargs"])
     
     if label_config is not None:
-        apply_labels_from_config(fig, ax_array, label_config)
+        apply_axes_config(fig, ax_array, label_config)
 
     if kwargs.get("tight_layout", True):
         fig.tight_layout(**kwargs.get("tight_layout_kwargs", {}))
@@ -1494,8 +1495,8 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
 
     # Position plots
     for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[0, i].plot(actual_poses['time'], actual_positions[:, i], label=f"Actual {axis}")
-        axs[0, i].plot(reference_poses['time'], reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
+        axs[0, i].plot(actual_poses['time'], actual_positions[:, i], label=f"Actual {axis}", color="tab:blue")
+        axs[0, i].plot(reference_poses['time'], reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='tab:red')
         axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
         axs[0, i].set_xlabel("Time (s)")
         axs[0, i].set_ylabel("Position (mm)")
@@ -1503,8 +1504,8 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
 
     # Euler angle plots
     for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[1, i].plot(actual_poses['time'], actual_euler[:, i], label=f"Actual {angle}")
-        axs[1, i].plot(reference_poses['time'], reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
+        axs[1, i].plot(actual_poses['time'], actual_euler[:, i], label=f"Actual {angle}", color="tab:blue")
+        axs[1, i].plot(reference_poses['time'], reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='tab:red')
         axs[1, i].set_title(angle)
         axs[1, i].set_xlabel("Time (s)")
         axs[1, i].set_ylabel("Angle (deg)")
@@ -1520,6 +1521,71 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
             for ax in ax_row:
                 ax.relim()   
                 ax.autoscale()
+
+    # Adjust layout
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    if save_as and save_as.endswith('.svg'):
+        fig.savefig(save_as, format='svg')
+        if save_as_emf:
+            emf_file = save_as.replace('.svg', '.emf')
+            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    
+    if not DISABLE_PLT_SHOW:
+        fig.show()
+    return fig, axs
+
+def plot_poses_variable_reference_row_plots_for_paper(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, scale_equal: bool = True,
+                                                      figsize: tuple=(3, 7), save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
+    """
+    Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
+    
+    Parameters:
+    - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
+    - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
+    """
+    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
+    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
+    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
+
+    # Convert quaternions to Euler angles
+    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
+
+    # Convert to degrees
+    actual_euler = np.rad2deg(actual_euler)
+    reference_euler = np.rad2deg(reference_euler)
+
+    # Plot positions
+    fig, axs = plt.subplots(6, 1, figsize=figsize, sharex=True)
+
+    # Position plots
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        axs[i].plot(actual_poses['time'], actual_positions[:, i], label=f"Actual {axis}", color="tab:blue")
+        axs[i].plot(reference_poses['time'], reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='tab:red')
+        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
+        axs[i].set_ylabel("Position [mm]")
+        axs[i].legend()
+
+    # Euler angle plots
+    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
+        axs[i+3].plot(actual_poses['time'], actual_euler[:, i], label=f"Actual {angle}", color="tab:blue")
+        axs[i+3].plot(reference_poses['time'], reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='tab:red')
+        axs[i+3].set_title(angle)
+        axs[i+3].set_ylabel("Angle [deg]")
+        axs[i+3].legend()
+
+    axs[5].set_xlabel("Time (s)")
+
+    if scale_equal:
+        axs[1].sharey(axs[0])
+        axs[2].sharey(axs[0])
+        axs[4].sharey(axs[3])
+        # axs[5].sharey(axs[3])
+        # Autoscale shared axes
+        for ax in axs: 
+            ax.relim()   
+            ax.autoscale()
 
     # Adjust layout
     fig.tight_layout(rect=[0, 0, 1, 0.95])
