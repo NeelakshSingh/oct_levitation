@@ -1,6 +1,6 @@
 <launch>
-    <arg name="sim"/>
     <arg name="description" />
+    <arg name="sim" value="false"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="rtprio_controller" default="true"/>
 
@@ -30,13 +30,6 @@
         </node>
     </group>
 
-    <node pkg="oct_levitation" name="vicon_delay_meas" type="delay_measurement.py" output="screen">
-        <param name="topic" value="vicon/onyx_disc_80x15/Origin"/>
-    </node>
-
-    <node pkg="oct_levitation" name="driver_delay_meas" type="delay_measurement.py" output="screen">
-        <param name="topic" value="tnb_mns_driver/des_currents_reg"/>
-    </node>
      
     <!-- I did not use pass_all_args because it can easily lead to runtime bugs which are hard to diagnose. -->
     <include file="$(find oct_levitation)/launch/control_pipeline_base.launch">

@@ -1,22 +1,23 @@
 <launch>
 
-    <!-- This file contains the launch facility for the simulator and the hardware interface.
+    <!-- This file contains the launch facility for the hardware interface.
     Therefore, one should include this file in all the controller launch files. -->
 
     <arg name="data_subfolder"/>
+    <arg name="sim" default="false"/>
     <arg name="rtprio_nodes" default="false"/>
     <arg name="hardware_connected" default="false"/>
     <arg name="run_rviz" default="true"/>
     <arg name="run_rqt_multiplot" default="false"/>
     <arg name="record_data" default="true"/>
 
-    <!-- Simulation parameters -->
+    <!-- Parameters -->
     <rosparam command="load" file="$(find oct_levitation)/config/general_params.yaml"/>
     <rosparam command="load" file="$(find oct_levitation)/config/controller_params.yaml"/>
 
     <group if="$(arg record_data)">
         <node pkg="oct_levitation" name="experiment_data_recorder" type="experiment_recorder.py" output="screen">
-            <param name="sim" value="false"/>
+            <param name="sim" value="$(arg sim)"/>
             <param name="data_subfolder" value="$(arg data_subfolder)"/>
         </node>
     </group>
