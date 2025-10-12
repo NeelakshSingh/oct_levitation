@@ -1,4 +1,0 @@
-<launch>
-    <node pkg="oct_levitation" name="fake_pose_publisher" type="fake_pose_publisher.py" output="screen"/>
-    <node pkg="oct_levitation" name="z_com_control" type="z_control_com_gen_alloc.py" output="screen"/>
-</launch>

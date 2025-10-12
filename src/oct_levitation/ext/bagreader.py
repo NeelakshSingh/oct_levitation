@@ -10,6 +10,8 @@
 # Edited Date: April 08, 2025
 # About: Adapted to be used for the data extraction of the oct_levitation project. Removed dependencies and functions not rquired anymore.
 
+# Original Source: https://github.com/jmscslgroup/bagpy/blob/master/bagpy/bagreader.py
+
 #   Permission is hereby granted, free of charge, to any person obtaining
 #   a copy of this software and associated documentation files
 #   (the "Software"), to deal in the Software without restriction, including
@@ -31,10 +33,9 @@
 #   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 #   OR OTHER DEALINGS IN THE SOFTWARE.
 
-__author__ = 'Rahul Bhadani'
-__email__  = 'rahulbhadani@email.arizona.edu'
-__version__ = "0.0.0" # this is set to actual version later
-
+__author__ = 'Neelaksh Singh, Rahul Bhadani'
+__email__  = 'sneelaksh@ethz.ch, rahulbhadani@email.arizona.edu'
+__version__ = "1.0.0" # oct_levitation
 
 import sys
 import os.path as ntpath

@@ -3,11 +3,9 @@
     <!-- This file contains the launch facility for the simulator and the hardware interface.
     Therefore, one should include this file in all the controller launch files. -->
 
-    <arg name="sim"/>
     <arg name="data_subfolder"/>
     <arg name="rtprio_nodes" default="false"/>
     <arg name="hardware_connected" default="false"/>
-    <arg name="enable_reference_pose" default="false"/>
     <arg name="run_rviz" default="true"/>
     <arg name="run_rqt_multiplot" default="false"/>
     <arg name="record_data" default="true"/>
@@ -15,37 +13,15 @@
     <!-- Simulation parameters -->
     <rosparam command="load" file="$(find oct_levitation)/config/general_params.yaml"/>
     <rosparam command="load" file="$(find oct_levitation)/config/controller_params.yaml"/>
-    <rosparam if="$(arg sim)" command="load" file="$(find oct_levitation)/config/free_body_sim_params.yaml"/>
 
     <group if="$(arg record_data)">
         <node pkg="oct_levitation" name="experiment_data_recorder" type="experiment_recorder.py" output="screen">
-            <param name="sim" value="$(arg sim)"/>
+            <param name="sim" value="false"/>
             <param name="data_subfolder" value="$(arg data_subfolder)"/>
         </node>
     </group>
 
-    <!-- <group if="$(arg rtprio_nodes)">
-        <node pkg="oct_levitation" name="sskf_delay_compensator" type="sskf_delay_compensator.py" output="screen" launch-prefix="taskset -c 4 chrt -f 90">
-            <param name="rtprio_node" value="$(arg rtprio_nodes)"/>
-        </node>
-    </group>
-
-    <group unless="$(arg rtprio_nodes)">
-        <node pkg="oct_levitation" name="sskf_delay_compensator" type="sskf_delay_compensator.py" output="screen">
-            <param name="rtprio_node" value="$(arg rtprio_nodes)"/>
-        </node>
-    </group> -->
-
-    <group if="$(arg enable_reference_pose)">
-        <node pkg="oct_levitation" name="reference_pose_publisher" type="reference_pose_publisher.py" output="screen"/>
-    </group>
-
-    <group if="$(arg sim)">
-        <node pkg="oct_levitation" name="free_body_simulation" type="free_rigid_body_simulator.py" output="screen"/>
-        <node pkg="oct_levitation" name="control_input_delaying_node" type="control_input_delay_sim.py" output="screen"/>
-    </group>
-
-    <group if="$(eval not sim and hardware_connected)">
+    <group if="$(hardware_connected)">
         <include file="$(find oct_levitation)/launch/tnb_mns_driver.launch"/>
     </group>
 
