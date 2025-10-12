@@ -5,9 +5,7 @@ import itertools
 import numpy as np
 import pandas as pd
 
-import oct_levitation.plotting as plotting
 import oct_levitation.geometry as geometry
-import oct_levitation.rigid_bodies as rigid_bodies
 import oct_levitation.common as common
 import alive_progress as ap
 
@@ -92,16 +90,6 @@ upright are assumed so the 3rd row for Tz is excluded from M. Plots are stored i
     os.makedirs(os.path.join(plot_save_path, "volumes"), exist_ok=True)
     os.makedirs(os.path.join(plot_save_path, "volume_slices"), exist_ok=True)
     os.makedirs(dataset_save_path, exist_ok=True)
-
-    # Now we will make the plots for every coil combination and then save them. At the same time
-    # we will determine which subset is the best with respect to the condition number and save a
-    # report of the same.
-    # Sampling points according to the desired plot style.
-
-    ### Which measure to use for best condition number?
-    ## For now, RMS of the condition number in the whole region. Problem? There are very high
-    ## condition numbers in some regions. How about we just check it in a smaller subspace near
-    ## the origin then?
 
     subspace_selection_mask = (np.abs(X) < x_eval_lim) & (np.abs(Y) < y_eval_lim) & (np.abs(Z) < z_eval_lim)
     

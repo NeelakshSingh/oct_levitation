@@ -1,23 +1,16 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(oct_levitation)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++17)
 set(CMAKE_CXX_STANDARD 17)
 
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
 find_package(catkin REQUIRED
-              rospy
-              roscpp
               mag_manip
-              wand_calibration
               control_utils
               tnb_mns_driver
-              oct_ctrl
               std_msgs
               geometry_msgs
+              message_generation
+              message_runtime
               vicon_bridge)
 
 include_directories(${EIGEN3_INCLUDE_DIR})
@@ -64,168 +57,20 @@ add_message_files(
   RigidBodyStateEstimate.msg
 )
 
-## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   ControllerDetails.srv
-# )
-
-## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
-
-################################################
-## Declare ROS dynamic reconfigure parameters ##
-################################################
-
-## To declare and build dynamic reconfigure parameters within this
-## package, follow these steps:
-## * In the file package.xml:
-##   * add a build_depend and a exec_depend tag for "dynamic_reconfigure"
-## * In this file (CMakeLists.txt):
-##   * add "dynamic_reconfigure" to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * uncomment the "generate_dynamic_reconfigure_options" section below
-##     and list every .cfg file to be processed
-
-## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
-
-###################################
-
-
-###########
-## Build ##
-###########
-
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-)
-
-set(SRC_FILES
-  src/oct_levitation/kalman_filter.cpp
-)
-
-## Declare a C++ library
-add_library(${PROJECT_NAME}
-  ${SRC_FILES}
-)
-
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Declare a C++ executable
-## With catkin_make all packages are built within a single CMake context
-## The recommended prefix ensures that target names across packages don't collide
-add_executable(ultimate_final_controller_node 
-  scripts/ultimate_final_controller_node.cpp
-)
-
-add_executable(ultimate_final_kalman_filter
-  scripts/ultimate_final_kalman_filter.cpp
-)
-
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
-# set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
-
-## Add cmake target dependencies of the executable
-## same as for the library above
-add_dependencies(ultimate_final_controller_node ${catkin_EXPORTED_TARGETS})
-add_dependencies(ultimate_final_kalman_filter ${catkin_EXPORTED_TARGETS})
-
-## Specify libraries to link a library or executable target against
-target_link_libraries(ultimate_final_controller_node
-  ${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  ${EIGEN3_LIBRARIES}
-)
-
-target_link_libraries(ultimate_final_kalman_filter
-  ${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  ${EIGEN3_LIBRARIES}
-)
-
 #############
 ## Install ##
 #############
 
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
-  scripts/linear_1d_controller.py
-  scripts/linear_5d_decoupled_origin_controller.py
-  scripts/linear_1d_lqri.py
-  scripts/system_component_analysis.py
-  scripts/gravity_compensation.py
-  scripts/torque_control.py
-  scripts/lqri_torque_control.py
-  scripts/lqri_z_control.py
-  scripts/lqri_xyz_control.py
-
-  # Delay Compensation KF
-  scripts/filters_and_estimators/sskf_delay_compensator.py
-
-  # Z Control Nodes
-  scripts/z_controllers/z_control_com_wrench.py
-  scripts/z_controllers/z_control_com_gen_alloc.py
-  scripts/z_controllers/z_yaw_control_com_gen_alloc.py
-  scripts/z_controllers/z_control_single_dipole_simplified.py
-  scripts/z_controllers/z_rp_control_single_dipole.py
-
-  # XY Control Nodes
-  scripts/xy_controllers/x_control_single_dipole_full_alloc.py
-  scripts/xy_controllers/y_control_single_dipole_full_alloc.py
-
-  # Yaw Control Nodes
-  scripts/yaw_controllers/yaw_control_com_wrench.py
-  scripts/yaw_controllers/yaw_control_com_gen_alloc.py
-
-  # Roll and pitch control nodes
-  scripts/normal_orientation_controllers/single_dipole_rp_control.py
-  scripts/normal_orientation_controllers/single_dipole_reduced_attitude_control.py
-  scripts/normal_orientation_controllers/single_dipole_body_fixed_reduced_attitude_control.py
-
-  # Single dipole 5DOF control nodes
-  scripts/five_dof_controllers/xyz_rp_single_dipole.py
-  scripts/five_dof_controllers/xyz_rp_inertial_ft_single_dipole.py
-  scripts/five_dof_controllers/xyz_reduced_attitude_single_dipole.py
+  xyz_reduced_attitude_single_dipole.py
 
   # Utilities
-  scripts/utils/joy_setpoint.py
-  scripts/utils/fft_noise_analysis.py
-  scripts/utils/euler_pose_converter.py
-  scripts/utils/matlab_sim_driver.py
-  scripts/utils/clock_publisher.py
-  scripts/utils/fake_pose_publisher.py
-  scripts/utils/reference_pose_publisher.py
   scripts/utils/condition_number_plot.py
-  scripts/utils/free_rigid_body_simulator.py
   scripts/utils/rviz_visualizations.py
-  scripts/utils/tf_republisher.py
-  scripts/utils/control_input_delay_sim.py
   scripts/utils/coil_subset_condition_calculator.py
   scripts/utils/experiment_recorder.py
   scripts/utils/experiment_analysis.py
   scripts/utils/experiment_data_summarizer.py
-  scripts/utils/delay_measurement.py
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
@@ -250,48 +95,4 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
  INCLUDE_DIRS include
-#  LIBRARIES oct_levitation
-#  CATKIN_DEPENDS other_catkin_pkg
-#  DEPENDS system_lib
 )
-
-## Mark executables for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-# install(TARGETS ${PROJECT_NAME}_node
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark libraries for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
-
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
-
-## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
-
-#############
-## Testing ##
-#############
-
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_oct_levitation.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
-
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)
