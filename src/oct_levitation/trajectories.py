@@ -395,9 +395,6 @@ def sine_z_trajectory_quaternion(t: float, amplitude: float, frequency: float, c
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 sine_z_trajectory_quaternion(0.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("sine_z_trajectory_quaternion_a4c4f0.5", partial(sine_z_trajectory_quaternion, amplitude=4.0e-3, frequency=0.5, center=4.0e-3))
-register_trajectory("sine_z_trajectory_quaternion_a10c10f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=10.0e-3))
-register_trajectory("sine_z_trajectory_quaternion_a10c20f0.5", partial(sine_z_trajectory_quaternion, amplitude=10.0e-3, frequency=0.5, center=20.0e-3))
 register_trajectory("sine_z_trajectory_quaternion_a15c25f0.5", partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=25.0e-3))
 
 @numba.njit(cache=True)
@@ -413,11 +410,6 @@ def xy_lissajous_trajectory_quaternion(t: float, A: float, a_hz: float, B: float
     return xyz, velocity, IDENTITY_QUATERNION, np.zeros(3, np.float64)
 
 xy_lissajous_trajectory_quaternion(0.0, 1.0e-3, 1.0, 1.0e-3, 1.0, 0.0) # Force compilation on import for expected type signature
-register_trajectory("xy_circle_quaternion_r5_fhz0.5_cz4", partial(xy_lissajous_trajectory_quaternion, A=5.0e-3, a_hz=0.5, B=5.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 4.0e-3]), shift=0.0))
-register_trajectory("xy_circle_quaternion_r10_fhz0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
-register_trajectory("xy_circle_quaternion_r10_fhz1.0_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=1.0, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
-register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.5_fy1_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.5, B=10.0e-3, b_hz=1.0, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
-register_trajectory("xy_infty_lissajous_quaternion_amp10_fx0.25_fy0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=10.0e-3, a_hz=0.25, B=10.0e-3, b_hz=0.5, delta=np.pi/2, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
 register_trajectory("xy_infty_lissajous_quaternion_ax20_ay10_fx0.25_fy0.5_cz10", partial(xy_lissajous_trajectory_quaternion, A=20.0e-3, a_hz=0.25, B=10.0e-3, b_hz=0.5, delta=0.0, center=np.array([0.0, 0.0, 10.0e-3]), shift=0.0))
 
 @numba.njit(cache=True)
@@ -529,7 +521,7 @@ register_trajectory("sample_periodic_z_linear_trajectory_discretized", # This sh
                     ))
 
 ###############################################
-## Some long chained trajectories for the paper
+## Some long chained trajectories for demonstration
 ###############################################
 
 demo_chain_list_1 = []
@@ -730,26 +722,6 @@ demo_chain_list_1.append(
 )
 
 
-# demo_chain_list_1.append(
-#     [
-#         partial(xyrp_lissajous_trajectory_quaternion, 
-#             x_amp=10.0e-3, x_hz=1.0*1.2, y_amp=15.0e-3, y_hz=0.5*1.2,
-#             r_amp=0.0, r_hz=0.25, p_amp=0.0, p_hz=0.5,
-#             phi_x=0.0, phi_y=0.0, phi_r=0.0, phi_p=np.pi,
-#             center=np.array([0.0, 0.0, 10.0e-3])),
-#         0.0,
-#         4.0*4.0/1.2
-#     ]
-# )
-
-# demo_chain_list_1.append(
-#     [
-#         TrajectoryTransitions.PAUSE_ON_NEXT,
-#         0.0,
-#         pause_time
-#     ]
-# )
-
 demo_chain_list_1.append(
     [
         "xyrp_lissajous_eight_T4_x20_y10_rp15_c0010",
@@ -835,7 +807,7 @@ register_trajectory("demo_chain_1_no_loop", ChainedTrajectory(demo_chain_list_1,
 register_trajectory("demo_chain_1_no_loop_lower_z_endpoint", ChainedTrajectory(demo_chain_list_lower_end, loop=False))
 
 
-# ### Setpoiont change trajectories for measuring the step response of each dimension.
+### Setpoint change trajectories for measuring the step response of each dimension.
 
 register_trajectory("setpoint_change_x_10mm",
                     ChainedTrajectory(
@@ -1120,10 +1092,8 @@ register_trajectory("lissajous_infty_xy_rp30_quaternion_8cycles",
 
 register_trajectory("simple_take_off_to_15mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 5.0e-3]), end_position=np.array([0.0, 0.0, 15.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=2.0), start_time=0.0, end_time=2.0, step=1e-3, loop=False))
 register_trajectory("simple_take_off_to_45mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 45.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=10.0), start_time=0.0, end_time=10.0, step=1e-3, loop=False))
-register_trajectory("simple_take_off_to_50mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 50.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=10.0), start_time=0.0, end_time=10.0, step=1e-3, loop=False))
-register_trajectory("simple_take_off_to_47mm_discretized", create_discretized_trajectory(partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 50.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=10.0), start_time=0.0, end_time=10.0, step=1e-3, loop=False))
 
-register_trajectory("z_boundary_pushing_sine_trajectory",
+register_trajectory("z_boundary_touching_sine_trajectory",
                     ChainedTrajectory(
         [
             [
@@ -1144,26 +1114,6 @@ register_trajectory("z_boundary_pushing_sine_trajectory",
             [
                 partial(const_pose_setpoint, position_setpoint=np.array([0.0, 0.0, 43.0e-3]), quaternion_setpoint=IDENTITY_QUATERNION),
                 0.0, 5.0
-            ]
-        ],
-        loop=False
-    )
-)
-
-register_trajectory("z_boundary_too_much_pushing_sine_trajectory",
-                    ChainedTrajectory(
-        [
-            [
-                partial(simple_linear_trajectory_quaternion, start_position=np.array([0.0, 0.0, 10.0e-3]), end_position=np.array([0.0, 0.0, 40.0e-3]), start_euler_xyz=np.zeros(3), end_euler_xyz=np.zeros(3), duration=5.0),
-                0.0, 5.0
-            ],
-            [
-                TrajectoryTransitions.PAUSE_ON_PREV, 0.0, 5.0 # time to remove ss error.
-            ],
-            [
-                partial(sine_z_trajectory_quaternion, amplitude=15.0e-3, frequency=0.5, center=40.0e-3),
-                0.0,
-                2.0*6.0
             ]
         ],
         loop=False
