@@ -92,6 +92,10 @@ git clone git@github.com:TheGodOfWar007/oct_levitation.git
 catkin build oct_levitation
 ```
 The `setup.py` file in the package root contains all necessary python packages which will be installed during the build process.
+To make complete use of the experiment analysis script, install `xterm`:
+```bash
+sudo apt-get install xterm
+``` 
 
 ### Hardware Interface to eMNS :electric_plug:
 To interface with the OctoMag eMNS hardware, you need to install the proprietary driver software provided by MagnebotiX or use the closed-source scripts used by MSRL.
@@ -126,7 +130,11 @@ Note that all scripts make use of the rigid body name to find the right data fil
 The experiment analysis script extracts and plots data, and opens the editor of your choice (nano in xterm by default) so that you can note down key observations from the experiment.
 These behaviors can be modified using the parameters defined in the launchfiles and the rosparam files inside the `config/` directory.
 
-## BibTex Citation :books:
+## The System in Action :clapper:
+EMBED THE FINAL VIDEO HERE
 
+## BibTex Citation :books:
+WRITE A BASIC BIBTEX ENTRY BASED ON THE ARXIV RELEASE
 
 ## Acknowledgements :handshake:
+ACKNOWLEDGE PROF BERKELMAN, MSRL, AND EVERYONE WHO HELPED MAKE THE PROJECT A SUCCESS
