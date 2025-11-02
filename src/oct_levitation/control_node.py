@@ -22,33 +22,6 @@ from scipy.linalg import block_diag
 from control_utils.general.utilities import init_system
 from oct_levitation.msg import ControllerDetails
 
-### Uncomment the following lines and associated code in the callback_control_logic to enable profiling
-# import cProfile
-# import atexit
-# import pstats
-
-# Profiler = cProfile.Profile()
-# PROFILE_FREQUENCY = 4 # Hz
-# LAST_PROFILE_TIME = 0
-
-# import rospkg
-# rospack = rospkg.RosPack()
-# pkg_path = rospack.get_path("oct_levitation")
-# profiler_file_stats_path = os.path.join(pkg_path, "profiler_stats")
-
-# def dump_profiler_stats():
-#     """
-#     Dumps the profiler stats to a file.
-#     """
-#     stats = pstats.Stats(Profiler).sort_stats("cumulative")
-#     if not os.path.exists(profiler_file_stats_path):
-#         os.makedirs(profiler_file_stats_path)
-#     profiler_file = os.path.join(profiler_file_stats_path, "profiler_stats.prof")
-#     stats.dump_stats(profiler_file)
-#     rospy.loginfo(f"Profiler stats dumped to {profiler_file}")
-
-# atexit.register(dump_profiler_stats)
-
 class ControlSessionNodeBase:
     """
     This class contains all the basic functionalities that a ROS Node implementing a levitation controller
@@ -222,14 +195,6 @@ class ControlSessionNodeBase:
         self.metadata_msg.controller_name.data = os.path.basename(file_path)
         self.metadata_msg.controller_path.data = file_path
 
-    def trajectory_function(self, t: float) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        This function is used to generate the trajectory for the rigid body. It is called in the callback_control_logic
-        function. The trajectory function should return a 6D vector containing the desired position and orientation
-        of the rigid body in whatever representation and frames of reference the derived class requires.
-        """
-        raise NotImplementedError("The trajectory function has not been implemented yet.")
-
     def five_dof_wrench_allocation_single_dipole(self,
                                                  position: np.ndarray,
                                                  quaternion: np.ndarray,
@@ -264,65 +229,6 @@ class ControlSessionNodeBase:
 
         return des_currents.flatten()
     
-    def five_dof_inertial_wrench_allocation_single_dipole(self,
-                                                 position: np.ndarray,
-                                                 quaternion: np.ndarray,
-                                                 w_com: np.ndarray):
-        """
-        This function assumes that the dipole moment in the local frame aligns with the z axis and thus clips the 3rd row
-        of the torque allocation map.
-        tf_msg: The transform feedback from any state feedback sensor. Vicon usually.
-        w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
-        """
-        dipole = self.rigid_body_dipole.dipole_list[0]
-        A = self.mpem_model.getActuationMatrix(position)
-        A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
-        M = geometry.magnetic_interaction_inertial_force_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
-        JMA = M @ A
-
-        self.cond_msg.header.stamp = rospy.Time.now()
-        self.cond_msg.vector = [numerical.numba_cond(JMA)]
-
-        self.cond_pub.publish(self.cond_msg)
-
-        computed_currents = numerical.numba_pinv(JMA) @ w_com
-        if self.sim_mode:
-            des_currents = np.zeros(8)
-            des_currents[self.__ACTIVE_COILS] = computed_currents
-        else:
-            # Due to real world coils being connected to a different limited set of drivers.
-            des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
-            des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
-
-        return des_currents.flatten()
-    
-    def five_dof_2_step_torque_force_allocation(self,
-                                              position: np.ndarray,
-                                              quaternion: np.ndarray,
-                                              w_com: np.ndarray):
-        """
-        This function assumes that the dipole moment in the local frame aligns with the z axis and thus clips the 3rd row
-        of the torque allocation map. Furthermore, the 3rd column will be clipped and Bz will be explicitly set to 0.
-        tf_msg: The transform feedback from any state feedback sensor. Vicon usually.
-        w_com: The desired COM/dipole center wrench. Forces are specified in the inertial frame while torques are specified in body fixed frame.
-        """
-        dipole = self.rigid_body_dipole.dipole_list[0]
-        A = self.mpem_model.getActuationMatrix(position)
-        A = A[:, self.__ACTIVE_COILS] # only use active coils to compute currents.
-        M = geometry.magnetic_interaction_inertial_force_torque(dipole.local_dipole_moment, quaternion, remove_z_torque=True)
-        bg_des = numerical.numba_pinv(M) @ w_com
-
-        computed_currents = numerical.numba_pinv(A) @ bg_des
-        if self.sim_mode:
-            des_currents = np.zeros(8)
-            des_currents[self.__ACTIVE_COILS] = computed_currents
-        else:
-            # Due to real world coils being connected to a different limited set of drivers.
-            des_currents = np.zeros(self.__N_CONNECTED_DRIVERS)
-            des_currents[self.__ACTIVE_DRIVERS] = computed_currents # active coils are connected to these active drivers
-
-        return des_currents.flatten()
-
     def post_init(self):
         """
         This function is always called at the end of the init function in the base class. Make sure to
@@ -431,12 +337,6 @@ class ControlSessionNodeBase:
         Used when the state estimator is not used. Direct vicon feedback is used.
         """
         start_time = time.perf_counter()
-        # now = rospy.Time.now()
-        # PROFILER_ENABLED = False
-        # if (now - self.LAST_PROFILE_TIME).to_sec() > 1.0 / PROFILE_FREQUENCY:
-        #     Profiler.enable()
-        #     PROFILER_ENABLED = True
-        #     self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
         self.check_shutdown_rt()
         self.update_time()
@@ -452,8 +352,6 @@ class ControlSessionNodeBase:
         rpy = geometry.euler_xyz_from_quaternion(quaternion)
         self.callback_control_logic(position, quaternion, rpy, sft_coeff=coeff)
         self.publish_topics()
-        # if PROFILER_ENABLED:
-        #     Profiler.disable()
         stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time = (stop_time - start_time)
@@ -466,12 +364,6 @@ class ControlSessionNodeBase:
         Used when the state estimator is enabled. Then the state estimator's velocity estimates are used.
         """
         start_time = time.perf_counter()
-        # now = rospy.Time.now()
-        # PROFILER_ENABLED = False
-        # if (now - self.LAST_PROFILE_TIME).to_sec() > 1.0 / PROFILE_FREQUENCY:
-        #     Profiler.enable()
-        #     PROFILER_ENABLED = True
-        #     self.LAST_PROFILE_TIME = now
         ## TODO: Maybe it makes more sense to smooth start Fz
         self.check_shutdown_rt()
         self.update_time()
@@ -492,8 +384,6 @@ class ControlSessionNodeBase:
         self.callback_control_logic(position, quaternion, rpy, linear_velocity=linear_velocity,
                                     angular_velocity=angular_velocity, sft_coeff=coeff)
         self.publish_topics()
-        # if PROFILER_ENABLED:
-        #     Profiler.disable()
         stop_time = time.perf_counter()
         if self.publish_computation_time:
             self.current_computation_time = (stop_time - start_time)

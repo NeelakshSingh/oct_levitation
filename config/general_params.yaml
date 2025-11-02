@@ -1,22 +1,2 @@
 oct_levitation:
-  # rigid_body: "bronzefill_ring_27gms_2N52" # Used for all trajectory tracking tests
-  rigid_body: "greentec_do80_di67_Md10_2N52" # Used for all regulation and step response tests
-  # rigid_body: "bronzefill_ring_27gms_4N52" # For Z boundary pushing
-
-  cpp_impl:
-    calfile: "mc3ao8s_md200_handp.yaml"
-    num_magnets: 1
-    z_values: # should have the same number of elements as num_magnets
-      - 0.0
-    magnet:
-      inner_radius: 0.0
-      outer_radius: 0.005
-      height: 0.005
-      remanence: 1.48
-      density: 7.5e3
-    north_pole_down: true
-    disc:
-      inner_radius: 0.005
-      outer_radius: 0.025
-      height: 0.01694
-      density: 1014.91
+  rigid_body: "greentec_do80_di67_Md10_2N52" # Should be one of the registered rigid bodies in the framework described in rigid_bodies.py

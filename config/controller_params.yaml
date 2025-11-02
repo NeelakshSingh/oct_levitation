@@ -1,37 +1,34 @@
 oct_levitation:
   control_freq: 1000 # ALWAYS MATCH VICON's RATE
-  calibration_file: "mc3ao8s_md200_handp.yaml"
-  publish_computation_time: true
+  calibration_file: "mc3ao8s_md200_handp.yaml" # MPEM calibration file to use
+  publish_computation_time: true # When true, publishes the control-loop's computation time at every feedback iteration. Useful for debugging issues related to timing.
   soft_start: true # Required because gravity compensation will request very high currents immediately.
   n_drivers: 9 # Number of coils supported by the system at the moment
   active_coils: [0, 1, 2, 3, 4, 5, 6, 7] # the ones which are actually used, according to the calibration file
-  active_drivers: [0, 1, 2,  3, 4, 5,  7, 8] # the driver numbers which are connected to these to allocate correctly for the ECB
+  active_drivers: [0, 1, 2, 3, 4, 5, 7, 8] # the driver numbers which are connected to these to allocate correctly for the ECB
   
   integrator_params:
     use_integrator: false # Use integrator for some time
     switch_off_on_convergence: false # Switch off integrator when the system converges
     check_convergence: false # Check convergence
-    integrator_enable_rpxyz: [0, 0, 1, 1, 1]
-    convergence_check_time: 2.0 # Stay at 1 second of convergence before switching off the integrator
-    position_error_tol: 0.0002
-    reduced_attitude_error_tol: 0.005
-    start_time: 5.0
-    end_time: 1000.0
+    integrator_enable_rpxyz: [0, 0, 1, 1, 1] # Write 1 or 0 to enable or disable integrator on that state. RP here corresponds to the two angles of the reduced attitude vector from desired value.
+    convergence_check_time: 2.0 # The number of seconds spent within the convergence check tolerance limit before switching off the integrator
+    position_error_tol: 0.0002 # Tolerance to check for position convergence
+    reduced_attitude_error_tol: 0.005 # Tolerance to check for reduced attitude convergence
+    start_time: 5.0 # Time to start the integrator
+    end_time: 1000.0 # Time to end the integrator, use a large number to effectively enable it indefinitely.
   
-  max_linear_velocity: 0.1 # Maximum velocity of the levitation system in m/s
-  max_angular_velocity: 3.490658503988659
+  max_linear_velocity: 0.1 # Maximum velocity of the levitation system in m/s for the controller to prevent it from going rapidly unstable due to events like marker occlusion.
+  max_angular_velocity: 3.490658503988659 # Maximum angular velocity of the levitation system in rad/s for the controller to prevent it from going rapidly unstable due to events like marker occlusion.
 
   trajectory_params:
     enable_tracking: false # Enabling tracking will also add a publisher to publish the reference pose
-    start_time: 5.0
-    end_time: 1000.0
+    start_time: 5.0 # Time to start tracking the trajectory
+    end_time: 1000.0 # Time to end the trajectory tracking, use a large number to effectively enable it indefinitely.
     trajectory_name: "z_boundary_pushing_sine_trajectory" # Should be a registered trajectory under the framework described in trajectories.py
-
-  cpp_impl:
-    omega_pd: 0.5
   
   delay_compensation_kf: # The sampling time of the KF will be the same as the control frequency and the current sensor feedback.
-    enabled: false
+    enabled: false # KEEP THIS DISABLED. THERE IS NO DELAY COMPENSATING KF IN THIS RELEASE.
     compensation_steps: 4 # The number of controller time steps worth of delay in the feedback to compensate for.
     unit_dipole_wrench_noise_std_rpxyz: [3.67859457e-05, 3.15473097e-05, 5.24102267e-04, 5.79027093e-04, 6.19678450e-04]
     vicon_noise_std_rpxyz: [2.37471348e-05, 8.75457449e-05, 1.01646014e-05, 4.16398263e-06, 6.27907061e-06]

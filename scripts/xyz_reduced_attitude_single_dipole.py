@@ -61,17 +61,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                 method='zoh')
-        
-        ## Onyx 80x15 I40 2N52 Object's Tuning
-        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
-
-        #### Bronzefill 27gms without integrator compensation.
-        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([15.0, 5.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
 
         #### Bronzefill 27gms with integrator compensation.
         Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
@@ -83,12 +72,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         #### Greentec Pro Do80 Di67
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
         # Qx = np.diag([25.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
-        # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
-        # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
-
-        #### Jasan Levitator V1 2N52
-        # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
-        # Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         # Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
         # self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
 
@@ -114,30 +97,14 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         self.Ixx = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Px
         self.Iyy = self.rigid_body_dipole.mass_properties.principal_inertia_properties.Py
 
-        #### I40 Onyx 80x15 2 N52.
-        # self.k_ra_p = 1600 # I40 Onyx 80x15 2 N52. Tunings for that object.
-        # self.K_ra_d = np.diag([1.0, 1.0])*120 # I40 Onyx 80x15 2 N52. Tunings for that object.
-
-        #### Bronzefill 27gms without integrator compensation.
-        # scale = 1.0
-        # self.k_ra_p = 650 * scale
-        # self.K_ra_d = np.diag([1.0, 1.0])*100 * scale
-
         #### Bronzefill 27gms with integrator compensation.
         # scale = 1.65 # Almost starts noise amplification at this value.
         scale = 1.35
-        # scale = 1.30 # This value is somewhat robust for trajectories.
         self.k_ra_p = 350 * scale
         self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
         #### Greentec Pro Do80 Di67
         # scale = 1.45
-        # self.k_ra_p = 350 * scale
-        # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
-
-        #### Jasan Levitator V12 N52  Tuning.
-        # scale = 1.0 # Works for magnet axis parallel to world Z axis.
-        # # scale = 0.5
         # self.k_ra_p = 350 * scale
         # self.K_ra_d = np.diag([1.0, 1.0])*80 * scale
 
