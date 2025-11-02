@@ -6,76 +6,127 @@
 <sup>2</sup>Learning and Dynamical Systems Group, Max Planck Institute for Intelligent Systems, T&uumlbingen, Germany<br>
 </div>
 
-<h2>Code Structure</h2>
-Some basic Git commands are:
+ADD A NICE POSTER IMAGE HERE SIMILAR TO THE ONE USED FOR THE FINAL PRESENTATION.
 
+## Package Structure :toolbox:
 ```
 oct_levitation
-│   .gitattributes
-│   .gitignore
-│   CMakeLists.txt
-│   debug.log
-│   launch_command.txt
-│   LICENSE
-│   package.xml
-│   README.md
-│   setup.py
+├─── config/
+│    ├── controller_params.yaml              : Parameters for the levitation controller
+│    ├── experiment_analysis_params.yaml     : Parameters for recording and plotting experiment data
+│    ├── general_params.yaml                 : Specifies the selected rigid body for levitation
+│    │
+│    ├── rqt_multiplot/                      : rqt_multiplot configuration files for live plotting experiment data
+│    │
+│    └── rviz/                               : RViz configuration files for visualizing states and inputs of the levitated rigid body
 │
-├───config
-│   │   controller_params.yaml
-│   │   experiment_analysis_params.yaml
-│   │   general_params.yaml
-│   │
-│   ├───rqt_multiplot
-│   │       rqt_multiplot_bronzefill_ring_27gm.xml
-│   │       rqt_multiplot_currents.xml
-│   │       rqt_multiplot_greentec_pro_do80_di67.xml
-│   │
-│   └───rviz
-│           single_dipole_control_config.rviz
+├─── docs/
+│    └── rtprio_permissions.md               : Instructions to set real-time permissions for the controller node on Linux
 │
-├───docs
-│       rtprio_permissions.md
+├─── launch/
+│    ├── control_pipeline_base.launch         : Launchfile for drivers and Vicon interface
+│    ├── experiment_analysis.launch           : Launchfile for recorded data plotting script
+│    ├── experiment_recording.launch          : Launchfile for recording experiment data
+│    ├── tnb_mns_driver.launch                : Launchfile for OctoMag’s driver
+│    └── xyz_normal_control_com_wrench.launch : Overall launchfile for the controller
 │
-├───launch
-│       control_pipeline_base.launch
-│       experiment_analysis.launch
-│       experiment_recording.launch
-│       tnb_mns_driver.launch
-│       xyz_normal_control_com_wrench.launch
+├─── msg/                                   : Custom ROS message definitions
 │
-├───msg
-│       ControllerDetails.msg
-│       RigidBodyStateEstimate.msg
+├─── scripts/
+│    ├── xyz_reduced_attitude_single_dipole.py : Main controller script with LQR, allocation, and reduced attitude control
+│    │
+│    └── utils/
+│         ├── coil_subset_condition_calculator.py : Calculates condition numbers for different coil subsets
+│         ├── condition_number_plot.py            : Plots condition numbers for all 8 coils given a calibration file
+│         ├── experiment_analysis.py              : Extracts and plots recorded experiment data for analysis
+│         ├── experiment_data_summarizer.py       : Summarizes key details from recorded experiments into a text file
+│         ├── experiment_recorder.py              : Records experiment data into a ROS bag
+│         └── rviz_visualizations.py              : Publishes RViz visualizations for the levitated rigid body
 │
-├───scripts
-│   │   xyz_reduced_attitude_single_dipole.py
-│   │
-│   └───utils
-│           coil_subset_condition_calculator.py
-│           condition_number_plot.py
-│           experiment_analysis.py
-│           experiment_data_summarizer.py
-│           experiment_recorder.py
-│           rviz_visualizations.py
-│
-└───src
-    └───oct_levitation
-        │   common.py
-        │   control_node.py
-        │   dynamics.py
-        │   filters.py
-        │   geometry.py
-        │   geometry_jit.py
-        │   mechanical.py
-        │   numerical.py
-        │   plotting.py
-        │   processing_utils.py
-        │   rigid_bodies.py
-        │   trajectories.py
-        │
-        └───ext
-                bagreader.py
-                LICENSE
-                __init__.py
+└─── src/
+     └── oct_levitation/
+          ├── common.py                    : Common definitions and utilities
+          ├── control_node.py              : ROS node base for the levitation controller
+          ├── geometry.py                  : Geometry functions and utilities
+          ├── geometry_jit.py              : JIT-compiled geometry functions for real-time performance
+          ├── mechanical.py                : Classes and functions related to rigid body’s mechanical and magnetic properties
+          ├── numerical.py                 : Common numerical methods and utilities
+          ├── plotting.py                  : Plotting functions used for experiment data analysis
+          ├── processing_utils.py          : Data extraction utilities
+          ├── rigid_bodies.py              : Definitions of different rigid bodies used in experiments
+          └── trajectories.py              : Functions defining trajectories used in experiments
+
 ```
+
+## Installation Instructions :hammer_and_wrench:
+This package has been tested on Ubuntu 20.04 with ROS Noetic.
+The rest of this section assumes that you have a working ROS Noetic installation and the knowledge required to create and build a ROS workspace.
+
+### Dependencies :package:
+This package depends on the following ROS packages for building and running the levitation controller:
+
+#### Vicon Bridge
+This package is required to receive pose data from the Vicon motion capture system.
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/ethz-asl/vicon_bridge.git
+```
+Connect the PC running the Vicon system to your computer with an ethernet connection and just run a Vicon tracking software.
+If you use another motion capture system, you must install its corresponding software interface and modify the launch files, as well as the topics in the controller node to receive pose data from that system.
+
+#### Magnetic Manipulation Library by MSRL
+MSRL provides a ROS package for modelling electromagnetic manipulation systems in the Tesla Core collection of packages which can be found here: https://github.com/ethz-msrl/Tesla_core_public.git.
+The implementation of the Multi-Pole Expansion Model used in this package can be found at in the [`Tesla_core_public/mag_control/mpem`](https://github.com/ethz-msrl/Tesla_core_public/tree/master/mag_control/mpem) directory.
+It also contains instructions for creating calibration datasets and running the model fitting procedure.
+Simply clone Tesla Core into your ROS workspace:
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/ethz-msrl/Tesla_core_public.git
+```
+
+### Clone and Build :construction:
+Simply clone this repository into your ROS workspace's source directory and build it as follows:
+```bash
+cd ~/catkin_ws/src
+git clone git@github.com:TheGodOfWar007/oct_levitation.git
+catkin build oct_levitation
+```
+The `setup.py` file in the package root contains all necessary python packages which will be installed during the build process.
+
+### Hardware Interface to eMNS :electric_plug:
+To interface with the OctoMag eMNS hardware, you need to install the proprietary driver software provided by MagnebotiX or use the closed-source scripts used by MSRL.
+Since both options are not publicly available, we cannot provide direct installation instructions here.
+Note that the codebase provided can be made to work with any eMNS provided that a suitable hardware interface node is implemented.
+The driver software must interface with ROS by subscribing to a topic for receiving desired coil currents which is published by the controller node.
+For this implementation the topic name is `/tnb_mns_driver/coil_currents`.
+Its custom message definition, while not provided here, is simply a time stamped multi-array of floats similar to the VectorStamped message defined in this package.
+Just define this interface and modify the base class from `src/control_node.py` accordingly.
+
+## Levitate a Rigid Body :magic_wand:
+Follow these steps to run the levitation controller on a rigid body with a single magnetic dipole:
+
+1. Describe the mechanical properties of your levitator in `src/rigid_bodies.py`. Objects used in the experiments included in the research paper and the video are already defined there for reference. Make sure to properly define the orientation of each magnet in the stack consisting of the dipole. Give the levitator a unique name and register it with the functions provided.
+2. Modify `config/general_params.yaml` to select your rigid body by its unique name.
+3. Make sure that you are able to receive pose data from your motion capture system in ROS. For Vicon, simply run the tracking software in the Vicon PC connected to your computer via ethernet.
+4. Make sure that your hardware interface node for the eMNS is running and is able to receive coil current commands on the driver via the appropriate ROS topic and communication interface.
+5. Launch the controller with the following command and with the levitator kept near the desired starting position:
+```bash
+roslaunch oct_levitation xyz_normal_control_com_wrench.launch sim:=false hardware_connected:=true description:="one or two lines about the experiment"
+```
+The `sim` argument was defined as a part of the framework within `control_node.py` to allow sending current commands to a simulator instead.
+It also makes sure that the coil driver stays switched off throughout the node's execution.
+Setting `hardware_connected` to true allows the service call for switching the coil driver on only if `sim` is false.
+The `description` argument is mandatory and was implemented to identify the purpose of each experiment among hundreds of recorded trials.
+
+6. Check the `data_subfolder` argument defined in the launchfile, that is the subfolder which can be used to categorize experiments for each rigid body. By default, the experiment data recorded runs automatically and saves data in the relative path `oct_levitation/data/experiment_data/<rigid_body_name>/<data_subfolder>/`. Key details are then plotted by running the experiment analysis launchfile. In this case, for example:
+```bash
+roslaunch oct_levitation experiment_analysis.launch data_subfolder:=xyz_normal_control
+```
+Note that all scripts make use of the rigid body name to find the right data files so make sure that it is correctly defined in `general_params.yaml`.
+The experiment analysis script extracts and plots data, and opens the editor of your choice (nano in xterm by default) so that you can note down key observations from the experiment.
+These behaviors can be modified using the parameters defined in the launchfiles and the rosparam files inside the `config/` directory.
+
+## BibTex Citation :books:
+
+
+## Acknowledgements :handshake:

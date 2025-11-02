@@ -43,9 +43,8 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 add_message_files(
   FILES
   ControllerDetails.msg
-  PID1DState.msg
-  Float64MultiArrayStamped.msg
   RigidBodyStateEstimate.msg
+  VectorStamped.msg
 )
 
 #############

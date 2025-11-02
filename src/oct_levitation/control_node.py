@@ -13,7 +13,7 @@ import sys
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3, Pose, Twist, TwistStamped
 from oct_levitation.msg import RigidBodyStateEstimate
 from tnb_mns_driver.msg import DesCurrentsReg
-from control_utils.msg import VectorStamped
+from oct_levitation.msg import VectorStamped
 from std_msgs.msg import String
 from mag_manip import mag_manip
 from typing import List, Tuple
