@@ -6,7 +6,9 @@
 <sup>2</sup>Learning and Dynamical Systems Group, Max Planck Institute for Intelligent Systems, T&uumlbingen, Germany<br>
 </div>
 
-ADD A NICE POSTER IMAGE HERE SIMILAR TO THE ONE USED FOR THE FINAL PRESENTATION.
+<p align="center">
+  <img src="cover.png" alt="Cover Image" width="100%">
+</p>
 
 ## Package Structure :toolbox:
 ```
@@ -92,6 +94,7 @@ git clone git@github.com:TheGodOfWar007/oct_levitation.git
 catkin build oct_levitation
 ```
 The `setup.py` file in the package root contains all necessary python packages which will be installed during the build process.
+Give real-time permissions to the controller node by following the instructions in `docs/rtprio_permissions.md`.
 To make complete use of the experiment analysis script, install `xterm`:
 ```bash
 sudo apt-get install xterm
@@ -131,10 +134,28 @@ The experiment analysis script extracts and plots data, and opens the editor of 
 These behaviors can be modified using the parameters defined in the launchfiles and the rosparam files inside the `config/` directory.
 
 ## The System in Action :clapper:
-EMBED THE FINAL VIDEO HERE
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=jSbByPsisOs">
+    <img src="https://img.youtube.com/vi/jSbByPsisOs/maxresdefault.jpg" alt="Watch the video" width="600">
+  </a>
+</p>
+
+<p align="center">
+  🎥 <a href="https://www.youtube.com/watch?v=jSbByPsisOs">Watch the demo on YouTube</a>
+</p>
+
 
 ## BibTex Citation :books:
-WRITE A BASIC BIBTEX ENTRY BASED ON THE ARXIV RELEASE
+
+```bibtex
+@article{neelaksh2025remote_maglev,
+  title         = {Remote Magnetic Levitation Using Reduced Attitude Control and Parametric Field Models},
+  author        = {Singh, Neelaksh and Zughaibi, Jasan and von Arx, Denis and Nelson, Bradley J. and Muehlebach, Michael},
+  journal       = {arXiv preprint arXiv:2511.XXXXX},
+  year          = {2025},
+  url           = {https://arxiv.org/abs/2511.XXXXX}
+}
+```
 
 ## Acknowledgements :handshake:
-ACKNOWLEDGE PROF BERKELMAN, MSRL, AND EVERYONE WHO HELPED MAKE THE PROJECT A SUCCESS
+We thank Prof. Peter Berkleman for providing valuable insight on magnetic levitation systems based on his extensive experience in developing magnetic levitation systems. We also thank MagnebotiX AG for technical support with the OctoMag eMNS hardware. We gratefully acknowledge the support of the Max Planck Institute for Intelligent Systems, T&uumlbingen, Germany, for providing access to their high-frequency motion capture system used in our experiments. Finally, we thank the authors of all open-source software packages used in this work as mentioned in the installation instructions.
