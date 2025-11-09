@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="cover.png" alt="Cover Image" width="100%">
+  <img src="control_diagram.png" alt="Cover Image" width="100%">
 </p>
 
 ## Package Structure :toolbox:
