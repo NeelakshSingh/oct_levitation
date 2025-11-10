@@ -30,7 +30,6 @@ oct_levitation
 │    ├── control_pipeline_base.launch         : Launchfile for drivers and Vicon interface
 │    ├── experiment_analysis.launch           : Launchfile for recorded data plotting script
 │    ├── experiment_recording.launch          : Launchfile for recording experiment data
-│    ├── tnb_mns_driver.launch                : Launchfile for OctoMag’s driver
 │    └── xyz_normal_control_com_wrench.launch : Overall launchfile for the controller
 │
 ├─── msg/                                   : Custom ROS message definitions
@@ -39,8 +38,6 @@ oct_levitation
 │    ├── xyz_reduced_attitude_single_dipole.py : Main controller script with LQR, allocation, and reduced attitude control
 │    │
 │    └── utils/
-│         ├── coil_subset_condition_calculator.py : Calculates condition numbers for different coil subsets
-│         ├── condition_number_plot.py            : Plots condition numbers for all 8 coils given a calibration file
 │         ├── experiment_analysis.py              : Extracts and plots recorded experiment data for analysis
 │         ├── experiment_data_summarizer.py       : Summarizes key details from recorded experiments into a text file
 │         ├── experiment_recorder.py              : Records experiment data into a ROS bag
@@ -102,13 +99,28 @@ sudo apt-get install xterm
 ``` 
 
 ### Hardware Interface to eMNS :electric_plug:
-To interface with the OctoMag eMNS hardware, you need to install the proprietary driver software provided by MagnebotiX or use the closed-source scripts used by MSRL.
-Since both options are not publicly available, we cannot provide direct installation instructions here.
-Note that the codebase provided can be made to work with any eMNS provided that a suitable hardware interface node is implemented.
+To interface with the OctoMag eMNS hardware, you need to install the proprietary driver software provided by MagnebotiX.
+Since it is not publicly available, we cannot provide direct installation instructions here.
+However, note that the codebase provided can be made to work with any eMNS provided that a suitable hardware interface node is implemented.
 The driver software must interface with ROS by subscribing to a topic for receiving desired coil currents which is published by the controller node.
-For this implementation the topic name is `/tnb_mns_driver/coil_currents`.
-Its custom message definition, while not provided here, is simply a time stamped multi-array of floats similar to the VectorStamped message defined in this package.
-Just define this interface and modify the base class from `src/control_node.py` accordingly.
+
+This implementation roughly works by publishing currents over a topic using the `VectorStamped` message defined in this package.
+One can program a hardware interface node which operates their eMNS driver and subscribes to this topic to receive the desired coil currents and send them to the eMNS coil drivers accordingly.
+The initialization of this interface is done in the following line in the controller base class defined in `src/oct_levitation/control_node.py`:
+```python
+self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl, shutdown_hook = init_system("JECB", self.__HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
+
+```
+The `self.currents_publisher` is the topic Publisher and `self.publish_currents_impl` is a function which takes in the message and publishes it using the publisher. 
+This interface is specific to OctoMag and the user can feel free to modify all concerned parts of the code to suit their hardware interface needs.
+Finally, note the following lines in the launchfile `launch/control_pipeline_base.launch`:
+```xml
+<group if="$(hardware_connected)">
+  <include file="$(find oct_levitation)/launch/tnb_mns_driver.launch"/>
+</group>
+```
+This line mentions `tnb_mns_driver.launch`, which used to launch the proprietary OctoMag driver software not included in this repository.
+Therefore, you must remove/replace this line as appropriate to launch your own hardware interface node otherwise the main launchfile `xyz_normal_control_com_wrench.launch` will fail to run.
 
 ## Levitate a Rigid Body :magic_wand:
 Follow these steps to run the levitation controller on a rigid body with a single magnetic dipole:

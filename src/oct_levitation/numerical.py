@@ -162,3 +162,207 @@ def numba_clip(a, a_min, a_max):
     return a
 
 numba_clip(np.array([1, 2, 3]), 0, 2) # Force compilation on import.
+
+import numpy as np
+import rospy
+
+class SimpleDisturbanceIntegrator:
+    """
+    A simple first-order discrete-time integrator for disturbance compensation.
+    Handles position and reduced attitude axes, supports convergence detection,
+    and can disable integrators upon convergence.
+
+    Parameters
+    ----------
+    Ki_lin_xyz : Tuple[float, float, float], optional
+        The linear integral gains for the (X, Y, Z) position errors.
+        Each element defines how strongly the corresponding axis integrates
+        position error into disturbance compensation.
+        Default is (0.0, 0.0, 0.0).
+
+    Ki_ang : float, optional
+        The angular integral gain for the reduced attitude errors (Nx, Ny).
+        Default is 0.0.
+
+    integrator_enable : np.NDArray[Union[int, bool]], optional
+
+    pos_error_tol : float, optional
+        The absolute position error tolerance below which an axis is considered
+        converged for a sustained duration. Default is 1e-3.
+
+    att_error_tol : float, optional
+        The absolute reduced attitude error tolerance below which an angular
+        axis is considered converged for a sustained duration. Default is 1e-3.
+
+    integrator_start_time : float, optional
+        The simulation time (in seconds) after which the integrator begins
+        accumulating error. Default is 0.0.
+
+    integrator_end_time : float, optional
+        The simulation time (in seconds) after which the integrator stops
+        updating. Default is infinity.
+
+    integrator_convergence_check_time : float, optional
+        The duration (in seconds) for which the error must remain below its
+        respective tolerance before the corresponding integrator is considered
+        converged. Default is 1.0.
+
+    switch_off_integrator_on_convergence : bool, optional
+        If True, disables (freezes) individual integrators once convergence
+        has been achieved for that axis. Default is True.
+
+    check_convergence : bool, optional
+        If True, enables automatic convergence checking and logging.
+        If False, integrators will never be marked as converged. Default is True.
+    """
+
+    def __init__(
+        self,
+        Ki_lin_xyz=(0.0, 0.0, 0.0),  # (Ki_x, Ki_y, Ki_z)
+        Ki_ang=0.0,
+        integrator_enable=np.ones(5, dtype=bool),
+        pos_error_tol=1e-3,
+        reduced_att_error_tol=1e-3,
+        integrator_start_time=0.0,
+        integrator_end_time=np.inf,
+        integrator_convergence_check_time=1.0,
+        switch_off_integrator_on_convergence=True,
+        check_convergence=True,
+    ):
+        # Integration gains
+        self.Ki_lin_x, self.Ki_lin_y, self.Ki_lin_z = Ki_lin_xyz
+        self.Ki_ang = Ki_ang
+
+        # Timing
+        self.integrator_start_time = integrator_start_time
+        self.integrator_end_time = integrator_end_time
+
+        # Convergence settings
+        self.__pos_error_tol = pos_error_tol
+        self.__att_error_tol = reduced_att_error_tol
+        self.__integrator_convergence_check_time = integrator_convergence_check_time
+        self.switch_off_integrator_on_convergence = switch_off_integrator_on_convergence
+        self.__integrator_check_convergence = check_convergence
+
+        # States
+        self.__integrator_enable = integrator_enable
+        self.__indiv_integrator_converge_state = np.ones(5, dtype=bool)
+        self.__indiv_integrator_converge_state[self.__integrator_enable == 1] = False
+        self.__convergence_time = np.zeros(5)
+        self.__enabled_integrators_converged = False
+
+        # Disturbance compensation: [Nx, Ny, Z, Y, X] ordering
+        self.disturbance_rpxyz = np.zeros(5)
+
+        # Internal time
+        self.time_elapsed = 0.0
+
+    def reset(self):
+        """Resets integrator states and disturbances."""
+        self.disturbance_rpxyz[:] = 0.0
+        self.__convergence_time[:] = 0.0
+        self.__indiv_integrator_converge_state[:] = False
+        self.__enabled_integrators_converged = False
+        self.__integrator_enable[:] = True
+        self.time_elapsed = 0.0
+
+    def step(self, dt, position_error, reduced_attitude_error):
+        """
+        Executes one integration step.
+
+        Parameters
+        ----------
+        dt : float
+            Time step for integration.
+        position_error : np.ndarray shape (3,)
+            Cartesian errors.
+        reduced_attitude_error : np.ndarray shape (2,)
+            Reduced attitude error as a 2D numpy array.
+
+        Returns
+        -------
+        np.ndarray
+            Updated disturbance_rpxyz (size 5).
+        """
+        self.dt = dt
+        self.time_elapsed += dt
+
+        # Integrate only in valid window
+        if self.integrator_start_time < self.time_elapsed < self.integrator_end_time:
+            # Integrate position and attitude disturbances
+            self.disturbance_rpxyz[0] += self.Ki_ang * reduced_attitude_error[0] * dt * self.__integrator_enable[0]
+            self.disturbance_rpxyz[1] += self.Ki_ang * reduced_attitude_error[1] * dt * self.__integrator_enable[1]
+            self.disturbance_rpxyz[2] += self.Ki_lin_x * position_error[0] * dt * self.__integrator_enable[2]
+            self.disturbance_rpxyz[3] += self.Ki_lin_y * position_error[1] * dt * self.__integrator_enable[3]
+            self.disturbance_rpxyz[4] += self.Ki_lin_z * position_error[2] * dt * self.__integrator_enable[4]
+
+            # Check convergence
+            if not self.__enabled_integrators_converged and self.__integrator_check_convergence:
+                self._check_convergence(position_error[0], position_error[1], position_error[2], reduced_attitude_error)
+
+        return self.disturbance_rpxyz
+
+    def _check_convergence(self, x_error, y_error, z_error, reduced_attitude_error):
+        """Internal helper to track convergence and disable integrators if needed."""
+
+        if abs(x_error) < self.__pos_error_tol and self.__integrator_enable[2]:
+            self.__convergence_time[2] += self.dt
+            if self.__convergence_time[2] > self.__integrator_convergence_check_time:
+                rospy.logwarn_once(f"X convergence achieved. Compensation force: {self.disturbance_rpxyz[2]}")
+                self.__indiv_integrator_converge_state[2] = True
+                if self.switch_off_integrator_on_convergence:
+                    rospy.logwarn_once("Stopping X integrator.")
+                    self.__integrator_enable[2] = False
+        else:
+            # Reset convergence time if error goes above tolerance
+            self.__convergence_time[2] = 0.0
+
+        if abs(y_error) < self.__pos_error_tol and self.__integrator_enable[3]:
+            self.__convergence_time[3] += self.dt
+            if self.__convergence_time[3] > self.__integrator_convergence_check_time:
+                rospy.logwarn_once(f"Y convergence achieved. Compensation force: {self.disturbance_rpxyz[3]}")
+                self.__indiv_integrator_converge_state[3] = True
+                if self.switch_off_integrator_on_convergence:
+                    rospy.logwarn_once("Stopping Y integrator.")
+                    self.__integrator_enable[3] = False
+        else:
+            self.__convergence_time[3] = 0.0
+
+        if abs(z_error) < self.__pos_error_tol and self.__integrator_enable[4]:
+            self.__convergence_time[4] += self.dt
+            if self.__convergence_time[4] > self.__integrator_convergence_check_time:
+                rospy.logwarn_once(f"Z convergence achieved. Compensation force: {self.disturbance_rpxyz[4]}")
+                self.__indiv_integrator_converge_state[4] = True
+                if self.switch_off_integrator_on_convergence:
+                    rospy.logwarn_once("Stopping Z integrator.")
+                    self.__integrator_enable[4] = False
+        else:
+            self.__convergence_time[4] = 0.0
+
+        if abs(reduced_attitude_error[0]) < self.__att_error_tol and self.__integrator_enable[0]:
+            self.__convergence_time[0] += self.dt
+            if self.__convergence_time[0] > self.__integrator_convergence_check_time:
+                rospy.logwarn_once(f"Reduced attitude Nx convergence achieved. Inertia normalized compensation torque: {self.disturbance_rpxyz[0]}") 
+                # Inertia normalized because this is before multiplying by inertia in the controller.
+                self.__indiv_integrator_converge_state[0] = True
+                if self.switch_off_integrator_on_convergence:
+                    rospy.logwarn_once("Stopping RA x integrator.")
+                    self.__integrator_enable[0] = False
+        else:
+            self.__convergence_time[0] = 0.0
+
+        if abs(reduced_attitude_error[1]) < self.__att_error_tol and self.__integrator_enable[1]:
+            self.__convergence_time[1] += self.dt
+            if self.__convergence_time[1] > self.__integrator_convergence_check_time:
+                rospy.logwarn_once(f"Reduced attitude Ny convergence achieved. Inertia normalized compensation torque: {self.disturbance_rpxyz[1]}")
+                self.__indiv_integrator_converge_state[1] = True
+                if self.switch_off_integrator_on_convergence:
+                    rospy.logwarn_once("Stopping RA y integrator.")
+                    self.__integrator_enable[1] = False
+        else:
+            self.__convergence_time[1] = 0.0
+
+        # Global convergence
+        if np.all(self.__indiv_integrator_converge_state):
+            self.__enabled_integrators_converged = True
+            rospy.logwarn_once("All enabled integrators converged.")

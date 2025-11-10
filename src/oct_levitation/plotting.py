@@ -107,154 +107,6 @@ def wrench_stamped_df_to_array_df(ft_df: pd.DataFrame) -> pd.DataFrame:
                         }, errors="raise", inplace=False)
     return ft_df
 
-### Works but doesn't do column spans
-# def arrange_subplots(arrangement, x_share=None, y_share=None):
-#     """
-#     Arrange a nested list of matplotlib Axes objects into a structured subplot layout,
-#     while allowing flexible axis sharing configurations. Replots the data into a new figure.
-    
-#     Parameters:
-#         arrangement (list): A nested list defining the layout of subplots.
-#         x_share (list, optional): A nested list specifying x-axis sharing (same number means shared).
-#         y_share (list, optional): A nested list specifying y-axis sharing (same number means shared).
-
-#     Returns:
-#         fig, ax_grid: The created figure and a grid of subplot axes.
-#     """
-    
-#     def count_grid_size(arr, row=0, col=0, max_size=[0, 0]):
-#         """Recursively determine the required number of rows and columns."""
-#         if isinstance(arr, list):
-#             for i, sub_arr in enumerate(arr):
-#                 count_grid_size(sub_arr, row + (i if col == 0 else 0), col + (0 if i == 0 else 1), max_size)
-#         else:
-#             max_size[0] = max(max_size[0], row + 1)
-#             max_size[1] = max(max_size[1], col + 1)
-
-#     # Compute required grid size
-#     max_size = [0, 0]
-#     count_grid_size(arrangement, max_size=max_size)
-#     max_rows, max_cols = max_size
-
-#     # Create figure and subplots
-#     fig, ax_grid = plt.subplots(max_rows, max_cols, figsize=(5 * max_cols, 3 * max_rows), squeeze=False)
-
-#     # Dicts to track shared axes
-#     shared_x = {}
-#     shared_y = {}
-
-#     def get_shared_axis(share_dict, share_id, default_ax):
-#         """Get or assign a shared axis based on an identifier."""
-#         if share_id not in share_dict:
-#             share_dict[share_id] = default_ax
-#         return share_dict[share_id]
-
-#     # Recursive function to place axes and replot data
-#     def place_axes(arr, row=0, col=0):
-#         if isinstance(arr, list):
-#             for i, sub_arr in enumerate(arr):
-#                 place_axes(sub_arr, row + (i if col == 0 else 0), col + (0 if i == 0 else 1))
-#         else:
-#             target_ax = ax_grid[row, col]
-#             source_ax = arr
-
-#             # Share X-axis if required
-#             if x_share:
-#                 share_id = x_share[row][col] if isinstance(x_share[row], list) else x_share[row]
-#                 if share_id != 0:
-#                     target_ax.sharex(get_shared_axis(shared_x, share_id, target_ax))
-
-#             # Share Y-axis if required
-#             if y_share:
-#                 share_id = y_share[row][col] if isinstance(y_share[row], list) else y_share[row]
-#                 if share_id != 0:
-#                     target_ax.sharey(get_shared_axis(shared_y, share_id, target_ax))
-
-#             # Copy data
-#             for line in source_ax.get_lines():
-#                 target_ax.plot(line.get_xdata(), line.get_ydata(), label=line.get_label(), linestyle=line.get_linestyle(),
-#                                linewidth=line.get_linewidth(), color=line.get_color(), marker=line.get_marker())
-            
-#             # Copy labels, limits, and title
-#             target_ax.set_xlabel(source_ax.get_xlabel())
-#             target_ax.set_ylabel(source_ax.get_ylabel())
-#             target_ax.set_title(source_ax.get_title())
-#             target_ax.set_xlim(source_ax.get_xlim())
-#             target_ax.set_ylim(source_ax.get_ylim())
-#             target_ax.legend()
-
-#     # Place axes and replot everything
-#     place_axes(arrangement)
-
-#     fig.tight_layout()
-#     
-    # if not DISABLE_PLT_SHOW:
-    #     fig.show()
-#     return fig, ax_grid
-
-def arrange_subplots(arrangement, x_share=None, y_share=None):
-    """
-    Arrange a nested list of matplotlib Axes objects into a structured subplot layout,
-    while allowing flexible axis sharing configurations. Replots the data into a new figure.
-    
-    Parameters:
-        arrangement (list): A nested list defining the layout of subplots.
-        x_share (list, optional): A nested list specifying x-axis sharing (same number means shared).
-        y_share (list, optional): A nested list specifying y-axis sharing (same number means shared).
-
-    Returns:
-        fig, ax_grid: The created figure and a grid of subplot axes.
-    """
-    num_rows = len(arrangement)
-    num_cols = max(len(row) if isinstance(row, list) else 1 for row in arrangement)
-    
-    fig, ax_grid = plt.subplots(num_rows, num_cols, figsize=(5 * num_cols, 3 * num_rows), squeeze=False)
-    
-    shared_x = {}
-    shared_y = {}
-    
-    def get_shared_axis(share_dict, share_id, default_ax):
-        if share_id not in share_dict:
-            share_dict[share_id] = default_ax
-        return share_dict[share_id]
-    
-    for row_idx, row in enumerate(arrangement):
-        if not isinstance(row, list):
-            row = [row]
-        num_subplots = len(row)
-        col_width = num_cols / num_subplots
-        
-        for col_idx, source_ax in enumerate(row):
-            target_ax = fig.add_subplot(num_rows, num_cols, row_idx * num_cols + col_idx + 1)
-            
-            if x_share:
-                share_id = x_share[row_idx][col_idx] if isinstance(x_share[row_idx], list) else x_share[row_idx]
-                if share_id != 0:
-                    target_ax.sharex(get_shared_axis(shared_x, share_id, target_ax))
-            
-            if y_share:
-                share_id = y_share[row_idx][col_idx] if isinstance(y_share[row_idx], list) else y_share[row_idx]
-                if share_id != 0:
-                    target_ax.sharey(get_shared_axis(shared_y, share_id, target_ax))
-            
-            for line in source_ax.get_lines():
-                target_ax.plot(line.get_xdata(), line.get_ydata(), label=line.get_label(),
-                               linestyle=line.get_linestyle(), linewidth=line.get_linewidth(),
-                               color=line.get_color(), marker=line.get_marker())
-            
-            target_ax.set_xlabel(source_ax.get_xlabel())
-            target_ax.set_ylabel(source_ax.get_ylabel())
-            target_ax.set_title(source_ax.get_title())
-            target_ax.set_xlim(source_ax.get_xlim())
-            target_ax.set_ylim(source_ax.get_ylim())
-            target_ax.legend()
-    
-    fig.tight_layout()
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, ax_grid
-
 @dataclass
 class AxisLabel:
     title: Optional[str] = None
@@ -3397,9 +3249,9 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
         linear_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.force.z"] / rigid_body_dipole.mass_properties.m) * dipole_actual_wrench_df["dt"]).cumsum()
 
         # Compute angular velocity (integrate torques)
-        angular_velocities_wrench[:, 0] = ((dipole_actual_wrench_df["wrench.torque.x"] / rigid_body_dipole.mass_properties.I_bf[0, 0]) * dipole_actual_wrench_df["dt"]).cumsum()
-        angular_velocities_wrench[:, 1] = ((dipole_actual_wrench_df["wrench.torque.y"] / rigid_body_dipole.mass_properties.I_bf[1, 1]) * dipole_actual_wrench_df["dt"]).cumsum()
-        angular_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.torque.z"] / rigid_body_dipole.mass_properties.I_bf[2, 2]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 0] = ((dipole_actual_wrench_df["wrench.torque.x"] / rigid_body_dipole.mass_properties.principal_inertia_properties.Ix[0, 0]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 1] = ((dipole_actual_wrench_df["wrench.torque.y"] / rigid_body_dipole.mass_properties.principal_inertia_properties.Iy[1, 1]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.torque.z"] / rigid_body_dipole.mass_properties.principal_inertia_properties.Iz[2, 2]) * dipole_actual_wrench_df["dt"]).cumsum()
 
     if not local_frame_for_ang_vel:
         # Convert angular velocities to the global frame.

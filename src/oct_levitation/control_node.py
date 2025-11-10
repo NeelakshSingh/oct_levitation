@@ -11,9 +11,7 @@ import time
 import sys
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3, Pose, Twist, TwistStamped
-from oct_levitation.msg import RigidBodyStateEstimate
-from tnb_mns_driver.msg import DesCurrentsReg
-from oct_levitation.msg import VectorStamped
+from oct_levitation.msg import RigidBodyStateEstimate, VectorStamped
 from std_msgs.msg import String
 from mag_manip import mag_manip
 from typing import List, Tuple
@@ -90,8 +88,6 @@ class ControlSessionNodeBase:
         self.computation_time_msg = VectorStamped()
         self.computation_time_sample = 0
         self.current_computation_time = 0
-
-        # self.LAST_PROFILE_TIME = rospy.Time(0) # Uncomment for profiling the code
 
         self.INTEGRATOR_PARAMS = rospy.get_param("oct_levitation/integrator_params")
         self.TRAJECTORY_PARAMS = rospy.get_param("oct_levitation/trajectory_params")
@@ -265,7 +261,7 @@ class ControlSessionNodeBase:
         # Publishing all the mandatory messages. They are all
         # set by the control_logic if it is implemented acc to
         # the specifications.
-        des_currents = np.asarray(self.desired_currents_msg.des_currents_reg)
+        des_currents = np.asarray(self.desired_currents_msg.vector)
         des_currents = np.clip(des_currents, -self.__MAX_CURRENT, self.__MAX_CURRENT)
         if np.any(np.abs(des_currents) == self.__MAX_CURRENT):
             rospy.logwarn_once(f"CURRENT LIMIT OF {self.__MAX_CURRENT}A HIT!")

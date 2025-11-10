@@ -13,9 +13,6 @@ REGISTERED_BODIES: Dict[str, MultiDipoleRigidBody] = {}
 
 UNIT_QUATERNION = Quaternion(0.0, 0.0, 0.0, 1.0)
 X_FLIP_QUATERNION = Quaternion(*geometry.quaternion_from_euler_xyz(np.array([np.pi, 0, 0])))
-Y_FLIP_QUATERNION = Quaternion(*geometry.quaternion_from_euler_xyz(np.array([0, np.pi, 0])))
-Z_FLIP_QUATERNION = Quaternion(*geometry.quaternion_from_euler_xyz(np.array([0, 0, np.pi])))
-ZERO_TRANSLATION = Vector3()
 
 def register_rigid_body(rigid_body: MultiDipoleRigidBody):
     """
@@ -62,10 +59,6 @@ DiscMagnet10x5_N52 = PermanentMagnet(
 GreentecRingDo80Di67MD10_2N52 = MultiDipoleRigidBody(
     name="greentec_do80_di67_Md10_2N52",
     mass_properties = MassProperties(39.3e-3, # The new print is lighter so its mass stayed the same despite heavier magnets.
-                                     np.array([[1.50992900e-05, -1.45310000e-07, -6.66800000e-08],
-                                               [-1.45310000e-07, 1.34681400e-05, -1.11140000e-07],
-                                               [-6.66800000e-08, -1.11140000e-07, 2.42827100e-05]]),
-                                     np.array([-0.00012000, -0.00021000, 0.00027000]),
                                      PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
                                          Ix=np.array([1.0, 0.0, 0.0]),
                                          Iy=np.array([0.0, 1.0, 0.0]),
@@ -82,7 +75,7 @@ GreentecRingDo80Di67MD10_2N52 = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/greentec_do80_di67_Md10/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down.
                 (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
             ]
         )
@@ -94,10 +87,6 @@ register_rigid_body(GreentecRingDo80Di67MD10_2N52)
 BronzefillRing27gm_2N52 = MultiDipoleRigidBody(
     name="bronzefill_ring_27gms_2N52",
     mass_properties = MassProperties(32.4e-3,
-                                    np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
-                                              [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
-                                              [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
-                                    np.array([-0.00019000, -0.00015000, 0.00022000]), # DO NOT USE THIS, VERIFY FIRST
                                      PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
                                          Ix=np.array([1.0, 0.0, 0.0]),
                                          Iy=np.array([0.0, 1.0, 0.0]),
@@ -114,7 +103,7 @@ BronzefillRing27gm_2N52 = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/bronzefill_ring_27gms_3_markers/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down.
                 (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
             ]
         )
@@ -126,10 +115,6 @@ register_rigid_body(BronzefillRing27gm_2N52)
 BronzefillRing27gm_4N52 = MultiDipoleRigidBody(
     name="bronzefill_ring_27gms_4N52",
     mass_properties = MassProperties(32.4e-3,
-                                    np.array([[6.20190000e-06, -8.00800000e-08, -4.48100000e-08],
-                                              [-8.00800000e-08, 5.65202000e-06, -3.46900000e-08],
-                                              [-4.48100000e-08, -3.46900000e-08, 1.14609400e-05]]),
-                                    np.array([-0.00019000, -0.00015000, 0.00022000]), # DO NOT USE THIS, VERIFY FIRST
                                      PrincipleAxesAndMomentsOfInertia( # Changed manually to match the vicon frame, will use this for control.
                                          Ix=np.array([1.0, 0.0, 0.0]),
                                          Iy=np.array([0.0, 1.0, 0.0]),
@@ -146,9 +131,9 @@ BronzefillRing27gm_4N52 = MultiDipoleRigidBody(
             transform=Transform(Vector3(0.0, 0.0, 0.0), UNIT_QUATERNION),
             frame_name="vicon/bronzefill_ring_27gms_3_markers/Origin",
             magnet_stack=[
-                (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
-                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
-                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down, axis is along north fashion.
+                (Transform(Vector3(0.0, 0.0, 8e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down.
+                (Transform(Vector3(0.0, 0.0, 3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down.
+                (Transform(Vector3(0.0, 0.0, -3e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52), # Because these are attached north down.
                 (Transform(Vector3(0.0, 0.0, -8e-3), X_FLIP_QUATERNION), DiscMagnet10x5_N52),
             ]
         )

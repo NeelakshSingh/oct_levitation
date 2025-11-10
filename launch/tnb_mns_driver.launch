@@ -1,6 +1,0 @@
-<launch>
-    <!-- This files launches the watchdogs and the driver node -->
-    <node pkg="control_utils" name="watchdog_state_jecb_node" type="watchdog_state_jecb.py" output="screen" launch-prefix="xterm -e"/>
-    <node pkg="control_utils" name="watchdog_dc_link_voltage_jecb_node" type="watchdog_voltage_jecb.py" output="screen" launch-prefix="xterm -e" />
-    <node pkg="tnb_mns_driver" name="tnb_mns_driver_node" type="tnb_mns_driver_node" output="screen" launch-prefix="xterm -e"/>
-</launch>
