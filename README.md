@@ -88,7 +88,7 @@ git clone https://github.com/ethz-msrl/Tesla_core_public.git
 Simply clone this repository into your ROS workspace's source directory and build it as follows:
 ```bash
 cd ~/catkin_ws/src
-git clone git@github.com:TheGodOfWar007/oct_levitation.git
+git clone git@github.com:NeelakshSingh/oct_levitation.git
 catkin build oct_levitation
 ```
 The `setup.py` file in the package root contains all necessary python packages which will be installed during the build process.

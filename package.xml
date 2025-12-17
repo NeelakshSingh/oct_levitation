@@ -4,21 +4,18 @@
   <version>1.0.0</version>
   <description>The oct_levitation package</description>
 
-  <maintainer email="sneelaksh@ethz.ch">Neelaksh Singh</maintainer>
+  <maintainer email="sneelaksh17@gmail.com">Neelaksh Singh</maintainer>
 
   <license>MIT</license>
 
-  <url type="website">https://github.com/TheGodOfWar007/oct_levitation.git</url>
+  <url type="website">https://github.com/NeelakshSingh/oct_levitation.git</url>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>message_generation</build_depend>
   <depend>message_runtime</depend>
   <depend>mag_manip</depend>
-  <depend>control_utils</depend>
-  <depend>tnb_mns_driver</depend>
   <depend>vicon_bridge</depend>
   <depend>std_msgs</depend>
-  <depend>oct_ctrl</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
