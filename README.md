@@ -148,13 +148,13 @@ These behaviors can be modified using the parameters defined in the launchfiles 
 
 ## The System in Action :clapper:
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=jSbByPsisOs">
-    <img src="https://img.youtube.com/vi/jSbByPsisOs/maxresdefault.jpg" alt="Watch the video" width="600">
+  <a href="https://youtu.be/2jLZ28T4uew?si=ZkWapzc_8Rndw5Ex">
+    <img src="https://img.youtube.com/vi/2jLZ28T4uew/maxresdefault.jpg" alt="Watch the video" width="600">
   </a>
 </p>
 
 <p align="center">
-  🎥 <a href="https://www.youtube.com/watch?v=jSbByPsisOs">Watch the demo on YouTube</a>
+  🎥 <a href="https://youtu.be/2jLZ28T4uew?si=ZkWapzc_8Rndw5Ex">Watch the demo on YouTube</a>
 </p>
 
 
