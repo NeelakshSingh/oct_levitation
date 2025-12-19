@@ -161,12 +161,12 @@ These behaviors can be modified using the parameters defined in the launchfiles 
 ## BibTex Citation :books:
 
 ```bibtex
-@article{neelaksh2025remote_maglev,
-  title         = {Remote Magnetic Levitation Using Reduced Attitude Control and Parametric Field Models},
-  author        = {Singh, Neelaksh and Zughaibi, Jasan and von Arx, Denis and Nelson, Bradley J. and Muehlebach, Michael},
-  journal       = {arXiv preprint arXiv:2511.XXXXX},
-  year          = {2025},
-  url           = {https://arxiv.org/abs/2511.XXXXX}
+@article{Singh2025RemoteMagneticLevitation,
+  author  = {Singh, Neelaksh and Zughaibi, Jasan and von Arx, Denis and Nelson, Bradley J. and Muehlebach, Michael},
+  title   = {Remote Magnetic Levitation Using Reduced Attitude Control and Parametric Field Models},
+  journal = {arXiv preprint arXiv:2512.15207},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2512.15207}
 }
 ```
 
