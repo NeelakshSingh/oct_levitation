@@ -46,7 +46,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Bz = np.array([[0, 1/self.mass]]).T
         Cz = np.array([[1, 0]])
 
-        z_max = 5e-3 # 5 mm maximum z displacement.
+        z_max = 5e-3 # 5 mm nominal z displacement.
         z_dot_max = 5*z_max
         Fz_max = 5*self.mass*z_dot_max # Assume very small maximum force.
 
@@ -57,9 +57,9 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         Az_norm = np.linalg.inv(Tzx) @ Az @ Tzx
         Bz_norm = np.linalg.inv(Tzx) @ Bz @ Tzu
-        Cz_norm = np.linalg.inv(Tzy) @ Cz @ Tzx
+        Cz_norm = np.linalg.inv(Tzy) @ Cz @ Tzx # Technically of no use here for LQR design, but just kept it for completeness.
 
-        Az_d_norm, Bz_d_norm, Cz_d_norm, Dz_d_norm, dt = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
+        Az_d_norm, Bz_d_norm, _, _, _ = signal.cont2discrete((Az_norm, Bz_norm, Cz_norm, 0), dt=self.dt,
                                                 method='zoh')
 
         #### Bronzefill 27gms with integrator compensation.
@@ -67,7 +67,7 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
         Qx = np.diag([22.0, 7.0]) # Different tuning for X axis because it seemed to have a different response due to some unmodelled effect.
         Qy = np.diag([15.0, 7.0]) # Different tuning for Y axis because it seemed to have a different response due to some unmodelled effect.
         # self.f_z_ff = 0.016871079683868213 # The extra feedforward force computed from the integrator.
-        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator.
+        self.f_z_ff = 0.0 # The extra feedforward force computed from the integrator. Should be non-zero only if there is a constant disturbance like weight estimation error which you measured from elsewhere.
 
         #### Greentec Pro Do80 Di67
         # Qz = np.diag([30.0, 10.0]) # This tuning can be used for X and Z axis, but slight noise amplification will be present.
