@@ -7,7 +7,7 @@ from visualization_msgs.msg import Marker
 from std_msgs.msg import ColorRGBA
 
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 
 
 class OctLevitationRvizVisualizations:

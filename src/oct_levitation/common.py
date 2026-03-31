@@ -1,5 +1,10 @@
 import numpy as np
 import os
+import rospkg
+
+rospack = rospkg.RosPack()
+OCT_LEVITATION_PACKAGE_PATH = rospack.get_path("oct_levitation")
+
 try:
     import wand_calibration as wand
 except ImportError:
@@ -23,11 +28,11 @@ class OctomagCalibratedModel:
 
     def __init__(self,
                  calibration_type: str = "legacy_yaml",
-                 calibration_file: str = "mc3ao8s_md200_handp.yaml",
+                 calibration_file: str = "octomag.yaml",
                  **kwargs):
         
         if calibration_type == "legacy_yaml":
-            model_path = os.path.join(os.environ['HOME'], '.ros', 'cal', calibration_file)
+            model_path = os.path.join(OCT_LEVITATION_PACKAGE_PATH, 'config', 'calibration_files', calibration_file)
             model = mag_manip.ForwardModelMPEM()
             model.setCalibrationFile(model_path)
             self.calibration = model

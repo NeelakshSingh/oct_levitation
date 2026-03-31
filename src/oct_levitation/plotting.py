@@ -3,53 +3,31 @@ import numpy.typing as np_t
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-import matplotlib
 from matplotlib.figure import Figure
 
-import oct_levitation.geometry as geometry
 import oct_levitation.geometry_jit as geometry_jit
 import oct_levitation.common as common
 import oct_levitation.mechanical as mechanical
-import tikzplotlib as tikzplt
-from oct_levitation.processing_utils import get_signal_fft
-from geometry_msgs.msg import Transform, Vector3, Quaternion
+from geometry_msgs.msg import Transform
 import os
 
 import pandas as pd
 
 import subprocess
 
-import scipy.signal as signal
-import scipy.fft as scifft
-
 import pynumdiff.optimize
 import pynumdiff.smooth_finite_difference
 
 from typing import Optional, Tuple, List, Dict, Union, Any, Callable
-from warnings import warn
 from copy import deepcopy
-from dataclasses import dataclass
-
-try:
-    from mayavi import mlab
-    from tvtk.util.ctf import ColorTransferFunction
-    from tvtk.api import tvtk
-except Exception as e:
-    warn("Mayavi installation could not be found, 3D volumetric and slice plots like those used for condition numbers will not work.")
-    warn("Error while importing mayavi: " + str(e))
 
 INKSCAPE_PATH = "/usr/bin/inkscape" # default
 
 DISABLE_PLT_SHOW = False
 
-### NOTE: An older version of mayavi i.e. 4.7.2 is used for this library, the docs for which
-### are no longer available on the original website. Consider using the wayback machine:
-### https://web.archive.org/web/20210220173347/https://docs.enthought.com/mayavi/mayavi/index.html
-### Actually, just change all 3D plotting functions to use plotly instead.
-
 """
 NOTE: I would like to thank ChatGPT for coming up with some really good ideas for extending this
-library and help with writing some cool plotting code I couldn't have written due to my limited 
+library and help with writing some cool plotting code I couldn't have written due to my limited
 knowledge when I first started to write this library.
 """
 
@@ -75,11 +53,6 @@ xkcd_contrast_colors = {
 }
 
 xkcd_contrast_list = list(xkcd_contrast_colors.values())
-
-def get_cmap(n, name='hsv'):
-    '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
-    RGB color; the keyword argument name must be a standard mpl colormap name.'''
-    return matplotlib.colormaps[name]
 
 def export_to_emf(svg_file: str, emf_file: str, inkscape_path: str = INKSCAPE_PATH) -> None:
     """
@@ -107,385 +80,26 @@ def wrench_stamped_df_to_array_df(ft_df: pd.DataFrame) -> pd.DataFrame:
                         }, errors="raise", inplace=False)
     return ft_df
 
-@dataclass
-class AxisLabel:
-    title: Optional[str] = None
-    xlabel: Optional[str] = None
-    ylabel: Optional[str] = None
-    zlabel: Optional[str] = None # For 3D plots, zlabel can be used to set the z-axis label
-    xlimit: Optional[Tuple[float, float]] = None
-    ylimit: Optional[Tuple[float, float]] = None
-    zlimit: Optional[Tuple[float, float]] = None # For 3D plots, zlimit can be used to set the z-axis limits
-    legend_labels: Optional[List[str]] = None
-    legend_loc: Optional[str] = "best"
-    remove_plot_idx: Union[int, List[int], None] = None # If provided, will remove the plot at this index from the axes completely
-    zorders: Optional[List[float]] = None  # New: zorder per line
-
-    def __post_init__(self):
-        if self.legend_loc is None:
-            warn("legend_loc is None, setting to 'best'")
-            self.legend_loc = "best"
-
-@dataclass
-class PlotLabelConfig:
-    fig_title: Optional[str] = None
-    axes_labels: Optional[Union[AxisLabel, List[Optional[AxisLabel]]]] = None
-
-    def __post_init__(self):
-        if isinstance(self.axes_labels, AxisLabel):
-            self.axes_labels = [self.axes_labels]
-
-def apply_axes_config(fig: Figure,
-                             ax_array: Union[plt.Axes, np.ndarray],
-                             label_config: PlotLabelConfig):
-    if label_config.fig_title is not None:
-        fig.suptitle(label_config.fig_title)
-
-    # Flatten axes if it's a 2D array (like subplots(n, m))
-    # NOTE: Numpy has C style row major ordering, hence the flattening concatenates the rows end to end
-    if isinstance(ax_array, np.ndarray):
-        flat_axes = ax_array.flatten()
-    elif isinstance(ax_array, list):
-        flat_axes = ax_array
-    else:
-        flat_axes = [ax_array]
-
-    if label_config.axes_labels is not None:
-        for i, axis_label in enumerate(label_config.axes_labels):
-            if i >= len(flat_axes) or axis_label is None:
-                continue
-            ax = flat_axes[i]
-            if axis_label.title is not None:
-                ax.set_title(axis_label.title)
-            if axis_label.xlabel is not None:
-                ax.set_xlabel(axis_label.xlabel)
-            if axis_label.ylabel is not None:
-                ax.set_ylabel(axis_label.ylabel)
-            if axis_label.zlabel is not None:
-                if hasattr(ax, 'set_zlabel'):
-                    ax.set_zlabel(axis_label.zlabel)
-                else:
-                    warn(f"Axis titled '{axis_label.title}' does not support zlabel. Skipping zlabel assignment.")
-            
-            if axis_label.xlimit is not None:
-                ax.set_xlim(axis_label.xlimit)
-            if axis_label.ylimit is not None:
-                ax.set_ylim(axis_label.ylimit)
-            if axis_label.zlimit is not None:
-                if hasattr(ax, 'set_zlim'):
-                    ax.set_zlim(axis_label.zlimit)
-                else:
-                    warn(f"Axis titled '{axis_label.title}' does not support zlimit. Skipping zlimit assignment.")
-
-            # Remove the plots first if specified and then apply the legend labels
-            if axis_label.remove_plot_idx is not None:
-                if isinstance(axis_label.remove_plot_idx, int):
-                    axis_label.remove_plot_idx = [axis_label.remove_plot_idx]
-                for idx in sorted(axis_label.remove_plot_idx, reverse=True):
-                    if 0 <= idx < len(ax.lines):
-                        ax.lines[idx].remove()
-                    else:
-                        warn(f"Index {idx} out of bounds for axis titled '{axis_label.title}'. Skipping removal.")
-            
-            # Apply the zorders if specified
-            if axis_label.zorders is not None:
-                if len(axis_label.zorders) != len(ax.lines):
-                    warn(
-                        f"Z-order count mismatch on axis titled '{axis_label.title}'. "
-                        f"Expected {len(ax.lines)}, got {len(axis_label.zorders)}. Skipping zorder assignment."
-                    )
-                else:
-                    for line, z in zip(ax.lines, axis_label.zorders):
-                        line.set_zorder(z)
-
-            if axis_label.legend_labels is not None:
-                handles, _ = ax.get_legend_handles_labels()
-                if len(axis_label.legend_labels) == 0:
-                    if ax.get_legend() is not None:
-                        ax.get_legend().remove()
-                elif len(handles) == len(axis_label.legend_labels):
-                    ax.legend(handles, axis_label.legend_labels, loc=axis_label.legend_loc or "best")
-                else:
-                    warn(
-                        f"Legend labels count mismatch on axis titled '{axis_label.title}'. "
-                        f"Expected {len(handles)}, got {len(axis_label.legend_labels)}. Leaving legend unchanged."
-                    )
-                    ax.legend(loc=axis_label.legend_loc or "best")
-            elif axis_label.legend_loc is not None:
-                if ax.get_legend() is not None:
-                    # Allow legend location override even without changing labels
-                    ax.legend(loc=axis_label.legend_loc)
-            
-
-def apply_axes_properties(fig: Figure,
-                          ax_array: Union[plt.Axes, AxesArray],
-                          label_config: Optional[PlotLabelConfig] = None,
-                          save_as: str = None,
-                          save_as_emf: bool = False,
-                          inkscape_path: str = INKSCAPE_PATH,
-                          save_kwargs: Optional[Dict[str, Any]] = {}, 
-                          **kwargs) -> Tuple[Figure, Union[plt.Axes, List[plt.Axes]]]:
-    """
-    Applies various optional properties to the provided Matplotlib Axes, enabling customization 
-    of grids, labels, ticks, limits, legends, aspect ratio, spines, background, and more.
-
-    Parameters:
-    -----------
-        fig : Figure
-            The Matplotlib Figure object associated with the Axes.
-        
-        ax_array : Union[plt.Axes, List[plt.Axes]]
-            A single Axes instance or a list of Axes instances to modify.
-
-        figsize : Tuple[float, float], optional
-            If provided, sets the figure size to the specified dimensions (width, height) in inches.
-        
-        save_as : str, optional
-            If provided, saves the figure to the specified filename (supports formats like PNG, PDF, SVG).
-        
-        save_as_emf : bool, default=False
-            If True, converts the saved figure to EMF format using Inkscape.
-
-        inkscape_path : str, default=INKSCAPE_PATH
-            Path to Inkscape executable for EMF conversion.
-
-        save_kwargs : dict, optional
-            Additional keyword arguments for the `fig.savefig()` method, such as DPI or transparent background.
-        
-        **kwargs : dict
-            Optional customization options:
-            - `"title"` (str): Sets the title of the plot.
-            - `"xlabel"` (str): Sets the x-axis label.
-            - `"ylabel"` (str): Sets the y-axis label.
-            - `"xlim"` (tuple): Sets x-axis limits as (min, max).
-            - `"ylim"` (tuple): Sets y-axis limits as (min, max).
-            - `"xticks"` (list): Sets specific tick positions for x-axis.
-            - `"yticks"` (list): Sets specific tick positions for y-axis.
-            - `"major_grid"` (bool, default=False): Enables/disables major grid.
-            - `"minor_grid"` (bool, default=False): Enables/disables minor grid.
-            - `"major_grid_style"` (dict): Customizes major grid appearance (e.g., `{'linestyle': '--', 'alpha': 0.5}`).
-            - `"minor_grid_style"` (dict): Customizes minor grid appearance (e.g., `{'linestyle': '--', 'alpha': 0.5}`).
-            - `"minor_ticks"` (bool, default=False): Enables/disables minor ticks.
-            - `"major_ticks"` (bool, default=True): Enables/disables major ticks.
-            - `"tick_direction"` (str, default="in"): Direction of ticks ('in', 'out', 'inout').
-            - `"tick_size"` (dict): Customizes tick size (e.g., `{"major": 6, "minor": 3}`).
-            - `"legend"` (bool, default=False): Enables/disables legend if available.
-            - `"legend_loc"` (str, default="best"): Legend location (e.g., `"upper right"`).
-            - `"aspect"` (str or float): Aspect ratio of the plot.
-            - `"spines"` (dict): Modifies spines visibility (e.g., `{"top": False, "right": False}`).
-            - `"facecolor"` (str): Sets figure background color.
-            - `"tight_layout"` (bool, default=True): Adjusts layout to prevent overlap. Accepts kwargs via `"kwargs.tight_layout_kwargs"` (dict).
-            - `"tight_layout_kwargs"` (dict): Additional parameters for `fig.tight_layout()`.
-
-            Optional customization options for Figure:
-            - figsize (tuple): Sets the figure size.
-            - fig_subplots_adjust_kwargs (dict): Additional parameters for `fig.subplots_adjust()`.
-
-    Returns:
-    --------
-        Tuple[Figure, Union[plt.Axes, List[plt.Axes]]]
-            The modified figure and Axes instances.
-
-    """
-    # Ensure ax_array is a list for uniform processing
-    if not isinstance(ax_array, np.ndarray):
-        ax_array = np.array([ax_array])
-
-    for ax in np.ravel(ax_array):
-        # Titles & Labels
-        if "title" in kwargs:
-            ax.set_title(kwargs["title"])
-        if "xlabel" in kwargs:
-            ax.set_xlabel(kwargs["xlabel"])
-        if "ylabel" in kwargs:
-            ax.set_ylabel(kwargs["ylabel"])
-
-        # Axis Limits
-        if "xlim" in kwargs:
-            ax.set_xlim(kwargs["xlim"])
-        if "ylim" in kwargs:
-            ax.set_ylim(kwargs["ylim"])
-
-        # Custom Tick Positions
-        if "xticks" in kwargs:
-            ax.set_xticks(kwargs["xticks"])
-        if "yticks" in kwargs:
-            ax.set_yticks(kwargs["yticks"])
-
-        # Grid & Minor/Major Ticks
-
-        if kwargs.get("major_ticks", True):
-            ax.tick_params(axis="both", which="major", direction=kwargs.get("tick_direction", "in"),
-                           length=kwargs.get("tick_size", {}).get("major", 6))
-            ax.tick_params(axis="both", which="minor", direction=kwargs.get("tick_direction", "in"),
-                           length=kwargs.get("tick_size", {}).get("minor", 3))
-
-
-        if kwargs.get("major_grid", False):
-            grid_style = kwargs.get("major_grid_style", {"linestyle": "-", 
-                                                         "alpha": 0.5,
-                                                         "color": mcolors.CSS4_COLORS["lightslategray"],
-                                                         "linewidth": 0.8})
-            ax.grid(which="major", **grid_style)
-
-        if kwargs.get("minor_ticks", False):
-            ax.minorticks_on()
-
-        if kwargs.get("minor_grid", False):
-            ax.minorticks_on()
-            grid_style = kwargs.get("major_grid_style", {"linestyle": ":", 
-                                                         "alpha": 0.5,
-                                                         "color": mcolors.CSS4_COLORS["lightslategray"],
-                                                         "linewidth": 0.8})
-            ax.grid(which="minor", **grid_style)
-
-        # Legend
-        if kwargs.get("legend", False):
-            ax.legend(loc=kwargs.get("legend_loc", "best"))
-
-        # Aspect Ratio
-        if "aspect" in kwargs:
-            ax.set_aspect(kwargs["aspect"])
-
-        # Spine Visibility
-        if "spines" in kwargs:
-            for spine, visibility in kwargs["spines"].items():
-                ax.spines[spine].set_visible(visibility)
-
-    # Figure-Level Modifications
-    if "facecolor" in kwargs:
-        fig.patch.set_facecolor(kwargs["facecolor"])
-
-    # Apply the figsize
-    if "figsize" in kwargs:
-        fig.set_size_inches(kwargs.get("figsize"))
-
-    if "fig_subplots_adjust_kwargs" in kwargs:
-        fig.subplots_adjust(**kwargs["fig_subplots_adjust_kwargs"])
-    
-    if label_config is not None:
-        apply_axes_config(fig, ax_array, label_config)
-
-    if kwargs.get("tight_layout", True):
-        fig.tight_layout(**kwargs.get("tight_layout_kwargs", {}))
-
-    if save_as:
-        name, ext = os.path.splitext(save_as)
+def save_plot(save_as: Union[List[str], str], fig: Figure, inkscape_path: str = INKSCAPE_PATH, **save_kwargs) -> None:
+    ANSI_BLUE = '\033[94m'
+    ANSI_RESET = '\033[0m'
+    if isinstance(save_as, str):
+        save_as = [save_as]
+    for path in save_as:
+        name, ext = os.path.splitext(path)
         save_format = ext[1:] if ext else 'png'  # Default to PNG if no extension
-        fig.savefig(save_as, format=save_format, **save_kwargs)
-        if save_as_emf:
-            emf_file = save_as.replace(ext, '.emf') # Replace the extension with .emf
-            # Now we need to check if the ext is a scalable format like SVG
-            if ext.lower() not in ['.svg', '.pdf']:
-                temp_file = name + '.svg'  # Save as SVG first
-                fig.savefig(temp_file, format='svg', **save_kwargs)
-                export_to_emf(temp_file, emf_file, inkscape_path=inkscape_path)
-            else:
-                export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-
-    return fig, ax_array
-    
+        fig.savefig(path, format=save_format, **save_kwargs)
+        print(f"{ANSI_BLUE}[INFO][oct_levitation.plotting] Saved plot to {path}{ANSI_RESET}")
+        if save_format.lower() == 'emf':
+            fig.savefig(name + '.svg', format='svg')  # Save as SVG first
+            print(f"{ANSI_BLUE}[INFO][oct_levitation.plotting] Saved intermediate SVG for EMF conversion to {name + '.svg'}{ANSI_RESET}")
+            emf_file = name + '.emf'
+            print(f"{ANSI_BLUE}[INFO][oct_levitation.plotting] Converting {name + '.svg'} to EMF format at {emf_file} using Inkscape{ANSI_RESET}")
+            export_to_emf(path, emf_file, inkscape_path=inkscape_path)
 
 ######################################
 # PLOTTING POSES
 ######################################
-
-def plot_6DOF_state_history_euler_xyz(state_history: np.ndarray, 
-                                      figsize: tuple = (30, 10),
-                                      save_as: str=None, 
-                                      save_as_emf: bool=False, 
-                                      inkscape_path: str=INKSCAPE_PATH, 
-                                      **kwargs) -> Tuple[Figure, AxesArray]:
-    """
-    Plots the 12 states from the state history of the 6DOF rigid body using the XYZ euler angles for orientation.
-    Args:
-        state_history (np.ndarray): The state history of the body. Should have shape (N, 12).
-                each state sample is of the form [x, y, z, vx, vy, vz, phi, theta, psi, wx, wy, wz]. All frame
-                notations are according to the defined conventions throughout this package.
-        figsize (tuple): The figure size of the plot.
-    """
-    assert state_history.shape[1] == 12, "State history should have 12 columns"
-    fig, axs = plt.subplots(2, 6, figsize=figsize)
-    axs[0, 0].plot(state_history[:, 0]*1e3, label='x')
-    axs[0, 0].set_title('x')
-    axs[0, 0].set_xlabel('Time')
-    axs[0, 0].set_ylabel('Position (mm)')
-    axs[0, 1].plot(state_history[:, 1]*1e3, label='y')
-    axs[0, 1].set_title('y')
-    axs[0, 1].set_xlabel('Time')
-    axs[0, 1].set_ylabel('Position (mm)')
-    axs[0, 2].plot(state_history[:, 2]*1e3, label='z')
-    axs[0, 2].set_title('z')
-    axs[0, 2].set_xlabel('Time')
-    axs[0, 2].set_ylabel('Position (mm)')
-    axs[0, 3].plot(state_history[:, 3]*1e3, label='vx')
-    axs[0, 3].set_title('vx')
-    axs[0, 3].set_xlabel('Time')
-    axs[0, 3].set_ylabel('Velocity (mm/s)')
-    axs[0, 4].plot(state_history[:, 4]*1e3, label='vy')
-    axs[0, 4].set_title('vy')
-    axs[0, 4].set_xlabel('Time')
-    axs[0, 4].set_ylabel('Velocity (mm/s)')
-    axs[0, 5].plot(state_history[:, 5]*1e3, label='vz')
-    axs[0, 5].set_title('vz')
-    axs[0, 5].set_xlabel('Time')
-    axs[0, 5].set_ylabel('Velocity (mm/s)')
-    axs[1, 0].plot(np.rad2deg(state_history[:, 6]), label='phi')
-    axs[1, 0].set_title('phi')
-    axs[1, 0].set_xlabel('Time')
-    axs[1, 0].set_ylabel('Angle (rad)')
-    axs[1, 1].plot(np.rad2deg(state_history[:, 7]), label='theta')
-    axs[1, 1].set_title('theta')
-    axs[1, 1].set_xlabel('Time')
-    axs[1, 1].set_ylabel('Angle (rad)')
-    axs[1, 2].plot(np.rad2deg(state_history[:, 8]), label='psi')
-    axs[1, 2].set_title('psi')
-    axs[1, 2].set_xlabel('Time')
-    axs[1, 2].set_ylabel('Angle (rad)')
-    axs[1, 3].plot(np.rad2deg(state_history[:, 9]), label='wx')
-    axs[1, 3].set_title('wx')
-    axs[1, 3].set_xlabel('Time')
-    axs[1, 3].set_ylabel('Angular Velocity (rad/s)')
-    axs[1, 4].plot(np.rad2deg(state_history[:, 10]), label='wy')
-    axs[1, 4].set_title('wy')
-    axs[1, 4].set_xlabel('Time')
-    axs[1, 4].set_ylabel('Angular Velocity (rad/s)')
-    axs[1, 5].plot(np.rad2deg(state_history[:, 11]), label='wz')
-    axs[1, 5].set_title('wz')
-    axs[1, 5].set_xlabel('Time')
-    axs[1, 5].set_ylabel('Angular Velocity (rad/s)')
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    
-    return fig, axs
-
-def plot_state_history_position3D(state_history: np.ndarray, figsize: tuple = (10,10),
-                                  save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> None:
-    assert state_history.shape[1] == 12, "State history should have 12 columns"
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111, projection='3d')
-    ax.plot(state_history[:, 0]*1e3, state_history[:, 1]*1e3, state_history[:, 2]*1e3)
-    ax.set_xlabel('X (mm)')
-    ax.set_ylabel('Y (mm)')
-    ax.set_zlabel('Z (mm)')
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, ax
 
 def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
                           xscale=1, yscale=1, zscale=1,
@@ -495,7 +109,7 @@ def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
 
     Plot a coordinate frame on a 3d axis. In the resulting plot,
     x = red, y = green, z = blue.
-    
+
     plotCoordinateFrame(axis, T_0f, size=1, linewidth=3)
 
     Args:
@@ -526,71 +140,14 @@ def plot_coordinate_frame(axis, T_0f, size=1, linewidth=3, name=None,
 
     if name is not None:
         axis.text(X[0,0],X[0,1],X[0,2], name, zdir='x')
-    
+
     return axis
-
-def plot_6DOF_pose_euler_xyz(state_history: np.ndarray, 
-                             orientation_plot_frequency: int = 1,
-                             figsize: tuple = (10, 10),
-                             frame_size: float = 1.0,
-                             frame_linewidth: float = 1.0,
-                             xlim: Optional[Tuple] = None,
-                             ylim: Optional[Tuple] = None,
-                             zlim: Optional[Tuple] = None,
-                             write_frame_idx: bool = False) -> None:
-    """
-    Plots the position and the orientation of the body in 3D space using the XYZ euler angles for orientation.
-    Coordinate frame drawn is scaled according to the largest limit along any axis.
-
-    Args
-    ----
-        state_history (np.ndarray): The state history of the body. Should have shape (N, 12). Each state sample is of the form [x, y, z, vx, vy, vz, phi, theta, psi, wx, wy, wz]. All frame notations are according to the defined conventions throughout this package.
-        orientation_plot_frequency (int): The frequency at which the orientation of the body should be plotted.
-        a value of N means orientation is plotted for every Nth position sample.
-        figsize (tuple): The figure size of the plot.
-        frame_size (float): The size of the frame to be plotted.
-        frame_linewidth (float): The width of the frame lines to be plotted.
-        kwargs: Additional keyword arguments to be passed to the matplotlib axes function.
-    """
-    assert state_history.shape[1] == 12, "State history should have 12 columns"
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111, projection='3d')
-    ax.plot(state_history[:, 0], state_history[:, 1], state_history[:, 2], color='black')
-    if xlim is not None:
-        ax.set_xlim(xlim)
-    if ylim is not None:
-        ax.set_ylim(ylim)
-    if zlim is not None:
-        ax.set_zlim(zlim)
-    axes_limits = np.array([ax.get_xlim(), ax.get_ylim(), ax.get_zlim()])
-    axes_ranges = np.diff(axes_limits, axis=1).flatten()
-    min_range_idx = np.argmin(axes_ranges)
-    scales = np.ones(3)
-    for idx in range(3):
-        if idx != min_range_idx:
-            scales[idx] = axes_ranges[idx]/axes_ranges[min_range_idx] # Upscaling the other axes to match the largest range.
-    for i in range(state_history.shape[0]):
-        if i % orientation_plot_frequency == 0:
-            T_0f = geometry.transformation_matrix_from_euler_xyz(state_history[i, 6:9], state_history[i, :3])
-            name = None
-            if write_frame_idx:
-                name = str(i)
-            plot_coordinate_frame(ax, T_0f, size=frame_size, linewidth=frame_linewidth, name=None,
-                                  xscale=scales[0], yscale=scales[1], zscale=scales[2])
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    
-    return fig, ax
 
 def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np.ndarray, scale_equal: bool = True,
                                   save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, AxesArray]:
     """
     Plots target Euler angles and positions from actual poses DataFrame and a constant reference pose.
-    
+
     Parameters:
     - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
     - reference_pose (np.ndarray): Array of size 7 [x, y, z, qx, qy, qz, qw] representing the constant reference pose.
@@ -608,8 +165,8 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
     reference_orientation = reference_pose[3:] # Reference orientation is taken as quaternion
 
     # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
-    reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
+    actual_euler = np.array([geometry_jit.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array(geometry_jit.euler_xyz_from_quaternion(reference_orientation))
 
     # Convert to degrees
     actual_euler = np.rad2deg(actual_euler)
@@ -642,9 +199,9 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
         axs[1, 1].sharey(axs[1, 0])
         axs[1, 2].sharey(axs[1, 0])
         # Autoscale shared axes
-        for ax_row in axs: 
+        for ax_row in axs:
             for ax in ax_row:
-                ax.relim()   
+                ax.relim()
                 ax.autoscale()
 
     # Adjust layout
@@ -654,49 +211,11 @@ def plot_poses_constant_reference(actual_poses: pd.DataFrame, reference_pose: np
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
 
-
-def plot_positions_constant_reference(actual_poses: pd.DataFrame, reference_position: np.ndarray,
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, AxesArray]:
-    """
-    Plots target positions from actual poses DataFrame and a constant reference position.
-    
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
-    - reference_position (np.ndarray): Array of size 3 [x, y, z] representing the constant reference position.
-    """
-    time = actual_poses['time'].values
-    # All positions are in mm
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
-    reference_position = reference_position*1000
-
-    # Plot positions
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
-
-    for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
-        axs[i].axhline(y=reference_position[i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Position (mm)")
-        axs[i].legend()
-
-    # Adjust layout
-    fig.tight_layout()
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-
-    return fig, axs
 
 def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: float,
                                        save_as: str=None,
@@ -705,7 +224,7 @@ def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: 
     """
     Plots target positions from actual poses DataFrame and a constant reference position.
     All inputs are in SI units.
-    
+
     Parameters:
     - actual_poses (pd.DataFrame): DataFrame containing actual positions with time.
     - reference_z (float): The desired z position.
@@ -733,7 +252,7 @@ def plot_z_position_constant_reference(actual_poses: pd.DataFrame, reference_z: 
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
 
@@ -780,52 +299,10 @@ def plot_z_position_variable_reference(actual_poses: pd.DataFrame, reference_pos
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, ax
-
-def plot_alpha_beta_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
-                                       save_as: str=None,
-                                       save_as_emf: bool=False,
-                                       inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    time = actual_poses['time'].values
-    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    # Convert quaternions to Euler angles
-    actual_yx = np.array([geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion)) 
-                          for quaternion in actual_orientations])
-
-    actual_xy = np.roll(actual_yx, 1, axis=1)
-
-    # Convert to degrees
-    actual_xy = np.rad2deg(actual_xy)
-    reference_angles = np.rad2deg(reference_angles)
-
-    # Plot Euler angles
-    fig, axs = plt.subplots(1, 2, figsize=(14, 3.5), sharex=True, sharey=True)
-
-    fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
-    for i, angle in enumerate(['Alpha', 'Beta']):
-        axs[i].plot(time, actual_xy[:, i], label=f"Actual {angle}")
-        axs[i].axhline(y=reference_angles[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(f"{angle} of Body Fixed Frame")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (deg)")
-        axs[i].legend()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
 
 def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, reference_angles: np.ndarray,
                                               ft_df: pd.DataFrame,
@@ -839,22 +316,22 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
     - Row 2: Desired Torques Tx and Ty
     """
     time = actual_poses['time'].values
-    
+
     # Compute actual alpha and beta from quaternions
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-    actual_yx = np.array([geometry.get_normal_alpha_beta_from_quaternion(q/np.linalg.norm(q)) for q in actual_orientations])
+    actual_yx = np.array([geometry_jit.get_normal_angles_from_quaternion(q/np.linalg.norm(q)) for q in actual_orientations])
 
     # Convert to degrees
     actual_xy = np.rad2deg(np.roll(actual_yx, 1, axis=1))
     reference_angles = np.rad2deg(reference_angles)
-    
+
     # Extract desired torques Tx and Ty, in mN-m
     torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values*1e3
-    
+
     # Create subplots
     fig, axs = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
     fig.suptitle("Alpha, Beta, and Torques")
-        
+
     fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
     for i, angle in enumerate(['Alpha', 'Beta']):
         axs[0, i].plot(time, actual_xy[:, i], label=f"Actual {angle}")
@@ -863,7 +340,7 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
         axs[0, i].set_xlabel("Time (s)")
         axs[0, i].set_ylabel("Angle (deg)")
         axs[0, i].legend()
-    
+
     for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
         axs[1, i].plot(time, torques[:, i], label=f"{torque} Desired")
         axs[1, i].set_title(f"Desired {torque} on COM expressed in world frame")
@@ -875,9 +352,9 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
         axs[0, 1].sharey(axs[0, 0])
         axs[1, 1].sharey(axs[1, 0])
         # Autoscale shared axes
-        for ax_row in axs: 
+        for ax_row in axs:
             for ax in ax_row:
-                ax.relim()   
+                ax.relim()
                 ax.autoscale()
 
     # Adjust layout
@@ -888,77 +365,7 @@ def plot_alpha_beta_torques_constant_reference(actual_poses: pd.DataFrame, refer
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
 
-def plot_alpha_beta_vel_errors_torques(rp_error_states_df: pd.DataFrame,
-                                       ft_df: pd.DataFrame,
-                                       angle_error_cols: List[str],
-                                       velocity_error_cols: List[str],
-                                       scale_equal: bool=True,
-                                       save_as: str=None,
-                                       save_as_emf: bool=False,
-                                       inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots a 2x2 subplot:
-    - Row 1: Actual vs Desired Alpha and Beta angles
-    - Row 2: Desired Torques Tx and Ty
-    """
-    time = rp_error_states_df['time'].values
-    
-    alpha_beta_error = np.rad2deg(rp_error_states_df[angle_error_cols].to_numpy()) # deg
-    alpha_beta_velocity_error = np.rad2deg(rp_error_states_df[velocity_error_cols].to_numpy()) # deg/sec
-    
-    # Extract desired torques Tx and Ty
-    torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].to_numpy()*1e3 # Convert to mN-m
-    
-    # Create subplots
-    fig, axs = plt.subplots(3, 2, figsize=(14, 8), sharex=True)
-        
-    fig.suptitle("Normal Angle, Angular Velocity Tracking Errors, and Desired Torques of Dipole Fixed Frame Z-Axis In World Frame")
-    for i, angle in enumerate(['Alpha', 'Beta']):
-        axs[0, i].plot(time, alpha_beta_error[:, i], label=f"{angle}")
-        axs[0, i].set_title(f"{angle} Error of Body Fixed Frame")
-        axs[0, i].set_xlabel("Time (s)")
-        axs[0, i].set_ylabel("Angle (deg)")
-        axs[0, i].legend()
-    
-    for i, angle in enumerate(['Alpha Dot', 'Beta Dot']):
-        axs[1, i].plot(time, alpha_beta_velocity_error[:, i], label=f"{angle}")
-        axs[1, i].set_title(f"{angle} Error of Body Fixed Frame")
-        axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Angle (deg/sec)")
-        axs[1, i].legend()
-    
-    for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
-        axs[2, i].plot(time, torques[:, i], label=f"{torque} Desired")
-        axs[2, i].set_title(f"Desired {torque} on COM expressed in world frame")
-        axs[2, i].set_xlabel("Time (s)")
-        axs[2, i].set_ylabel("Torque (mN-m)")
-        axs[2, i].legend()
-
-    if scale_equal:
-        axs[0, 1].sharey(axs[0, 0])
-        axs[1, 1].sharey(axs[1, 0])
-        axs[2, 1].sharey(axs[2, 0])
-
-        # Autoscale shared axes
-        for ax_row in axs: 
-            for ax in ax_row:
-                ax.relim()   
-                ax.autoscale()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
@@ -1020,7 +427,7 @@ def plot_z_position_Fz_constant_reference(actual_poses: pd.DataFrame, reference_
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axes
@@ -1082,77 +489,12 @@ def plot_z_position_Fz_variable_reference(actual_poses: pd.DataFrame, reference_
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axes
 
 
-
-def plot_alpha_beta_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                              save_as: str = None, save_as_emf: bool = False,
-                              inkscape_path: str = INKSCAPE_PATH, **kwargs):
-    """
-    Plots Alpha and Beta angles over time from actual poses and reference poses.
-    Angles are computed from quaternions and converted to degrees.
-
-    Parameters:
-        - actual_poses (pd.DataFrame): DataFrame containing actual orientations with time.
-        - reference_poses (pd.DataFrame): DataFrame containing reference orientations with time.
-        - save_as (str): Filename to save the plot as SVG (optional).
-        - save_as_emf (bool): If True, also save the plot as EMF using Inkscape.
-        - inkscape_path (str): Path to Inkscape executable.
-        - **kwargs: Additional arguments passed to plt.plot().
-    """
-    time = actual_poses['time'].values
-
-    # Extract quaternions and compute Euler angles
-    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y',
-                                        'transform.rotation.z', 'transform.rotation.w']].values
-    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y',
-                                              'transform.rotation.z', 'transform.rotation.w']].values
-
-    actual_angles = np.array([
-        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
-        for quaternion in actual_orientations
-    ])
-    reference_angles = np.array([
-        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
-        for quaternion in reference_orientations
-    ])
-
-    # Convert to degrees
-    actual_angles_deg = np.rad2deg(np.roll(actual_angles, 1, axis=1))
-    reference_angles_deg = np.rad2deg(np.roll(reference_angles, 1, axis=1))
-
-    # Plot Euler angles
-    fig, axs = plt.subplots(1, 2, figsize=(14, 3.5), sharex=True, sharey=True)
-    fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
-
-    angle_labels = ['Alpha', 'Beta']
-    for i, angle in enumerate(angle_labels):
-        axs[i].plot(time, actual_angles_deg[:, i], label=f"Actual {angle}", **kwargs)
-        axs[i].plot(time, reference_angles_deg[:, i], label=f"Reference {angle}",
-                    linestyle='dashed', color='r', **kwargs)
-        axs[i].set_title(f"{angle} of Body Fixed Frame")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (deg)")
-        axs[i].legend()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-
-    # Save as SVG/EMF if required
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
 
 def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
                                               ft_df: pd.DataFrame,
@@ -1166,7 +508,7 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
     - Row 2: Desired Torques Tx and Ty
     """
     time = actual_poses['time'].values
-    
+
     # Compute actual alpha and beta from quaternions
     # Extract quaternions and compute Euler angles
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y',
@@ -1175,25 +517,25 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
                                               'transform.rotation.z', 'transform.rotation.w']].values
 
     actual_angles = np.array([
-        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
+        geometry_jit.get_normal_angles_from_quaternion(quaternion/np.linalg.norm(quaternion))
         for quaternion in actual_orientations
     ])
     reference_angles = np.array([
-        geometry.get_normal_alpha_beta_from_quaternion(quaternion/np.linalg.norm(quaternion))
+        geometry_jit.get_normal_angles_from_quaternion(quaternion/np.linalg.norm(quaternion))
         for quaternion in reference_orientations
     ])
 
     # Convert to degrees
     actual_angles_deg = np.rad2deg(np.roll(actual_angles, 1, axis=1))
     reference_angles_deg = np.rad2deg(np.roll(reference_angles, 1, axis=1))
-    
+
     # Extract desired torques Tx and Ty
     torques = ft_df[['wrench.torque.x', 'wrench.torque.y']].values*1e3
-    
+
     # Create subplots
     fig, axs = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
     fig.suptitle("Alpha, Beta, and Torques")
-        
+
     fig.suptitle("Angles of Dipole Fixed Frame Z-Axis with World's Z-Axis")
     for i, angle in enumerate(['Alpha', 'Beta']):
         axs[0, i].plot(time, actual_angles_deg[:, i], label=f"Actual {angle}", **kwargs)
@@ -1203,7 +545,7 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
         axs[0, i].set_xlabel("Time (s)")
         axs[0, i].set_ylabel("Angle (deg)")
         axs[0, i].legend()
-    
+
     for i, torque in enumerate(['Torque Tx', 'Torque Ty']):
         axs[1, i].plot(time, torques[:, i], label=f"{torque} Desired")
         axs[1, i].set_title(f"Desired {torque} on COM expressed in world frame")
@@ -1215,9 +557,9 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
         axs[0, 1].sharey(axs[0, 0])
         axs[1, 1].sharey(axs[1, 0])
         # Autoscale shared axes
-        for ax_row in axs: 
+        for ax_row in axs:
             for ax in ax_row:
-                ax.relim()   
+                ax.relim()
                 ax.autoscale()
 
     # Adjust layout
@@ -1228,103 +570,17 @@ def plot_alpha_beta_torques_variable_reference(actual_poses: pd.DataFrame, refer
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
 
-
-def plot_orientations_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray,
-                                         save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots target orientations (Euler angles) from actual poses DataFrame and a constant reference orientation.
-    
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame containing actual orientations (quaternions) with time.
-    - reference_orientation (np.ndarray): Array of size 4 [qx, qy, qz, qw] representing the constant reference quaternion.
-    """
-    time = actual_poses['time'].values
-    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
-    reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
-
-    # Convert to degrees
-    actual_euler = np.rad2deg(actual_euler)
-    reference_euler = np.rad2deg(reference_euler)
-
-    # Plot Euler angles
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
-
-    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
-        axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle + " of Body Fixed Frame")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (deg)")
-        axs[i].legend()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_exyz_roll_pitch_constant_reference(actual_poses: pd.DataFrame, reference_orientation: np.ndarray,
-                                            save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots target orientations (Euler angles) from actual poses DataFrame and a constant reference orientation.
-    
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame containing actual orientations (quaternions) with time.
-    - reference_orientation (np.ndarray): Array of size 4 [qx, qy, qz, qw] representing the constant reference quaternion.
-    """
-    time = actual_poses['time'].values
-    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
-    reference_euler = np.array(geometry.euler_xyz_from_quaternion(reference_orientation))
-
-    # Convert to degrees
-    actual_euler = np.rad2deg(actual_euler)
-    reference_euler = np.rad2deg(reference_euler)
-
-    # Plot Euler angles
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
-
-    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
-        axs[i].axhline(y=reference_euler[i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle + " of Body Fixed Frame")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (deg)")
-        axs[i].legend()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
 
 def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, scale_equal: bool = True,
                                   save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
-    
+
     Parameters:
     - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
     - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
@@ -1335,8 +591,8 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
     reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
-    reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
+    actual_euler = np.array([geometry_jit.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    reference_euler = np.array([geometry_jit.euler_xyz_from_quaternion(q) for q in reference_orientations])
 
     # Convert to degrees
     actual_euler = np.rad2deg(actual_euler)
@@ -1369,182 +625,11 @@ def plot_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: p
         axs[1, 1].sharey(axs[1, 0])
         axs[1, 2].sharey(axs[1, 0])
         # Autoscale shared axes
-        for ax_row in axs: 
-            for ax in ax_row:
-                ax.relim()   
-                ax.autoscale()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_poses_variable_reference_row_plots_for_paper(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame, scale_equal: bool = True,
-                                                      figsize: tuple=(3, 7), save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
-    
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
-    - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
-    """
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
-    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000 # in mm
-    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
-    reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
-
-    # Convert to degrees
-    actual_euler = np.rad2deg(actual_euler)
-    reference_euler = np.rad2deg(reference_euler)
-
-    # Plot positions
-    fig, axs = plt.subplots(6, 1, figsize=figsize, sharex=True)
-
-    # Position plots
-    for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[i].plot(actual_poses['time'], actual_positions[:, i], label=f"Actual {axis}", color="tab:blue")
-        axs[i].plot(reference_poses['time'], reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='tab:red')
-        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
-        axs[i].set_ylabel("Position [mm]")
-        axs[i].legend()
-
-    # Euler angle plots
-    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[i+3].plot(actual_poses['time'], actual_euler[:, i], label=f"Actual {angle}", color="tab:blue")
-        axs[i+3].plot(reference_poses['time'], reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='tab:red')
-        axs[i+3].set_title(angle)
-        axs[i+3].set_ylabel("Angle [deg]")
-        axs[i+3].legend()
-
-    axs[5].set_xlabel("Time (s)")
-
-    if scale_equal:
-        axs[1].sharey(axs[0])
-        axs[2].sharey(axs[0])
-        axs[4].sharey(axs[3])
-        # axs[5].sharey(axs[3])
-        # Autoscale shared axes
-        for ax in axs: 
-            ax.relim()   
-            ax.autoscale()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_poses_estimated_vs_measured(estimated_poses: pd.DataFrame, measured_poses: pd.DataFrame, scale_equal: bool = True,
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots estimated and measured Euler angles and positions from two pose DataFrames.
-
-    Parameters:
-    - estimated_poses (pd.DataFrame): DataFrame with estimated poses (positions and quaternions) and time.
-    - measured_poses (pd.DataFrame): DataFrame with measured poses (positions and quaternions) and time.
-    """
-    time_est = estimated_poses['time'].values
-    time_meas = measured_poses['time'].values
-
-    est_pos = estimated_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values * 1000  # in mm
-    meas_pos = measured_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values * 1000  # in mm
-
-    est_quat = estimated_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-    meas_quat = measured_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    est_euler = np.rad2deg(np.array([geometry.euler_xyz_from_quaternion(q) for q in est_quat]))
-    meas_euler = np.rad2deg(np.array([geometry.euler_xyz_from_quaternion(q) for q in meas_quat]))
-
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10), sharex=True)
-
-    # Position plots
-    for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[0, i].plot(time_meas, meas_pos[:, i], label=f"Measured {axis}", color='black')
-        axs[0, i].plot(time_est, est_pos[:, i], label=f"Estimated {axis}", linestyle='dashed', color='tab:blue')
-        axs[0, i].set_title(f"Position {axis} of Body Fixed Frame")
-        axs[0, i].set_xlabel("Time (s)")
-        axs[0, i].set_ylabel("Position (mm)")
-        axs[0, i].legend()
-        axs[0, i].grid(True, which='major', linestyle='-', linewidth=0.6, color='grey')
-        axs[0, i].grid(True, which='minor', linestyle=':', linewidth=0.4, color='lightgrey')
-        axs[0, i].minorticks_on()
-
-    # Orientation plots
-    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[1, i].plot(time_meas, meas_euler[:, i], label=f"Measured {angle}", color='black')
-        axs[1, i].plot(time_est, est_euler[:, i], label=f"Estimated {angle}", linestyle='dashed', color='tab:blue')
-        axs[1, i].set_title(f"{angle} Angle")
-        axs[1, i].set_xlabel("Time (s)")
-        axs[1, i].set_ylabel("Angle (deg)")
-        axs[1, i].legend()
-        axs[1, i].grid(True, which='major', linestyle='-', linewidth=0.6, color='grey')
-        axs[1, i].grid(True, which='minor', linestyle=':', linewidth=0.4, color='lightgrey')
-        axs[1, i].minorticks_on()
-
-    if scale_equal:
-        axs[0, 2].sharey(axs[0, 0])
-        axs[0, 1].sharey(axs[0, 0])
-        axs[1, 1].sharey(axs[1, 0])
-        axs[1, 2].sharey(axs[1, 0])
         for ax_row in axs:
             for ax in ax_row:
                 ax.relim()
                 ax.autoscale()
 
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-
-def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                                      save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots target positions from actual poses DataFrame and variable reference positions DataFrame.
-    
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame with actual positions and time.
-    - reference_poses (pd.DataFrame): DataFrame with reference positions and time.
-    """
-    time = actual_poses['time'].values
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
-    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values*1000
-
-    # Plot positions
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
-
-    for i, axis in enumerate(['X', 'Y', 'Z']):
-        axs[i].plot(time, actual_positions[:, i], label=f"Actual {axis}")
-        axs[i].plot(time, reference_positions[:, i], label=f"Reference {axis}", linestyle='dashed', color='r')
-        axs[i].set_title(f"Position {axis} of Body Fixed Frame")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Position (mm)")
-        axs[i].legend()
-
     # Adjust layout
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     if save_as and save_as.endswith('.svg'):
@@ -1552,51 +637,7 @@ def plot_positions_variable_reference(actual_poses: pd.DataFrame, reference_pose
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
 
-def plot_orientations_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                                         save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots target orientations (Euler angles) from actual poses DataFrame and variable reference orientations DataFrame.
-    
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame with actual orientations (quaternions) and time.
-    - reference_poses (pd.DataFrame): DataFrame with reference orientations (quaternions) and time.
-    """
-    time = actual_poses['time'].values
-    actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
-    reference_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in reference_orientations])
-
-    # Convert to degrees
-    actual_euler = np.rad2deg(actual_euler)
-    reference_euler = np.rad2deg(reference_euler)
-
-    # Plot Euler angles
-    fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
-
-    for i, angle in enumerate(['Roll', 'Pitch', 'Yaw']):
-        axs[i].plot(time, actual_euler[:, i], label=f"Actual {angle}")
-        axs[i].plot(time, reference_euler[:, i], label=f"Reference {angle}", linestyle='dashed', color='r')
-        axs[i].set_title(angle + " of Body Fixed Frame.")
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Angle (deg)")
-        axs[i].legend()
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
@@ -1635,18 +676,18 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
     # Plot arrows for actual positions to indicate direction of forward progress
     for i in range(arrow_interval, len(time), arrow_interval):
         ax.quiver(actual_positions[i-1, 0], actual_positions[i-1, 1], actual_positions[i-1, 2],
-                  actual_positions[i, 0] - actual_positions[i-1, 0], 
-                  actual_positions[i, 1] - actual_positions[i-1, 1], 
-                  actual_positions[i, 2] - actual_positions[i-1, 2], 
+                  actual_positions[i, 0] - actual_positions[i-1, 0],
+                  actual_positions[i, 1] - actual_positions[i-1, 1],
+                  actual_positions[i, 2] - actual_positions[i-1, 2],
                   color='black', arrow_length_ratio=0.1)
 
     if plot_reference_arrows:
         # Plot arrows for reference positions to indicate direction of forward progress
         for i in range(arrow_interval, len(time), arrow_interval):
             ax.quiver(reference_positions[i-1, 0], reference_positions[i-1, 1], reference_positions[i-1, 2],
-                    reference_positions[i, 0] - reference_positions[i-1, 0], 
-                    reference_positions[i, 1] - reference_positions[i-1, 1], 
-                    reference_positions[i, 2] - reference_positions[i-1, 2], 
+                    reference_positions[i, 0] - reference_positions[i-1, 0],
+                    reference_positions[i, 1] - reference_positions[i-1, 1],
+                    reference_positions[i, 2] - reference_positions[i-1, 2],
                     color='red', linestyle='--', arrow_length_ratio=0.1)
 
     # Add reference pose frames (non-constant)
@@ -1676,62 +717,7 @@ def plot_3d_poses_with_arrows_variable_reference(actual_poses: pd.DataFrame, ref
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, ax
 
-def plot_3d_poses_variable_reference(actual_poses: pd.DataFrame, reference_poses: pd.DataFrame,
-                                     x_limit: tuple = None, y_limit: tuple = None, z_limit: tuple = None, 
-                                     save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **traj_kwargs):
-    """
-    Plots the actual and reference poses in 3D space with arrows indicating the direction of forward progress in time.
-    Reference poses are taken from the provided DataFrame and are non-constant.
-
-    Parameters:
-    - actual_poses (pd.DataFrame): DataFrame containing actual poses (positions and quaternions) with time.
-    - reference_poses (pd.DataFrame): DataFrame containing reference poses (positions and quaternions) with time.
-    - arrow_interval (int): Interval for plotting arrows indicating the direction of motion.
-    """
-    actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
-    reference_positions = reference_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
-    reference_orientations = reference_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-
-    # Convert reference quaternions to Euler angles using `euler_xyz_from_quaternion`
-
-    # Create figure and 3D axis
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Plot actual positions, CONVERTED TO mm
-    ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path', **traj_kwargs)
-
-    # Plot reference positions (non-constant)
-    ax.plot(reference_positions[:, 0]*1000, reference_positions[:, 1]*1000, reference_positions[:, 2]*1000, color='red', label='Reference Path', **traj_kwargs)
-
-    ax.set_xlabel('X (mm)')
-    ax.set_ylabel('Y (mm)')
-    ax.set_zlabel('Z (mm)')
-    ax.set_title("Actual Pose v/s Reference Pose of Body Fixed Frame")
-
-    # Show legend
-    ax.legend()
-
-    if x_limit is not None:
-        ax.set_xlim(x_limit)
-    if y_limit is not None:
-        ax.set_ylim(y_limit)
-    if z_limit is not None:
-        ax.set_zlim(z_limit)
-
-    # Show plot
-    fig.tight_layout()
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, ax
@@ -1751,7 +737,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     time = actual_poses['time'].values
     actual_positions = actual_poses[['transform.translation.x', 'transform.translation.y', 'transform.translation.z']].values
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
-    
+
     # Reference pose (constant)
     reference_position = reference_pose[:3]
     reference_orientation = reference_pose[3:]
@@ -1764,27 +750,27 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
     ax.plot(actual_positions[:, 0]*1000, actual_positions[:, 1]*1000, actual_positions[:, 2]*1000, color='black', label='Actual Path')
 
     # Plot constant reference position (horizontal line)
-    ax.plot(np.full_like(time, reference_position[0]), 
+    ax.plot(np.full_like(time, reference_position[0]),
             np.full_like(time, reference_position[1]),
-            np.full_like(time, reference_position[2]), 
+            np.full_like(time, reference_position[2]),
             color='red', linestyle='--', label='Constant Reference')
 
     # Plot arrows for actual positions to indicate direction of forward progress
     for i in range(arrow_interval, len(time), arrow_interval):
         ax.quiver(actual_positions[i-1, 0], actual_positions[i-1, 1], actual_positions[i-1, 2],
-                  actual_positions[i, 0] - actual_positions[i-1, 0], 
-                  actual_positions[i, 1] - actual_positions[i-1, 1], 
-                  actual_positions[i, 2] - actual_positions[i-1, 2], 
+                  actual_positions[i, 0] - actual_positions[i-1, 0],
+                  actual_positions[i, 1] - actual_positions[i-1, 1],
+                  actual_positions[i, 2] - actual_positions[i-1, 2],
                   color='black', arrow_length_ratio=0.1)
 
     # Add reference pose frame (constant)
-    reference_T_0f = geometry.transformation_matrix_from_quaternion(reference_orientation, reference_position)
+    reference_T_0f = geometry_jit.transformation_matrix_from_quaternion(reference_orientation, reference_position)
     plot_coordinate_frame(ax, reference_T_0f, size=frame_size, linewidth=1.5, name='Constant Reference Pose', xscale=1, yscale=1, zscale=1,
                           x_style='r--', y_style='g--', z_style='b--')
 
     # Add coordinate frames at selected positions in the actual path
-    for i in range(0, len(time), frame_interval): 
-        actual_T_0f = geometry.transformation_matrix_from_quaternion(actual_orientations[i], actual_positions[i])
+    for i in range(0, len(time), frame_interval):
+        actual_T_0f = geometry_jit.transformation_matrix_from_quaternion(actual_orientations[i], actual_positions[i])
         plot_coordinate_frame(ax, actual_T_0f, size=frame_size, linewidth=1.5, name=None)
 
     ax.set_xlabel('X (mm)')
@@ -1802,7 +788,7 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, ax
@@ -1810,37 +796,6 @@ def plot_3d_poses_with_arrows_constant_reference(actual_poses: pd.DataFrame, ref
 ######################################
 # PLOTTING CURRENTS, CONTROL INPUTS, FIELDS, CONDITION NUMBERS
 ######################################
-
-def plot_actual_currents(system_state_df: pd.DataFrame,
-                         save_as: str=None,
-                         save_as_emf: bool=False,
-                         inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
-    # Plot each current column in its respective subplot
-    # Create subplots in a 2x4 layout
-    fig, axs = plt.subplots(2, 4, figsize=(16, 8), sharex=True, sharey=True)
-    fig.suptitle("Actual Currents vs Time", fontsize=16)  # Main title for the figure
-
-    # Flatten the 2D axes array for easier iteration
-    axs = axs.flatten()
-    for i in range(8):
-        axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='b', **kwargs)
-        axs[i].set_title(f'Currents in Coil {i+1}')
-        axs[i].set_xlabel("Time (s)")
-        axs[i].set_ylabel("Current (A)")
-        axs[i].grid(True)
-
-    # Adjust layout to prevent overlap
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-
-    return fig, axs
 
 def plot_dclink_voltages(system_state_df: pd.DataFrame,
                          indices: List[int]=[0, 1, 2],
@@ -1871,7 +826,7 @@ def plot_dclink_voltages(system_state_df: pd.DataFrame,
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
 
@@ -1889,8 +844,8 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
     # Flatten the 2D axes array for easier iteration
     axs = axs.flatten()
     for i in range(8):
-        axs[i].plot(system_state_df['time'], system_state_df[f'currents_reg_{i}'], label=f'Actual Current {i+1}', color='tab:blue', **kwargs)
-        axs[i].plot(des_currents_df['time'], des_currents_df[f'des_currents_reg_{i}'], label=f'Desired Current {i+1}', color='tab:green', **kwargs)
+        axs[i].plot(system_state_df['time'].to_numpy(), system_state_df[f'currents_reg_{i}'].to_numpy(), label=f'Actual Current {i+1}', color='tab:blue', **kwargs)
+        axs[i].plot(des_currents_df['time'].to_numpy(), des_currents_df[f'des_currents_reg_{i}'].to_numpy(), label=f'Desired Current {i+1}', color='tab:green', **kwargs)
         axs[i].set_title(f'Currents in Coil {i+1}')
         axs[i].set_xlabel("Time (s)")
         axs[i].set_ylabel("Current (A)")
@@ -1904,499 +859,15 @@ def plot_currents_with_reference(system_state_df: pd.DataFrame, des_currents_df:
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
 
     return fig, axs
 
-def plot_forces_and_torques(ft_df: pd.DataFrame,
-                            title: str="Desired Forces and Torques",
-                            torque_in_mNm: bool = True,
-                            force_in_N: bool = False,
-                            save_as: str=None,
-                            save_as_emf: bool=False,
-                            inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
-    """
-    Plots forces (Fx, Fy, Fz) and torques (Tx, Ty, Tz) from a DataFrame with time on the x-axis.
-    Forces are converted to milliNewtons (mN) and torques to milliNewton-millimeters (mN-mm).
-
-    Parameters:
-        ft_df (pd.DataFrame): Input DataFrame with 'time', 'array_0' to 'array_5' columns.
-                           'array_0' = Fx, 'array_1' = Fy, 'array_2' = Fz
-                           'array_3' = Tx, 'array_4' = Ty, 'array_5' = Tz
-    """
-    force_units = "mN"
-    force_multiplier = 1e3
-    torque_units = "Nm"
-    torque_multipler = 1
-    if force_in_N:
-        force_units = "N"
-        force_multiplier = 1
-    if torque_in_mNm:
-        torque_units = "mN-m"
-        torque_multiplier = 1e3
-
-    # Extract relevant columns
-    time = ft_df['time']
-    Fx = ft_df['array_0'] * force_multiplier  # Convert to mN
-    Fy = ft_df['array_1'] * force_multiplier
-    Fz = ft_df['array_2'] * force_multiplier
-    Tx = ft_df['array_3'] * torque_multipler  # Convert to mN-mm
-    Ty = ft_df['array_4'] * torque_multipler
-    Tz = ft_df['array_5'] * torque_multipler
-
-    # Create subplots: 2 rows, 3 columns
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-    fig.suptitle(title, fontsize=16)
-
-    # Plot forces (mN)
-    axes[0, 0].plot(time, Fx, color='b')
-    axes[0, 0].set_ylabel(f'Force ({force_units})')
-    axes[0, 0].set_title('Fx')
-
-    axes[0, 1].plot(time, Fy, color='g')
-    axes[0, 1].set_title('Fy')
-
-    axes[0, 2].plot(time, Fz, color='k')
-    axes[0, 2].set_title('Fz')
-
-    # Share y-axis for forces
-    axes[0, 1].sharey(axes[0, 0])
-    axes[0, 2].sharey(axes[0, 0])
-
-    # Plot torques (mN-mm)
-    axes[1, 0].plot(time, Tx, color='b')
-    axes[1, 0].set_ylabel(f'Torque ({torque_units})')
-    axes[1, 0].set_title('Tx')
-
-    axes[1, 1].plot(time, Ty, color='g')
-    axes[1, 1].set_title('Ty')
-
-    axes[1, 2].plot(time, Tz, color='k')
-    axes[1, 2].set_title('Tz')
-
-    # Share y-axis for torques
-    axes[1, 1].sharey(axes[1, 0])
-    axes[1, 2].sharey(axes[1, 0])
-
-    # Autoscale shared axes
-    for ax_row in axes: 
-        for ax in ax_row:
-            ax.relim()   
-            ax.autoscale()
-
-    # Share x-axis for all subplots
-    for ax in axes[1, :]:
-        ax.set_xlabel('Time (s)')
-
-    # Adjust layout
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # Leave space for the title
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axes
-
-def plot_forces_and_torques_from_wrench_stamped(ft_df: pd.DataFrame,
-                                                title: str,
-                                                torque_in_mNm: bool = True,
-                                                force_in_N: bool = False,
-                                                save_as: str=None,
-                                                save_as_emf: bool=False,
-                                                inkscape_path: str=INKSCAPE_PATH, **kwargs) -> Tuple[Figure, List[plt.Axes]]:
-
-    # Just convert the dataframe to a format accepted by the array msg based plotter.
-    ft_df = ft_df.rename(columns={
-                            "wrench.force.x": "array_0",
-                            "wrench.force.y": "array_1",
-                            "wrench.force.z": "array_2",
-                            "wrench.torque.x": "array_3",
-                            "wrench.torque.y": "array_4",
-                            "wrench.torque.z": "array_5"
-                        }, errors="raise", inplace=False)
-    return plot_forces_and_torques(ft_df, title, torque_in_mNm, force_in_N, save_as, save_as_emf, inkscape_path, **kwargs)
-
-def plot_3d_quiver(dataframe: pd.DataFrame, 
-                   scale_factor: float=1.0, 
-                   save_as: str=None, 
-                   save_as_emf: bool=False, 
-                   inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots a 3D quiver plot using position and field vector data from a pandas dataframe.
-
-    Parameters:
-        dataframe (pd.DataFrame): A dataframe containing the columns 'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'.
-        scale_factor (float): A scaling factor to adjust the length of the arrows. Default is 1.0.
-        save_as (str): File path to save the plot as an SVG. Use '.svg' extension.
-        save_as_emf (bool): Whether to save an additional EMF file (requires Inkscape). Default is False.
-        inkscape_path (str): If save_as_emf is true then this argument must be set to inkscape's binary path in your system.
-        **kwargs: Additional keyword arguments to pass to the `ax.quiver` function.
-
-    Returns:
-        None
-    """
-    required_columns = {'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'}
-    if not required_columns.issubset(dataframe.columns):
-        raise ValueError(f"Dataframe must contain the columns: {required_columns}")
-    
-    # Converting distances to mm and fields to mT
-    Px, Py, Pz = dataframe['Px'] * 1000, dataframe['Py'] * 1000, dataframe['Pz'] * 1000
-    Bx, By, Bz = dataframe['Bx'] * 1000, dataframe['By'] * 1000, dataframe['Bz'] * 1000
-    Bx_scaled, By_scaled, Bz_scaled = Bx * scale_factor, By * scale_factor, Bz * scale_factor
-    
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.quiver(Px, Py, Pz, Bx_scaled, By_scaled, Bz_scaled, length=1, normalize=False, **kwargs)
-    
-    ax.set_xlabel('X (mm)')
-    ax.set_ylabel('Y (mm)')
-    ax.set_zlabel('Z (mm)')
-    ax.set_title('3D Quiver Plot of Field Vectors (Field in mT)')
-    
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, ax
-
-def plot_3d_comparison_quiver(dataframes: List[pd.DataFrame],
-                              labels: List[str],
-                              scale_factor: float=1.0, 
-                              save_as: str=None, 
-                              save_as_emf: bool=False, 
-                              inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots a 3D quiver plot using position and field vector data from a pandas dataframe.
-
-    Parameters:
-        dataframes (list[pd.DataFrame]): List of dataframes containing the columns 'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'.
-        labels (list[str]): List of dataframe labels for plotting.
-        scale_factor (float): A scaling factor to adjust the length of the arrows. Default is 1.0.
-        save_as (str): File path to save the plot as an SVG. Use '.svg' extension.
-        save_as_emf (bool): Whether to save an additional EMF file (requires Inkscape). Default is False.
-        inkscape_path (str): If save_as_emf is true then this argument must be set to inkscape's binary path in your system.
-        **kwargs: Additional keyword arguments to pass to the `ax.quiver` function.
-
-    Returns:
-        None
-    """
-    required_columns = {'Px', 'Py', 'Pz', 'Bx', 'By', 'Bz'}
-    cmap = get_cmap(len(dataframes))
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    for i, (dataframe, label) in enumerate(zip(dataframes, labels)):
-        if not (required_columns.issubset(dataframe.columns)):
-            raise ValueError(f"Dataframe must contain the columns: {required_columns}")
-    
-        Px, Py, Pz = dataframe['Px'] * 1000, dataframe['Py'] * 1000, dataframe['Pz'] * 1000
-        Bx, By, Bz = dataframe['Bx'] * 1000, dataframe['By'] * 1000, dataframe['Bz'] * 1000
-        Bx_scaled, By_scaled, Bz_scaled = Bx * scale_factor, By * scale_factor, Bz * scale_factor
-        
-        ax.quiver(Px, Py, Pz, Bx_scaled, By_scaled, Bz_scaled, length=1, normalize=False,
-                label=label, color=xkcd_contrast_list[i%len(xkcd_contrast_list)], **kwargs)
-    
-    ax.set_xlabel('X (mm)')
-    ax.set_ylabel('Y (mm)')
-    ax.set_zlabel('Z (mm)')
-    ax.set_title(f'3D Quiver Plot of Field Vectors (Field in mT), Scale: {scale_factor}x')
-    ax.legend()
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, ax
-
-def plot_field_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
-                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel,
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots the 3 magnetic field components (Bx, By, Bz) over time for both actual and desired fields.
-    The desired components are calculated using the linear actuation matrix since that's what we use
-    during the computation. However, the actual field is computed using the nonlinear model's forward
-    computation function available through the calibration model class.
-    Shared x and y axes across subplots. Allows saving as SVG/EMF.
-
-    Parameters:
-        pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
-        desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
-        actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
-        save_as (str): Filename to save the plot as SVG/EMF (without extension).
-        **kwargs: Additional parameters for plt.plot().
-    """
-    combined_desired = pd.merge_asof(pose_df, desired_currents_df, on='time')
-    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
-
-    time = combined_desired['time']
-    desired_fields = {'Bx': [], 'By': [], 'Bz': []}
-    actual_fields = {'Bx': [], 'By': [], 'Bz': []}
-
-    for i in range(len(combined_desired)):
-        position = np.array([
-            combined_desired['transform.translation.x'].iloc[i],
-            combined_desired['transform.translation.y'].iloc[i],
-            combined_desired['transform.translation.z'].iloc[i]
-        ])
-
-        desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
-        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-
-        A = calibrated_model.get_actuation_matrix(position)
-        desired_field = A @ desired_currents
-        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
-
-        for idx, key in enumerate(['Bx', 'By', 'Bz']):
-            desired_fields[key].append(desired_field[idx] * 1000)  # Convert to mT
-            actual_fields[key].append(actual_field[idx] * 1000)
-
-    # Plot the field components with shared axes
-    fig, axs = plt.subplots(3, 1, figsize=(12, 9), sharex=True, sharey=True)
-    for i, key in enumerate(['Bx', 'By', 'Bz']):
-        axs[i].plot(time, actual_fields[key], label=f'Actual {key}', linestyle='-', color='tab:red', **kwargs)
-        axs[i].plot(time, desired_fields[key], label=f'Desired {key}', linestyle='-', color='tab:blue', **kwargs)
-        axs[i].set_ylabel(f'{key} [mT]')
-        axs[i].grid(True)
-        axs[i].legend()
-
-    axs[-1].set_xlabel("Time [s]")
-    fig.suptitle("Actual (Non-Linear Model) v/s Desired Field (Linear Approx) Components at Dipole Center")
-    fig.tight_layout()
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_gradient_components_linear_des_at_dipole_center(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
-                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel,
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz) over time 
-    for both actual and desired gradients. The desired components are calculated using 
-    the linear actuation matrix since that's what we use during the computation. However,
-    the actual field is computed using the nonlinear model's forward computation function 
-    available through the calibration model class.
-    Shared x and y axes across subplots. Allows saving as SVG/EMF.
-
-    Parameters:
-        pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
-        desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
-        actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
-        save_as (str): Filename to save the plot as SVG/EMF (without extension).
-        **kwargs: Additional parameters for plt.plot().
-    """
-    combined_desired = pd.merge_asof(pose_df, desired_currents_df, on='time')
-    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
-
-    time = combined_desired['time']
-    desired_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
-    actual_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
-
-    for i in range(len(combined_desired)):
-        position = np.array([
-            combined_desired['transform.translation.x'].iloc[i],
-            combined_desired['transform.translation.y'].iloc[i],
-            combined_desired['transform.translation.z'].iloc[i]
-        ])
-
-        desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
-        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-
-        A = calibrated_model.get_actuation_matrix(position)
-        desired_field = A @ desired_currents
-        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
-
-        gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
-        for idx, key in enumerate(gradient_keys, start=3):
-            desired_gradients[key].append(desired_field[idx] * 1000)
-            actual_gradients[key].append(actual_field[idx] * 1000)
-
-    # Plot the gradient components with shared axes
-    fig, axs = plt.subplots(5, 1, figsize=(12, 10), sharex=True, sharey=True)
-    for i, key in enumerate(['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']):
-        axs[i].plot(time, actual_gradients[key], label=f'Actual {key}', linestyle='-', color='tab:red', **kwargs)
-        axs[i].plot(time, desired_gradients[key], label=f'Desired {key}', linestyle='-', color='tab:blue', **kwargs)
-        axs[i].set_ylabel(f'{key} [mT/m]')
-        axs[i].grid(True)
-        axs[i].legend()
-
-    axs[-1].set_xlabel("Time [s]")
-    fig.suptitle("Actual (Non-Linear Model) v/s Desired Gradients (Linear Approx) at Dipole Center")
-    fig.tight_layout()
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_field_components_at_dipole_center_const_actuation_position(
-                          pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
-                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel, des_actuation_pos=np.zeros(3),
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots the 3 magnetic field components (Bx, By, Bz) over time for both actual and desired fields.
-    Where the desired fields are calculated based on the actuation matrix calcualted at the given 
-    desired position. However, the actual field is computed using the nonlinear model's forward
-    computation function available through the calibration model class.
-    Shared x and y axes across subplots. Allows saving as SVG/EMF.
-
-    Parameters:
-        pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
-        desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
-        actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        calibrated_model (common.OctomagCalibratedModel): The calibration model used.
-        des_actuation_pos (np.ndarray): The position which is used to calculate the desired field values.
-            Defaults to origin.
-        save_as (str): Filename to save the plot as SVG/EMF (without extension).
-        **kwargs: Additional parameters for plt.plot().
-    """
-    combined_desired = pd.merge_asof(pose_df, desired_currents_df, on='time')
-    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
-
-    time = combined_desired['time']
-    desired_fields = {'Bx': [], 'By': [], 'Bz': []}
-    actual_fields = {'Bx': [], 'By': [], 'Bz': []}
-
-    A = calibrated_model.get_actuation_matrix(des_actuation_pos)
-
-    for i in range(len(combined_desired)):
-        position = np.array([
-            combined_desired['transform.translation.x'].iloc[i],
-            combined_desired['transform.translation.y'].iloc[i],
-            combined_desired['transform.translation.z'].iloc[i]
-        ])
-
-        desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
-        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-
-        desired_field = A @ desired_currents
-        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
-
-        for idx, key in enumerate(['Bx', 'By', 'Bz']):
-            desired_fields[key].append(desired_field[idx] * 1000)  # Convert to mT
-            actual_fields[key].append(actual_field[idx] * 1000)
-
-    # Plot the field components with shared axes
-    fig, axs = plt.subplots(3, 1, figsize=(12, 6), sharex=True, sharey=True)
-    for i, key in enumerate(['Bx', 'By', 'Bz']):
-        axs[i].plot(time, actual_fields[key], label=f'Actual {key}', linestyle='-', color='tab:red', **kwargs)
-        axs[i].plot(time, desired_fields[key], label=f'Desired {key}', linestyle='-', color='tab:blue', **kwargs)
-        axs[i].set_ylabel(f'{key} [mT]')
-        axs[i].grid(True)
-        axs[i].legend()
-
-    axs[-1].set_xlabel("Time [s]")
-    fig.suptitle(f"Actual (Non-Linear Model) v/s Desired Field Components at Dipole Center for A({des_actuation_pos})")
-    fig.tight_layout()
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_gradient_components_at_dipole_center_const_actuation_position(pose_df: pd.DataFrame, desired_currents_df: pd.DataFrame, 
-                          actual_currents_df: pd.DataFrame, calibrated_model: common.OctomagCalibratedModel, des_actuation_pos=np.zeros(3),
-                          save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
-    """
-    Plots the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz) over time 
-    for both actual and desired gradients. However, the actual field is computed using 
-    the nonlinear model's forward computation function available through the calibration 
-    model class. Shared x and y axes across subplots. Allows saving as SVG/EMF.
-
-    Parameters:
-        pose_df (pd.DataFrame): Pose DataFrame with columns: 'time', 'transform.translation.x', 'y', 'z'
-        desired_currents_df (pd.DataFrame): Desired currents dataframe with 'des_currents_reg_*' columns
-        actual_currents_df (pd.DataFrame): Actual currents dataframe with 'currents_reg_*' columns
-        model_fn (Callable): Function that maps position to an 8x8 matrix A
-        des_actuation_pos (np.ndarray): The position which is used to calculate the desired field values.
-            Defaults to origin.
-        save_as (str): Filename to save the plot as SVG/EMF (without extension).
-        **kwargs: Additional parameters for plt.plot().
-    """
-    combined_desired = pd.merge_asof(pose_df, desired_currents_df, on='time')
-    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
-
-    time = combined_desired['time']
-    desired_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
-    actual_gradients = {'dBx/dx': [], 'dBx/dy': [], 'dBx/dz': [], 'dBy/dy': [], 'dBy/dz': []}
-
-    A = calibrated_model.get_actuation_matrix(des_actuation_pos)
-
-    for i in range(len(combined_desired)):
-        position = np.array([
-            combined_desired['transform.translation.x'].iloc[i],
-            combined_desired['transform.translation.y'].iloc[i],
-            combined_desired['transform.translation.z'].iloc[i]
-        ])
-
-        desired_currents = np.array([combined_desired[f'des_currents_reg_{j}'].iloc[i] for j in range(8)])
-        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-
-        desired_field = A @ desired_currents
-        actual_field = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
-
-        gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
-        for idx, key in enumerate(gradient_keys, start=3): 
-            desired_gradients[key].append(desired_field[idx] * 1000) # Converting all readings to mT/m
-            actual_gradients[key].append(actual_field[idx] * 1000) # Converting all readings to mT/m
-
-    # Plot the gradient components with shared axes
-    fig, axs = plt.subplots(5, 1, figsize=(12, 10), sharex=True, sharey=True)
-    for i, key in enumerate(['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']):
-        axs[i].plot(time, actual_gradients[key], label=f'Actual {key}', linestyle='-', color='tab:red', **kwargs)
-        axs[i].plot(time, desired_gradients[key], label=f'Desired {key}', linestyle='-', color='tab:blue', **kwargs)
-        axs[i].set_ylabel(f'{key} [mT/m]')
-        axs[i].grid(True)
-        axs[i].legend()
-
-    axs[-1].set_xlabel("Time [s]")
-    fig.suptitle(f"Actual (Non-Linear Model) v/s Desired Gradients at Dipole Center For A({des_actuation_pos})")
-    fig.tight_layout()
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_actual_field_and_gradients(pose_df: pd.DataFrame, actual_currents_df: pd.DataFrame, 
-                                    calibrated_model: common.OctomagCalibratedModel, 
-                                    save_as: str = None, save_as_emf: bool = False, 
+def plot_actual_field_and_gradients(pose_df: pd.DataFrame, actual_currents_df: pd.DataFrame,
+                                    calibrated_model: common.OctomagCalibratedModel,
+                                    save_as: str = None, save_as_emf: bool = False,
                                     inkscape_path: str = INKSCAPE_PATH, **kwargs):
     """
     Plots the 3 magnetic field components (Bx, By, Bz) and the 5 gradient components (dBx/dx, dBx/dy, dBx/dz, dBy/dy, dBy/dz)
@@ -2443,330 +914,10 @@ def plot_actual_field_and_gradients(pose_df: pd.DataFrame, actual_currents_df: p
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
-
-def plot_actual_field_gradients_and_angle_bw_field_and_normal(
-                pose_df: pd.DataFrame,
-                actual_currents_df: pd.DataFrame,
-                calibrated_model: common.OctomagCalibratedModel,
-                normal_vector: np.ndarray = np.array([0.0, 0.0, 1.0]),
-                field_vectors_in_body_fixed_frame: bool = False,
-                normalize_quaternions: bool = True,
-                use_different_linestyles: bool = True,
-                save_as: str = None,
-                save_as_emf: bool = False,
-                inkscape_path: str = INKSCAPE_PATH,
-                **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
-    """
-    Plots the 3 magnetic field components (Bx, By, Bz), all 5 gradient components together,
-    and the angle between the field vector and a specified normal vector (in degrees).
-
-    Parts of this function were generated using ChatGPT based on the previous functions of similar kind.
-    """
-    combined_actual = pd.merge_asof(pose_df, actual_currents_df, on='time')
-    time = combined_actual['time']
-
-    field_keys = ['Bx', 'By', 'Bz']
-    gradient_keys = ['dBx/dx', 'dBx/dy', 'dBx/dz', 'dBy/dy', 'dBy/dz']
-    actual_values = {key: [] for key in field_keys + gradient_keys}
-    angle_degrees = []
-
-    for i in range(len(combined_actual)):
-        position = np.array([
-            combined_actual['transform.translation.x'].iloc[i],
-            combined_actual['transform.translation.y'].iloc[i],
-            combined_actual['transform.translation.z'].iloc[i]
-        ])
-        quaternion = np.array([
-            combined_actual['transform.rotation.x'].iloc[i],
-            combined_actual['transform.rotation.y'].iloc[i],
-            combined_actual['transform.rotation.z'].iloc[i],
-            combined_actual['transform.rotation.w'].iloc[i]
-        ])
-        if normalize_quaternions:
-            quaternion = quaternion / np.linalg.norm(quaternion)  # Normalize quaternion, somtimes it can be sligthly off because of interpolation
-        actual_currents = np.array([combined_actual[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-        actual_field_grad = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents).flatten()
-
-        # Transform field vector to body frame if needed
-
-        # Store gradient components (always in inertial/world frame)
-        for j, key in enumerate(gradient_keys):
-            actual_values[key].append(actual_field_grad[3 + j] * 1000)  # Convert T/m to mT/m
-
-        # Compute angle in degrees between field and normal vector (transformed)
-        field_vector = actual_field_grad[:3]
-        normal_vector_inertial = geometry_jit.rotate_vector_from_quaternion(quaternion, normal_vector).flatten()
-        angle_rad = np.arccos(
-            np.clip(
-                np.dot(field_vector, normal_vector_inertial)/ (np.linalg.norm(field_vector) * np.linalg.norm(normal_vector_inertial) + geometry_jit.EPSILON_TOLERANCE),
-                -1.0, 1.0
-            )
-        )
-        angle_degrees.append(np.rad2deg(angle_rad))
-
-        if field_vectors_in_body_fixed_frame:
-            field_vector = geometry_jit.rotate_vector_from_quaternion(
-                geometry_jit.invert_quaternion(quaternion),
-                field_vector
-            )
-
-        # Store field components
-        for j, key in enumerate(field_keys):
-            actual_values[key].append(field_vector[j] * 1000)  # Convert T to mT
-
-    # Setup figure and axes
-    fig, axs = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
-
-    # --- Field components in one subplot ---
-    if use_different_linestyles:
-        field_linestyles = ['-', '--', '-.']
-    else:
-        field_linestyles = ['-'] * len(field_keys)
-    field_colors = ['tab:red', 'tab:green', 'tab:blue']
-
-    for i, key in enumerate(field_keys):
-        axs[0].plot(time, actual_values[key], label=key,
-                    linestyle=field_linestyles[i],
-                    color=field_colors[i], **kwargs)
-    axs[0].set_ylabel("Field [mT]")
-    axs[0].legend(loc='upper right')
-    axs[0].grid(True)
-
-    # --- Gradient components in one subplot ---
-    if use_different_linestyles:
-        gradient_linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
-    else:
-        gradient_linestyles = ['-'] * len(gradient_keys)
-    gradient_colors = ['tab:purple', 'tab:orange', 'tab:brown', 'tab:gray', 'tab:pink']
-
-    for idx, key in enumerate(gradient_keys):
-        axs[1].plot(time, actual_values[key], label=key,
-                    linestyle=gradient_linestyles[idx],
-                    color=gradient_colors[idx], **kwargs)
-    axs[1].set_ylabel("Gradients [mT/m]")
-    axs[1].legend(loc='upper right')
-    axs[1].grid(True)
-
-    # --- Angle subplot ---
-    axs[2].plot(time, angle_degrees, linestyle='-', color='tab:cyan', label='Angle', **kwargs)
-    axs[2].set_ylabel("Angle [deg]")
-    axs[2].set_xlabel("Time [s]")
-    axs[2].grid(True)
-
-    fig.suptitle("Magnetic Field, Gradients, and Angle to Normal Vector")
-    fig.tight_layout(rect=[0, 0, 1, 0.97])  # Leave space for suptitle
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-
-    return fig, axs
-
-
-def plot_actual_wrench_on_dipole_center(dipole_center_pose_df: pd.DataFrame,
-                                        actual_currents_df: pd.DataFrame,
-                                        desired_wrench: pd.DataFrame,
-                                        calibrated_model: common.OctomagCalibratedModel,
-                                        dipole_strength: float,
-                                        dipole_axis: np.ndarray,
-                                        use_local_frame_for_torques: bool = False,
-                                        dataset_torques_in_local_frame: bool = False,
-                                        save_as: str = None,
-                                        save_as_emf: bool = False,
-                                        inkscape_path: str = INKSCAPE_PATH,
-                                        return_actual_wrench: bool = False,
-                                        **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
-    """
-    Plots the actual and desired wrench (force and torque) components over time for a dipole center,
-    based on the given pose and current data.
-
-    This function computes the actual wrench exerted by the dipole based on the current data and
-    compares it to the desired wrench values. It then plots the components of force (Fx, Fy, Fz) and torque (Taux, Tauy, Tauz) 
-    against time. The plot allows visualization of the agreement between the actual and reference values.
-
-    Parameters:
-        dipole_center_pose_df (pd.DataFrame):
-            DataFrame containing the pose of the dipole center.
-
-        actual_currents_df (pd.DataFrame):
-            DataFrame containing the actual currents (currents_reg_0 to currents_reg_7) applied to the dipole over time.
-            Each row corresponds to a specific time step.
-
-        desired_wrench (pd.DataFrame):
-            DataFrame containing the desired wrench (force and torque) components at each time step. Should have columns 'Fx', 'Fy', 
-            'Fz', 'Taux', 'Tauy', 'Tauz' representing the reference force and torque values.
-
-        calibrated_model (OctomagCalibratedModel):
-            An instance of a model used to calculate the exact field gradients based on the position and currents.
-            It should have a method `get_exact_field_grad5_from_currents(position, currents)` to compute the actual fields.
-
-        dipole_strength (float):
-            The strength of the dipole, which is used to compute the interaction matrix.
-
-        dipole_axis (np.ndarray):
-            A 3D vector representing the axis of the dipole for torque computation.
-
-        save_as (str):
-            The file path where the plot should be saved (in PNG format). If not provided, the plot is not saved.
-
-        save_as_emf (bool):
-            If True, the plot will also be saved in EMF format alongside the PNG file. Default is False.
-
-        inkscape_path (str):
-            Path to the Inkscape executable, used for converting the EMF file to PNG when `save_as_emf` is True. Default is None.
-
-        **kwargs (additional) keyword arguments
-            Additional arguments to be passed to the plotting function (e.g., for customizing the plot appearance).
-
-    Returns:
-        A tuple where the first element is the figure object while the second elements is the axes object.
-    
-    Notes:
-    - The plot consists of two rows: the first row for force components (Fx, Fy, Fz) and the second for torque components (Taux, Tauy, Tauz).
-    - The actual wrench is computed from the dipole's position, rotation, and current data using the calibrated model and interaction matrix.
-    - The plot includes both actual wrench and reference wrench (desired) values for comparison.
-    """
-    # Combine pose and current data
-    combined_pose_currents = pd.merge_asof(dipole_center_pose_df, actual_currents_df, on='time')
-    time = dipole_center_pose_df['time']
-    actual_wrench_dict = {'wrench.torque.x': [], 'wrench.torque.y': [], 'wrench.torque.z': [],
-                          'wrench.force.x': [], 'wrench.force.y': [], 'wrench.force.z': []}
-    
-    key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
-               'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
-
-    # Calculate actual wrench
-    for i in range(len(combined_pose_currents)):
-        position = np.array([
-            combined_pose_currents['transform.translation.x'].iloc[i],
-            combined_pose_currents['transform.translation.y'].iloc[i],
-            combined_pose_currents['transform.translation.z'].iloc[i]
-        ])
-        actual_currents = np.array([combined_pose_currents[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-
-        actual_fields = calibrated_model.get_exact_field_grad5_from_currents(position, actual_currents)
-        
-        quaternion = np.array([
-            combined_pose_currents['transform.rotation.x'].iloc[i],
-            combined_pose_currents['transform.rotation.y'].iloc[i],
-            combined_pose_currents['transform.rotation.z'].iloc[i],
-            combined_pose_currents['transform.rotation.w'].iloc[i]
-        ])
-
-        quaternion = quaternion/np.linalg.norm(quaternion)
-
-        M = geometry.magnetic_interaction_matrix_from_quaternion(dipole_quaternion=quaternion,
-                                                                 dipole_strength=dipole_strength,
-                                                                 full_mat=True,
-                                                                 torque_first=True,
-                                                                 dipole_axis=dipole_axis)
-        actual_wrench = (M @ actual_fields).flatten()
-        torques = actual_wrench[:3]
-        forces_wf = actual_wrench[3:]
-
-        if use_local_frame_for_torques:
-            torques = geometry.rotate_vector_from_quaternion(
-                geometry.invert_quaternion(quaternion),
-                torques
-            )
-
-        ## Depending on the torque evaluation frame and the current frame of the torques in the dataset.
-        ## convert the desired torques. This was implemented because some experiments perform direct world
-        ## frame torque control, while some perform body fixed frame torque control.
-        if not dataset_torques_in_local_frame and use_local_frame_for_torques:
-            # Also transform the desired torques from the world frame to the local frame.
-            des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
-            des_torques = geometry.rotate_vector_from_quaternion(
-                geometry.invert_quaternion(quaternion),
-                des_torques
-            )
-            desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
-        
-        if dataset_torques_in_local_frame and not use_local_frame_for_torques:
-             # Also transform the desired torques from the local frame to the world frame.
-            des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
-            des_torques = geometry.rotate_vector_from_quaternion(
-                quaternion,
-                des_torques
-            )
-            desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
-                
-        actual_wrench = np.concatenate((torques, forces_wf))
-
-        for j, key in enumerate(list(actual_wrench_dict.keys())):
-            actual_wrench_dict[key].append(actual_wrench[j])
-
-    # Convert wrench dict to DataFrame
-    actual_wrench_df = pd.DataFrame(actual_wrench_dict)
-    
-    # Plot settings
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Force (actual, reference), Torque (actual, reference)
-    
-    fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
-    
-    # Force subplots (columns 0, 1, 2), Forces converted to mN
-    for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
-        axes[0, i].plot(time, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], **kwargs)
-        axes[0, i].plot(time, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], **kwargs)
-        axes[0, i].set_title(f'{force_component} - Force')
-        axes[0, i].grid(True)
-        if i == 0:
-            axes[0, i].set_ylabel('Force (mN)')
-        if i == 2:
-            axes[0, i].legend(loc='upper right')
-
-    # Torque subplots (columns 0, 1, 2), Torques converted to mN-m
-    for i, torque_component in enumerate(['Taux', 'Tauy', 'Tauz']):
-        axes[1, i].plot(time, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], **kwargs)
-        axes[1, i].plot(time, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], **kwargs)
-        axes[1, i].set_title(f'{torque_component} - Torque')
-        axes[1, i].grid(True)
-        if i == 0:
-            axes[1, i].set_ylabel('Torque (mN-m)')
-        if i == 2:
-            axes[1, i].legend(loc='upper right')
-
-    # Shared X-axis
-    for ax in axes[1, :]:
-        ax.set_xlabel('Time (s)')
-    
-    axes[0, 1].sharey(axes[0, 0])
-    axes[0, 2].sharey(axes[0, 0])
-    axes[1, 1].sharey(axes[1, 0])
-    axes[1, 2].sharey(axes[1, 0])
-
-    # Autoscale axes
-    for ax_row in axes: 
-            for ax in ax_row:
-                ax.relim()   
-                ax.autoscale()
-
-    fig.tight_layout()
-
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    
-    if return_actual_wrench:
-        actual_wrench_df['time'] = desired_wrench['time']
-        return fig, axes, actual_wrench_df
-    return fig, axes
 
 def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          actual_currents_df: pd.DataFrame,
@@ -2776,19 +927,17 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                                                          use_local_frame_for_torques: bool,
                                                          dataset_torques_in_local_frame: bool,
                                                          plot_for_each_magnet: bool = True,
-                                                         min_alpha: float = 0.1,
-                                                         max_alpha: float = 0.8,
+                                                         alpha_range: Tuple[float, float] = (0.2, 0.8),
                                                          stack_label_color_map_func: Optional[Callable[[List[Tuple[Transform, mechanical.PermanentMagnet]]], List[Tuple[str, str, str, float]]]] = None,
                                                          plot_overall_magnet_torque_component: bool = True,
                                                          plot_torque_components_separately: bool = False,
                                                          save_as: str = None,
-                                                         save_as_emf: bool = False,
-                                                         inkscape_path: str = INKSCAPE_PATH,
                                                          return_actual_wrench: bool = False,
                                                          component_plot_kwargs: Optional[Dict[str, Any]] = dict(),
                                                          remove_gravity_compensation_force: bool = False,
                                                          fg_comp: Optional[np_t.NDArray[float]] = None,
                                                          plot_mean_values: bool = False,
+                                                         figsize: Tuple[float, float] = (15, 8),
                                                          **kwargs) -> Tuple[Figure, np_t.NDArray[plt.Axes]]:
     """
     Plots the actual and desired wrench (force and torque) components over time for a dipole center,
@@ -2796,7 +945,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
 
     This function computes the actual wrench exerted by the dipole based on the current data and
     compares it to the desired wrench values. It then plots the components of force (Fx, Fy, Fz) and torque (Taux, Tauy)
-    against time. The plot allows visualization of the agreement between the actual and reference values. 
+    against time. The plot allows visualization of the agreement between the actual and reference values.
 
     IMPORTANT: PLE
 
@@ -2809,7 +958,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             Each row corresponds to a specific time step.
 
         desired_wrench (pd.DataFrame):
-            DataFrame containing the desired wrench (force and torque) components at each time step. Should have columns 'Fx', 'Fy', 
+            DataFrame containing the desired wrench (force and torque) components at each time step. Should have columns 'Fx', 'Fy',
             'Fz', 'Taux', 'Tauy', 'Tauz' representing the reference force and torque values.
 
         calibrated_model (OctomagCalibratedModel):
@@ -2836,7 +985,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
 
     Returns:
         A tuple where the first element is the figure object while the second elements is the axes object.
-    
+
     Notes:
     - The plot consists of two rows: the first row for force components (Fx, Fy, Fz) and the second for torque components (Taux, Tauy, Tauz).
     - The actual wrench is computed from the dipole's position, rotation, and current data using the calibrated model and interaction matrix.
@@ -2862,39 +1011,63 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
 
     key_map = {'Fx': 'wrench.force.x', 'Fy': 'wrench.force.y', 'Fz': 'wrench.force.z',
                'Taux': 'wrench.torque.x', 'Tauy': 'wrench.torque.y', 'Tauz': 'wrench.torque.z'}
-    
-    def z_color_ft_mapping(magnet_stack: List[Tuple[Transform, mechanical.PermanentMagnet]]) -> List[Tuple[str, str, str, float]]:
-        label_color_list = []
-        max_dist = -np.inf
-        min_dist = np.inf
-        for magnet_tf, _ in magnet_stack:
-            # For negative z values use a different color and for positive z values use a different color.
-            # Scale the alpha according to the distnce from the dipole reference frame.
-            position = geometry.numpy_translation_from_tf_msg(magnet_tf)*1000 # in mm
-            label = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
-            dist = np.linalg.norm(position)
-            if min_dist > dist:
-                min_dist = dist
-            if max_dist < dist:
-                max_dist = dist
-            if magnet_tf.translation.z > 0:
-                label_color_list.append([label, "tab:purple", "tab:cyan", dist])
-            else:
-                label_color_list.append([label, "tab:brown", "tab:pink", dist])
-            
-        for i in range(len(label_color_list)): # rescaling opacities
-            dist = label_color_list[i][3]
-            # The closer the magnet, the darker its plot should be
-            alpha = max_alpha - (max_alpha - min_alpha)*((dist - min_dist)/(max_dist - min_dist + 1e-6))
-            label_color_list[i][3] = alpha
-            label_color_list[i] = tuple(label_color_list[i])
-        
-        return label_color_list
 
-    
+    min_alpha, max_alpha = alpha_range
+
+    def z_color_ft_mapping(magnet_stack: List[Tuple[Transform, mechanical.PermanentMagnet]]) -> List[Tuple[Optional[str], str, str, float, int]]:
+        n_magnets = len(magnet_stack)
+        # Collect z-values and labels for each magnet
+        entries = []
+        for idx, (magnet_tf, _) in enumerate(magnet_stack):
+            position = geometry_jit.numpy_translation_from_tf_msg(magnet_tf)*1000 # in mm
+            label = f'P: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) mm'
+            entries.append((idx, position[2], label))
+
+        # Sort by z to assign ranks: rank 0 = lowest z, rank n-1 = highest z
+        sorted_by_z = sorted(entries, key=lambda x: x[1])
+        rank_map = {}  # original_idx -> rank
+        for rank, (idx, _, _) in enumerate(sorted_by_z):
+            rank_map[idx] = rank
+
+        first_idx = sorted_by_z[0][0]   # lowest z magnet (original index)
+        last_idx = sorted_by_z[-1][0]   # highest z magnet (original index)
+
+        # Build result in original magnet_stack order
+        # Zorder: lowest z (rank 0) gets highest magnet zorder, highest z gets lowest
+        base_magnet_zorder = 8
+        result = [None] * n_magnets
+        for idx, _, label in entries:
+            rank = rank_map[idx]
+            # Uniform alpha spacing by rank
+            if n_magnets > 1:
+                alpha = min_alpha + (max_alpha - min_alpha) * rank / (n_magnets - 1)
+            else:
+                alpha = max_alpha
+            # Only label the first (lowest z) and last (highest z) magnets
+            if n_magnets == 2:
+                if idx == first_idx:
+                    magnet_label = 'Lower magnet'
+                elif idx == last_idx:
+                    magnet_label = 'Upper magnet'
+                else:
+                    magnet_label = None
+            else:
+                if idx == first_idx:
+                    magnet_label = 'Lowest magnet'
+                elif idx == last_idx:
+                    magnet_label = 'Highest magnet'
+                else:
+                    magnet_label = None
+            # Lowest z (rank 0) on top of highest z (rank n-1)
+            zorder = base_magnet_zorder - rank
+            result[idx] = (magnet_label, "black", "black", alpha, zorder)
+
+        return result
+
+
     if stack_label_color_map_func is None:
         stack_label_color_map_func = z_color_ft_mapping
-    
+
     stack_properties = stack_label_color_map_func(dipole.magnet_stack)
     # Calculate actual wrench
     for i in range(len(combined_pose_currents)):
@@ -2904,7 +1077,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             combined_pose_currents['transform.translation.z'].iloc[i]
         ])
         actual_currents = np.array([combined_pose_currents[f'currents_reg_{j}'].iloc[i] for j in range(8)])
-        
+
         quaternion = np.array([
             combined_pose_currents['transform.rotation.x'].iloc[i],
             combined_pose_currents['transform.rotation.y'].iloc[i],
@@ -2923,7 +1096,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         dipole_quat = geometry_jit.numpy_quaternion_from_tf_msg(dipole.transform)
         dipole_position = geometry_jit.numpy_translation_from_tf_msg(dipole.transform)
         T_MD = geometry_jit.transformation_matrix_from_quaternion(dipole_quat, dipole_position)
-        
+
         actual_com_force = np.zeros(3)
         actual_com_torque = np.zeros(3)
 
@@ -2952,7 +1125,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             magnet_force_M = (R_VM.T @ magnet_force_V).flatten()
 
             Mbar_tau = geometry_jit.magnetic_interaction_field_to_local_torque_from_rotmat(mag_dipole_M, R_VM) # This will map the V frame field to M frame torques
-            
+
             magnet_force_world = magnet_force_V.flatten()
             magnet_com_torque_from_torque = (Mbar_tau @ b_V).flatten()
 
@@ -2967,7 +1140,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                 magnet_com_torque_contribution = R_VM @ magnet_com_torque_contribution
                 magnet_com_torque_from_torque = R_VM @ magnet_com_torque_from_torque
                 magnet_com_torque_from_force = R_VM @ magnet_com_torque_from_force
-            
+
             # Explicit appending to avoid confusion. There were indexing errors with the overall
             # contribution dictionary. So I won't do that for this edit.
             magnet_contribution_dict = per_magnet_wrench_contributions[i]
@@ -2985,7 +1158,7 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             magnet_torque_ft_contribution_dict[key_map['Tauy']].append(magnet_com_torque_from_torque[1])
             magnet_torque_ft_contribution_dict[key_map['Tauz']].append(magnet_com_torque_from_torque[2])
 
-        
+
         if not use_local_frame_for_torques: # By default we calculate them in the local frame.
             actual_com_torque = R_VM @ actual_com_torque
 
@@ -2995,21 +1168,21 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
         if not dataset_torques_in_local_frame and use_local_frame_for_torques:
             # Also transform the desired torques from the world frame to the local frame.
             des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
-            des_torques = geometry.rotate_vector_from_quaternion(
-                geometry.invert_quaternion(quaternion),
+            des_torques = geometry_jit.rotate_vector_from_quaternion(
+                geometry_jit.invert_quaternion(quaternion),
                 des_torques
             )
             desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
-        
+
         if dataset_torques_in_local_frame and not use_local_frame_for_torques:
              # Also transform the desired torques from the local frame to the world frame.
             des_torques = desired_wrench.iloc[i][[key_map['Taux'], key_map['Tauy'], key_map['Tauz']]].to_numpy()
-            des_torques = geometry.rotate_vector_from_quaternion(
+            des_torques = geometry_jit.rotate_vector_from_quaternion(
                 quaternion,
                 des_torques
             )
             desired_wrench.loc[i, [key_map['Taux'], key_map['Tauy'], key_map['Tauz']]] = des_torques
-        
+
         actual_wrench = np.concatenate((actual_com_torque, actual_com_force)) # This sequence should be correct. Please double check.
 
         for j, key in enumerate(list(actual_wrench_dict.keys())):
@@ -3030,54 +1203,55 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
             magnet_contribution[key_map['Fx']] -= fg_comp[0]
             magnet_contribution[key_map['Fy']] -= fg_comp[1]
             magnet_contribution[key_map['Fz']] -= fg_comp[2]
-    
+
     # Plot settings
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']  # Force (actual, reference), Torque (actual, reference)
-    
+    fig, axes = plt.subplots(2, 3, figsize=figsize, sharex=True)
     fig.suptitle('Actual Wrench (Non-Linear Model computed) v/s Desired Wrench')
     time_actual = actual_currents_df['time']
     time_des = desired_wrench['time']
-    
+
     # Force subplots (columns 0, 1, 2), Forces converted to mN
     for i, force_component in enumerate(['Fx', 'Fy', 'Fz']):
-        axes[0, i].plot(time_actual, actual_wrench_df[key_map[force_component]]*1000, label='Actual Force', color=colors[0], zorder=7, **kwargs)
-        axes[0, i].plot(time_des, desired_wrench[key_map[force_component]]*1000, label='Reference Force', color=colors[1], zorder=10, linestyle=":", **kwargs)
+        actual_ft_label = 'Actual FT' if i == 2 else None
+        desired_ft_label = 'Desired FT' if i == 2 else None
+        axes[0, i].plot(time_actual, actual_wrench_df[key_map[force_component]]*1000, label=actual_ft_label, color='tab:green', linewidth=1, alpha=1.0, zorder=9, **kwargs)
+        axes[0, i].plot(time_des, desired_wrench[key_map[force_component]]*1000, label=desired_ft_label, color='tab:blue', linewidth=1, zorder=10, alpha=0.8, linestyle="--", **kwargs)
         if plot_for_each_magnet:
             for num, (magnet_wrench_contribution, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, dipole.magnet_stack)):
-                label, force_color, _, alpha = stack_properties[num]
-                axes[0, i].plot(time_actual, np.array(magnet_wrench_contribution[key_map[force_component]])*1000, 
-                                label=label,
+                _, force_color, _, alpha, mag_zorder = stack_properties[num]
+                axes[0, i].plot(time_actual, np.array(magnet_wrench_contribution[key_map[force_component]])*1000,
                                 color=force_color,
                                 alpha=alpha,
-                                zorder=8,
+                                linewidth=1,
+                                zorder=mag_zorder,
                                 **component_plot_kwargs)
         if plot_mean_values:
             mean_value = np.mean(actual_wrench_df[key_map[force_component]]*1000)
-            axes[0, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean Actual Force', zorder=11)
+            axes[0, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean actual force', zorder=11)
         axes[0, i].set_title(f'{force_component} - Force')
         axes[0, i].grid(True)
         if i == 0:
             axes[0, i].set_ylabel('Force (mN)')
         if i == 2:
-            axes[0, i].legend(loc='upper right').set_zorder(12)
+            axes[0, i].legend(loc='lower right').set_zorder(12)
 
     # Torque subplots (columns 0, 1, 2), Torques converted to mN-m
     for i, (torque_component, torque_from_force_component) in enumerate(zip(['Taux', 'Tauy', 'Tauz'], ['Fx', 'Fy', 'Fz'])):
-        axes[1, i].plot(time_actual, actual_wrench_df[key_map[torque_component]]*1e3, label='Actual Torque', color=colors[2], zorder=7, **kwargs)
-        axes[1, i].plot(time_des, desired_wrench[key_map[torque_component]]*1e3, label='Reference Torque', color=colors[3], zorder=10, linestyle=":", **kwargs)
+        axes[1, i].plot(time_actual, actual_wrench_df[key_map[torque_component]]*1e3, color='tab:green', linewidth=1, alpha=1.0, zorder=9, **kwargs)
+        axes[1, i].plot(time_des, desired_wrench[key_map[torque_component]]*1e3, color='tab:blue', linewidth=1, zorder=10, alpha=0.8, linestyle="--", **kwargs)
         title = f'{torque_component} - Torque'
         if plot_torque_components_separately:
             title += ' \n(dotted: F contrib., dashed: Tau contrib.)'
         if plot_for_each_magnet:
             for num, (magnet_wrench_contribution, magnet_torque_components, (magnet_tf, _)) in enumerate(zip(per_magnet_wrench_contributions, per_magnet_torque_ft_contribution_components, dipole.magnet_stack)):
-                label, _, torque_color, alpha = stack_properties[num]
+                label, _, torque_color, alpha, mag_zorder = stack_properties[num]
                 if plot_overall_magnet_torque_component:
-                    axes[1, i].plot(time_actual, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000, 
+                    axes[1, i].plot(time_actual, np.array(magnet_wrench_contribution[key_map[torque_component]])*1000,
                                     label=label,
                                     color=torque_color,
                                     alpha=alpha,
-                                    zorder=8,
+                                    linewidth=1,
+                                    zorder=mag_zorder,
                                     **component_plot_kwargs)
                 if plot_torque_components_separately:
                     # Plotting the contribution from forces
@@ -3086,13 +1260,13 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                         axes[1, i].plot(time_actual, np.array(magnet_torque_components[key_map[torque_from_force_component]])*1000,
                                         color=torque_color,
                                         alpha=alpha,
-                                        zorder=8,
+                                        zorder=mag_zorder,
                                         linestyle=":",
                                         **component_plot_kwargs)
                         axes[1, i].plot(time_actual, np.array(magnet_torque_components[key_map[torque_component]])*1000,
                                         color=torque_color,
                                         alpha=alpha,
-                                        zorder=8,
+                                        zorder=mag_zorder,
                                         linestyle="--",
                                         **component_plot_kwargs)
                     if not plot_overall_magnet_torque_component:
@@ -3100,19 +1274,19 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
                         axes[1, i].plot(time_actual, np.array(magnet_torque_components[key_map[torque_from_force_component]])*1000,
                                         color=torque_color,
                                         alpha=alpha,
-                                        zorder=8,
+                                        zorder=mag_zorder,
                                         linestyle=":",
                                         **component_plot_kwargs)
                         axes[1, i].plot(time_actual, np.array(magnet_torque_components[key_map[torque_component]])*1000,
                                         color=torque_color,
                                         alpha=alpha,
                                         label=label,
-                                        zorder=8,
+                                        zorder=mag_zorder,
                                         linestyle="--",
                                         **component_plot_kwargs)
         if plot_mean_values:
             mean_value = np.mean(actual_wrench_df[key_map[torque_component]]*1e3)
-            axes[1, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean Actual Torque', zorder=11)
+            axes[1, i].axhline(mean_value, color='tab:purple', linestyle='--', label=f'Mean actual torque', zorder=11)
         axes[1, i].set_title(title)
         axes[1, i].grid(True)
         if i == 0:
@@ -3123,30 +1297,27 @@ def plot_actual_wrench_on_dipole_center_from_each_magnet(pose_df: pd.DataFrame,
     # Shared X-axis
     for ax in axes[1, :]:
         ax.set_xlabel('Time (s)')
-    
+
     axes[0, 1].sharey(axes[0, 0])
     axes[0, 2].sharey(axes[0, 0])
     axes[1, 1].sharey(axes[1, 0])
     axes[1, 2].sharey(axes[1, 0])
 
     # Autoscale axes
-    for ax_row in axes: 
+    for ax_row in axes:
             for ax in ax_row:
-                ax.relim()   
+                ax.relim()
                 ax.autoscale()
 
     fig.tight_layout()
 
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
+    if save_as:
+        save_plot(save_as, fig, inkscape_path=INKSCAPE_PATH)
 
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
-    
+
     if return_actual_wrench:
         actual_wrench_df['time'] = time_actual
         return fig, axes, actual_wrench_df
@@ -3186,9 +1357,9 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
     quaternions = dipole_center_pose_df[orientation_columns].to_numpy()
 
     # Compute angular velocities using finite differences on Euler angles
-    euler_angles = np.array([geometry.euler_xyz_from_quaternion(dipole_center_pose_df[orientation_columns].iloc[i].to_numpy())
+    euler_angles = np.array([geometry_jit.euler_xyz_from_quaternion(dipole_center_pose_df[orientation_columns].iloc[i].to_numpy())
                              for i in range(len(dipole_center_pose_df))])
-    
+
     # Compute angular velocities using finite differences of Euler angles
     euler_rates_fd = np.diff(euler_angles, axis=0) / np.diff(time)[:, None]
     euler_rates_fd = np.vstack([np.zeros(3), euler_rates_fd])  # Insert a zero at the start for the first time step
@@ -3198,7 +1369,7 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
     colors = ['tab:blue', 'tab:red', 'tab:green']  # Velocity (actual, reference), Angular Velocity (actual, reference)
 
     # Plot angular velocities (wx, wy, wz) on second row
-    angular_velocities_fd = np.array([geometry.local_angular_velocities_from_euler_xyz_rate(euler_angles[i], euler_rates_fd[i])
+    angular_velocities_fd = np.array([geometry_jit.euler_xyz_rate_to_local_angular_velocity(euler_rates_fd[i], euler_angles[i])
                                       for i in range(len(dipole_center_pose_df))]) # Get local angular velocities from Euler angle derivatives
 
     angular_velocities_pynumdiff = None
@@ -3218,7 +1389,7 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
             return pynumdiff.smooth_finite_difference.butterdiff(
                 signal, dt, params=signal_params, options={'iterate': True}
             )
-        
+
         linear_velocities_pynumdiff = np.zeros_like(linear_velocities)
         euler_rates_pynumdiff = np.zeros_like(euler_rates_fd)
         euler_angles_filtered = np.zeros_like(euler_angles)
@@ -3231,9 +1402,9 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
             ang_signal_filtered, ang_signal_dot = optimal_diff_signal(ang_signal)
             euler_rates_pynumdiff[:, i] = ang_signal_dot
             euler_angles_filtered[:, i] = ang_signal_filtered
-        
+
         # Finally convert the euler rates to angular velocities
-        angular_velocities_pynumdiff = np.array([geometry.local_angular_velocities_from_euler_xyz_rate(euler_angles_filtered[i], euler_rates_pynumdiff[i])
+        angular_velocities_pynumdiff = np.array([geometry_jit.euler_xyz_rate_to_local_angular_velocity(euler_rates_pynumdiff[i], euler_angles_filtered[i])
                                                  for i in range(len(dipole_center_pose_df))]) # Get local angular velocities from Euler angle derivatives
 
     linear_velocities_wrench = None
@@ -3249,15 +1420,15 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
         linear_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.force.z"] / rigid_body_dipole.mass_properties.m) * dipole_actual_wrench_df["dt"]).cumsum()
 
         # Compute angular velocity (integrate torques)
-        angular_velocities_wrench[:, 0] = ((dipole_actual_wrench_df["wrench.torque.x"] / rigid_body_dipole.mass_properties.principal_inertia_properties.Ix[0, 0]) * dipole_actual_wrench_df["dt"]).cumsum()
-        angular_velocities_wrench[:, 1] = ((dipole_actual_wrench_df["wrench.torque.y"] / rigid_body_dipole.mass_properties.principal_inertia_properties.Iy[1, 1]) * dipole_actual_wrench_df["dt"]).cumsum()
-        angular_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.torque.z"] / rigid_body_dipole.mass_properties.principal_inertia_properties.Iz[2, 2]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 0] = ((dipole_actual_wrench_df["wrench.torque.x"] / rigid_body_dipole.mass_properties.I_bf[0, 0]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 1] = ((dipole_actual_wrench_df["wrench.torque.y"] / rigid_body_dipole.mass_properties.I_bf[1, 1]) * dipole_actual_wrench_df["dt"]).cumsum()
+        angular_velocities_wrench[:, 2] = ((dipole_actual_wrench_df["wrench.torque.z"] / rigid_body_dipole.mass_properties.I_bf[2, 2]) * dipole_actual_wrench_df["dt"]).cumsum()
 
     if not local_frame_for_ang_vel:
         # Convert angular velocities to the global frame.
         # The estimated angular velocities are directly in the local frame always.
         def rotate_array_from_quat_array(qarr: np.ndarray, varr: np.ndarray):
-            return np.array([geometry.rotate_vector_from_quaternion(qarr[i], varr[i])
+            return np.array([geometry_jit.rotate_vector_from_quaternion(qarr[i], varr[i])
                                           for i in range(len(qarr))])
         angular_velocities_fd = rotate_array_from_quat_array(quaternions, angular_velocities_fd) # Get local angular velocities from Euler angle derivatives
         if angular_velocities_pynumdiff is not None:
@@ -3279,7 +1450,7 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
             axes[0, i].set_ylabel('Velocity (mm/s)')
         if i == 2:
             axes[0, i].legend(loc='upper right')
-    
+
     for i, component in enumerate(['wx', 'wy', 'wz']):
         axes[1, i].plot(time, np.rad2deg(angular_velocities_fd[:, i]), label=f'{component} (deg/s)', color=colors[0], zorder=1, **kwargs)
         if also_plot_pynumdiff:
@@ -3300,16 +1471,16 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
     # Shared X-axis for all subplots
     for ax in axes[1, :]:
         ax.set_xlabel('Time (s)')
-    
+
     axes[0, 1].sharey(axes[0, 0])
     axes[0, 2].sharey(axes[0, 0])
     axes[1, 1].sharey(axes[1, 0])
     axes[1, 2].sharey(axes[1, 0])
 
     # Autoscale axes
-    for ax_row in axes: 
+    for ax_row in axes:
         for ax in ax_row:
-            ax.relim()   
+            ax.relim()
             ax.autoscale()
 
     fig.tight_layout()
@@ -3320,322 +1491,11 @@ def plot_estimated_velocities(dipole_center_pose_df: pd.DataFrame,
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
 
     return fig, axes
-
-######################################
-# SIGNAL PROCESSING RELATED PLOTS
-######################################
-def plot_fft_from_dataframe(dataframe: pd.DataFrame, 
-                            column_names: list,
-                            label_list: list,
-                            remove_dc: bool = False, 
-                            positive_freqs_only: bool = False,
-                            share_scales: bool = False,
-                            subplot_shape: Optional[Tuple[int]] = None,
-                            figsize: Optional[Tuple[int]] = None,
-                            suptitle: Optional[str] = None,
-                            save_as: str = None, 
-                            save_as_emf: bool = False, 
-                            inkscape_path: str = INKSCAPE_PATH):
-    """
-    Computes and plots the Fast Fourier Transform (FFT) for signals from a dataframe.
-    The sampling frequency is derived from the 'time' column in the dataframe. 
-    Shared x-axis across all subplots, with one subplot per signal column.
-
-    Parameters:
-
-        dataframe (pd.DataFrame): 
-            Input dataframe containing the 'time' column and signal columns for FFT computation.
-        column_names (list): 
-            List of column names in the dataframe representing the signals to compute and plot FFT for.
-        save_as (str, optional): 
-            Path to save the plot as an SVG or PNG file (without extension).
-        save_as_emf (bool, optional): 
-            If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
-        inkscape_path (str, optional): 
-            Path to the Inkscape executable for converting to EMF format.
-        **kwargs: 
-            Additional keyword arguments passed to plt.plot().
-    """
-    # Calculate sampling frequency
-    dt = np.mean(np.diff(dataframe['time']))  # Calculate time step
-
-    # Prepare the FFT plot
-    if subplot_shape is not None:
-        sshape = subplot_shape
-    else:
-        sshape = (len(column_names), 1)
-    if figsize is not None:
-        fsize = figsize
-    else:
-        fsize = (10, len(column_names) * 3)
-    fig, axs = plt.subplots(sshape[0], sshape[1], figsize=fsize, sharex=share_scales, sharey=share_scales)
-    for i, (column, label) in enumerate(zip(column_names, label_list)):
-        # Compute FFT
-        signal = dataframe[column].values
-        fft_values, fft_frequencies = get_signal_fft(signal, dt, remove_dc=remove_dc, positive_freqs_only=positive_freqs_only)
-
-        # Plot FFT
-        if 1 in sshape:
-            ax = axs[i]
-        else:
-            j = i // sshape[1]
-            k = i - j*sshape[1] - 1
-            ax = axs[j, k]
-        ax.plot(fft_frequencies, fft_values, label=f'FFT of {label}', color='tab:blue')
-        ax.set_xlabel('Frequency (Hz)')
-        ax.set_ylabel('Magnitude')
-        title = f'FFT Plot for {label}'
-        if remove_dc:
-            title += ' (DC Removed)'
-        ax.set_title(title)
-        ax.grid(True)
-        ax.legend()
-    
-    if suptitle is not None:
-        fig.suptitle(suptitle)
-
-    fig.tight_layout()
-
-    # Save the plot if required
-    if save_as and save_as.endswith('.svg'):
-        fig.savefig(save_as, format='svg')
-        if save_as_emf:
-            emf_file = save_as.replace('.svg', '.emf')
-            export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
-
-def plot_time_series_and_fft(dataframe: pd.DataFrame, 
-                             column_names: list,
-                             label_list: list,
-                             remove_dc: bool = False, 
-                             save_as: str = None, 
-                             save_as_emf: bool = False, 
-                             inkscape_path: str = INKSCAPE_PATH, 
-                             **kwargs):
-    """
-    Plots both the time series data and its corresponding FFT for given columns in the dataframe.
-    The sampling frequency is derived from the 'time' column. Produces a 2 x n subplot layout,
-    where the first row contains the time series and the second row contains the FFT.
-
-    Parameters:
-        dataframe (pd.DataFrame): 
-            Input dataframe containing the 'time' column and signal columns for FFT computation.
-        column_names (list): 
-            List of column names in the dataframe representing the signals to compute and plot FFT for.
-        save_as (str, optional): 
-            Path to save the plot as an SVG or PNG file (without extension).
-        save_as_emf (bool, optional): 
-            If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
-        inkscape_path (str, optional): 
-            Path to the Inkscape executable for converting to EMF format.
-        **kwargs: 
-            Additional keyword arguments passed to plt.plot().
-    """
-    # Ensure the dataframe has a 'time' column
-    if 'time' not in dataframe.columns:
-        raise ValueError("The dataframe must contain a 'time' column.")
-    
-    time = dataframe['time'].values
-    dt = np.mean(np.diff(time))  # Calculate time step
-    
-    # Prepare the figure
-    num_columns = len(column_names)
-    fig, axes = plt.subplots(2, num_columns, figsize=(6 * num_columns, 8), constrained_layout=True)
-    if num_columns == 1:  # If only one signal, axes won't be 2D, so wrap in a list
-        axes = np.array([[axes[0]], [axes[1]]])
-
-    for idx, (column, label) in enumerate(zip(column_names, label_list)):
-        if column not in dataframe.columns:
-            raise ValueError(f"Column '{column}' not found in the dataframe.")
-        
-        signal = dataframe[column].values
-        
-        # Time series plot
-        axes[0, idx].plot(time, signal, label=label, **kwargs)
-        axes[0, idx].set_title(f"Time Series - {label}")
-        axes[0, idx].set_xlabel("Time (s)")
-        axes[0, idx].set_ylabel("Amplitude")
-        axes[0, idx].grid(True)
-        axes[0, idx].legend()
-
-        # FFT calculation
-        fft_vals = np.abs(scifft.fft(signal))
-        fft_freqs = scifft.fftfreq(len(signal), dt)
-        title = f"FFT - {label}"
-        if remove_dc:
-            fft_vals[0] = 0.0
-            title += " (DC Removed)"
-        fft_freqs = np.roll(fft_freqs, len(fft_freqs)//2)
-        fft_vals = np.roll(fft_vals, len(fft_vals)//2)
-
-        # FFT plot
-        axes[1, idx].plot(fft_freqs, fft_vals, label=label, **kwargs)
-        axes[1, idx].set_title(title)
-        axes[1, idx].set_xlabel("Frequency (Hz)")
-        axes[1, idx].set_ylabel("Amplitude")
-        axes[1, idx].grid(True)
-        axes[1, idx].legend()
-
-    # Adjust layout and titles
-    fig.suptitle("Time Series and FFT Plots", fontsize=16, weight='bold')
-    
-    # Save the figure if specified
-    if save_as:
-        fig.savefig(f"{save_as}.svg", format='svg')
-        if save_as_emf and inkscape_path:
-            emf_path = f"{save_as}.emf"
-            svg_path = f"{save_as}.svg"
-            import subprocess
-            subprocess.run([inkscape_path, svg_path, '--export-type=emf', '--export-filename', emf_path])
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-
-    return fig, axes
-
-def plot_ffts_from_two_dataframes(dataframe1: pd.DataFrame,
-                                  dataframe2: pd.DataFrame,
-                                  column_names1: List,
-                                  label_list1: List,
-                                  column_names2: Optional[List] = None,
-                                  label_list2: Optional[List] = None,
-                                  label_suffix1: Optional[str] = None,
-                                  label_suffix2: Optional[str] = None,
-                                  clip_frequency: bool = False,
-                                  remove_dc: bool = False,
-                                  positive_freqs_only: bool = False,
-                                  share_scales: bool = False,
-                                  figsize: Optional[Tuple[int]] = None,
-                                  suptitle: Optional[str] = None,
-                                  save_as: str = None,
-                                  save_as_emf: bool = False,
-                                  inkscape_path: str = INKSCAPE_PATH
-                                ):
-    """
-    Computes and plots the FFT for signals from two dataframes side by side.
-
-    Parameters:
-        dataframe1, dataframe2 (pd.DataFrame):
-            Input dataframes containing the 'time' column and signal columns for FFT computation.
-        column_names1, column_names2 (list, optional):
-            Lists of column names in the dataframes representing the signals to compute and plot FFT for.
-            If `column_names2` is None, it defaults to `column_names1`.
-        label_list1, label_list2 (list, optional):
-            Labels for the signals from both dataframes. If `label_list2` is None, it defaults to `label_list1`.
-        remove_dc (bool, optional):
-            If True, removes the DC component from the signals before FFT computation.
-        positive_freqs_only (bool, optional):
-            If True, only plots the positive frequencies.
-        share_scales (bool, optional):
-            If True, shares the x and y axes across all subplots.
-        subplot_shape (Tuple[int], optional):
-            Tuple specifying the number of rows and columns for subplots. If None, defaults to a 2-row layout.
-        figsize (Tuple[int], optional):
-            Size of the figure. Defaults to a size proportional to the number of signals.
-        suptitle (str, optional):
-            Overall title for the combined plot.
-        save_as (str, optional):
-            Path to save the plot as an SVG or PNG file (without extension).
-        save_as_emf (bool, optional):
-            If True, saves the plot as an EMF file. Requires 'inkscape_path' to be provided.
-        inkscape_path (str, optional):
-            Path to the Inkscape executable for converting to EMF format.
-
-    Returns:
-        fig, axs: Matplotlib figure and axes objects.
-    """
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    if column_names2 is None:
-        column_names2 = column_names1
-    if label_list2 is None:
-        label_list2 = label_list1
-
-    # Calculate sampling frequency
-    dt1 = np.mean(np.diff(dataframe1['time']))
-    dt2 = np.mean(np.diff(dataframe2['time']))
-
-    # Determine subplot shape
-    num_signals = len(column_names1)
-    subplot_shape = (num_signals, 2)  # Default to 2 columns (one per dataframe)
-    if figsize is None:
-        figsize = (10, num_signals * 3)
-
-    fig, axs = plt.subplots(subplot_shape[0], subplot_shape[1], figsize=figsize, sharex=share_scales, sharey=share_scales)
-
-    for i, (col1, label1, col2, label2) in enumerate(zip(column_names1, label_list1, column_names2, label_list2)):
-        # Compute FFT for dataframe1
-        signal1 = dataframe1[col1].values
-        fft_values1, fft_frequencies1 = get_signal_fft(signal1, dt1, remove_dc=remove_dc, positive_freqs_only=positive_freqs_only)
-
-        # Compute FFT for dataframe2
-        signal2 = dataframe2[col2].values
-        fft_values2, fft_frequencies2 = get_signal_fft(signal2, dt2, remove_dc=remove_dc, positive_freqs_only=positive_freqs_only)
-
-        # Plot FFT for dataframe1
-        ax1 = axs[i, 0] if len(column_names1) > 1 else axs[0]
-        if label_suffix1 is not None:
-            label1 += " " + label_suffix1
-        if label_suffix2 is not None:
-            label2 += " " + label_suffix2
-        
-        if clip_frequency:
-            f_min = np.max([np.min(fft_frequencies1), np.min(fft_frequencies2)])
-            f_max = np.min([np.max(fft_frequencies1), np.max(fft_frequencies2)])
-            
-            f_mask1 = np.logical_and(fft_frequencies1 > f_min, fft_frequencies1 < f_max)
-            f_mask2 = np.logical_and(fft_frequencies2 > f_min, fft_frequencies2 < f_max)
-
-            fft_frequencies1 = fft_frequencies1[f_mask1]
-            fft_frequencies2 = fft_frequencies2[f_mask2]
-            fft_values1 = fft_values1[f_mask1]
-            fft_values2 = fft_values2[f_mask2]
-
-        ax1.plot(fft_frequencies1, fft_values1, label=f'FFT of {label1}', color='tab:blue')
-        ax1.set_xlabel('Frequency (Hz)')
-        ax1.set_ylabel('Magnitude')
-        ax1.set_title(f'{label1} (Dataframe 1)')
-        ax1.grid(True)
-        ax1.legend()
-
-        # Plot FFT for dataframe2
-        ax2 = axs[i, 1] if len(column_names1) > 1 else axs[1]
-        ax2.plot(fft_frequencies2, fft_values2, label=f'FFT of {label2}', color='tab:orange')
-        ax2.set_xlabel('Frequency (Hz)')
-        ax2.set_ylabel('Magnitude')
-        ax2.set_title(f'{label2} (Dataframe 2)')
-        ax2.grid(True)
-        ax2.legend()
-
-    if suptitle is not None:
-        fig.suptitle(suptitle)
-
-    fig.tight_layout()
-
-    # Save the plot if required
-    if save_as:
-        fig.savefig(save_as, format='svg', dpi=300)
-        if save_as_emf:
-            emf_path = save_as.replace('.svg', '.emf')
-            fig.savefig(emf_path, format='emf', dpi=300)
-            if inkscape_path:
-                os.system(f'"{inkscape_path}" "{emf_path}" --export-filename="{save_as}"')
-
-    
-    if not DISABLE_PLT_SHOW:
-        fig.show()
-    return fig, axs
 
 ######################################
 # MAGNETIC ACTUATION ANALYSIS PLOTS
@@ -3646,7 +1506,7 @@ def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
                               save_as_emf: bool = False,
                               inkscape_path: str = INKSCAPE_PATH,
                               **kwargs):
-    
+
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(jma_cond_df['time'], jma_cond_df['vector_0'], color='#0343df', label='Allocation condition', **kwargs)  # Blue
     ax.set_xlabel('Time')
@@ -3662,7 +1522,7 @@ def plot_jma_condition_number(jma_cond_df: pd.DataFrame,
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
 
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
 
@@ -3672,7 +1532,7 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
                                   save_as: str=None, save_as_emf: bool=False, inkscape_path: str=INKSCAPE_PATH, **kwargs):
     """
     Plots target Euler angles and positions from actual poses DataFrame and variable reference poses DataFrame.
-    
+
     Parameters:
     - actual_poses (pd.DataFrame): DataFrame with actual poses (positions and quaternions) and time.
     - reference_poses (pd.DataFrame): DataFrame with reference poses (positions and quaternions) and time.
@@ -3682,7 +1542,7 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
     actual_orientations = actual_poses[['transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z', 'transform.rotation.w']].values
 
     # Convert quaternions to Euler angles
-    actual_euler = np.array([geometry.euler_xyz_from_quaternion(q) for q in actual_orientations])
+    actual_euler = np.array([geometry_jit.euler_xyz_from_quaternion(q) for q in actual_orientations])
 
     # Convert to degrees
     actual_euler = np.rad2deg(actual_euler)
@@ -3727,8 +1587,8 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
         axs[4].sharey(axs[3])
         axs[5].sharey(axs[3])
         # Autoscale shared axes
-        for ax in axs: 
-            ax.relim()   
+        for ax in axs:
+            ax.relim()
             ax.autoscale()
 
     # Adjust layout
@@ -3738,349 +1598,10 @@ def plot_6dof_pose_with_jma_condition_number(actual_poses: pd.DataFrame, cond_df
         if save_as_emf:
             emf_file = save_as.replace('.svg', '.emf')
             export_to_emf(save_as, emf_file, inkscape_path=inkscape_path)
-    
+
     if not DISABLE_PLT_SHOW:
         fig.show()
     return fig, axs
-
-def plot_volumetric_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
-                                                  calibration_model: common.OctomagCalibratedModel,
-                                                  orientation_quaternion: np.ndarray,
-                                                  cond_threshold: float = 20,
-                                                  cond_color_steps: float = 15,
-                                                  clip_cond: float = 100,
-                                                  cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                  cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                  cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                  reject_M_component: str = "Tz",
-                                                  num_samples: int = 20,
-                                                  display_interactive_pane : bool = True,
-                                                  coil_subset: Optional[np.ndarray] = None,
-                                                  save_as: str = None,
-                                                  save_dataset: bool = False,
-                                                  vtk_dataset_save_kwargs: Dict = dict(),
-                                                  **save_kwargs):
-    """
-    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
-    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
-
-    Apart from this, I use tvtk to save .vti data.
-    """
-    
-    # Sampling points according to the desired plot style.
-    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
-    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
-    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
-    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
-
-    M = geometry.magnetic_interaction_matrix_from_quaternion(orientation_quaternion,
-                                                             dipole.strength,
-                                                             full_mat=True,
-                                                             torque_first=True,
-                                                             dipole_axis=dipole.axis)
-    
-    reject_row_map = {"Tx": 0, "Ty": 1, "Tz": 2}
-    idx_r = reject_row_map[reject_M_component]
-    M = np.vstack((M[:idx_r], M[idx_r+1:]))
-
-    @np.vectorize
-    def get_ma_condition(x, y, z):
-        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
-        if coil_subset is not None:
-            A = A[:, coil_subset]
-        return np.linalg.cond(M @ A)
-    
-    cond = get_ma_condition(X, Y, Z)
-    subspace_selection_mask = (np.abs(X) < 0.02) & (np.abs(Y) < 0.02) & (np.abs(Z) < 0.02)
-    cond_subspace = cond[subspace_selection_mask]
-    print(f"cond shape: {cond.shape}, subspace selection mask count: {np.sum(subspace_selection_mask)}, cond subspace shape: {cond_subspace.shape}")
-    def calc_rms(arr):
-        return np.sqrt(np.mean(np.square(arr)))
-    print(f"RMS Condition number value in a 2x2x2mm workspace around origin: {calc_rms(cond_subspace)}")
-    
-    # Clipping for visualization
-    cond = np.clip(cond, 0.0, clip_cond)
-
-
-    # Volumetric rendering
-    cond_field = mlab.pipeline.scalar_field(cond)
-
-    ctf = ColorTransferFunction()
-
-    # # Add solid green color for very low values
-    ctf.add_rgb_point(0,   0, 1, 0)  # Green at lowest value
-    # ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
-
-    # Add colormap for values ≥ 20 (e.g., blue to red gradient)
-    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue at threshold
-    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
-    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
-
-
-    # Create opacity transfer function (OTF) by manipulating the _volume_property
-    opacity_function = tvtk.PiecewiseFunction()
-    # Set opacity for values below the threshold to be opaque (1.0)
-    opacity_function.add_point(1.0, 0.0)  # Fully opaque at lowest value
-    opacity_function.add_point(cond_threshold, 0.2)  # Less opaque at threshold
-    # Set opacity to 0.0 for higher values, making them fully transparent
-    opacity_function.add_point(cond_threshold + cond_color_steps, 0.1)
-    opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.01)
-
-    cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=clip_cond)
-
-    cond_vol._volume_property.set_color(ctf)  # Set custom color mapping
-    cond_vol._volume_property.set_scalar_opacity(opacity_function)
-    cond_vol.update_ctf = True  # Update color transfer function
-    # Add axes to the plot
-    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([cube_x_lim[0], 
-                                                                cube_x_lim[1], 
-                                                                cube_y_lim[0], 
-                                                                cube_y_lim[1],
-                                                                cube_z_lim[0],
-                                                                cube_z_lim[1]])*1e3)
-    mlab.outline()
-
-    if save_as is not None:
-        mlab.savefig(save_as, **save_kwargs)
-        if save_dataset:
-            base_name, _ = os.path.splitext(save_as)
-            vt_name = base_name + ".vti"
-            cond_field.save_output(vt_name, **vtk_dataset_save_kwargs)
-
-    if display_interactive_pane:
-        mlab.show()
-
-    return (cond_field, cond_vol, axes)
-
-def plot_slices_ma_condition_number_variation(dipole: mechanical.MagneticDipole,
-                                                calibration_model: common.OctomagCalibratedModel,
-                                                orientation_quaternion: np.ndarray,
-                                                cond_range: np.ndarray = np.array([0.0, 50.0]),
-                                                cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                reject_M_component: str = "Tz",
-                                                num_samples: int = 20,
-                                                x_plane_idx: Optional[int] = None,
-                                                y_plane_idx: Optional[int] = None,
-                                                z_plane_idx: Optional[int] = None,
-                                                disable_x_slice: bool = False,
-                                                disable_y_slice: bool = False,
-                                                disable_z_slice: bool = False,
-                                                display_interactive_pane : bool = True,
-                                                coil_subset: Optional[np.ndarray] = None,
-                                                save_as: str = None,
-                                                **save_kwargs):
-    """
-    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
-    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
-
-    Apart from this, I use tvtk to save .vti data.
-    """
-    
-    # Sampling points according to the desired plot style.
-    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
-    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
-    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
-    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
-
-    M = geometry.magnetic_interaction_matrix_from_quaternion(orientation_quaternion,
-                                                             dipole.strength,
-                                                             full_mat=True,
-                                                             torque_first=True,
-                                                             dipole_axis=dipole.axis)
-    
-    reject_row_map = {"Tx": 0, "Ty": 1, "Tz": 2}
-    idx_r = reject_row_map[reject_M_component]
-    M = np.vstack((M[:idx_r], M[idx_r+1:]))
-
-    @np.vectorize
-    def get_ma_condition(x, y, z):
-        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
-        if coil_subset is not None:
-            A = A[:, coil_subset]
-        return np.linalg.cond(M @ A)
-    
-    cond = get_ma_condition(X, Y, Z)
-
-    # Render x and y aligned planes with a well defined colormap
-    if x_plane_idx is None:
-        x_plane_idx = num_samples // 2
-    if y_plane_idx is None:
-        y_plane_idx = num_samples // 2
-    if z_plane_idx is None:
-        z_plane_idx = num_samples // 2
-    
-    slice_x = None
-    slice_y = None
-    slice_z = None
-
-    if not disable_x_slice:
-        slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
-                                        vmin=cond_range[0], vmax=cond_range[1])
-    if not disable_y_slice:
-        slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
-                                        vmin=cond_range[0], vmax=cond_range[1])
-    if not disable_z_slice:
-        slice_z = mlab.volume_slice(cond, plane_orientation='z_axes', slice_index=z_plane_idx, colormap="jet",
-                                        vmin=cond_range[0], vmax=cond_range[1])
-
-    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([cube_x_lim[0], 
-                                                                cube_x_lim[1], 
-                                                                cube_y_lim[0], 
-                                                                cube_y_lim[1],
-                                                                cube_z_lim[0],
-                                                                cube_z_lim[1]])*1e3)
-    colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
-    mlab.outline()
-
-    if save_as is not None:
-        mlab.savefig(save_as, **save_kwargs)
-
-    if display_interactive_pane:
-        mlab.show()
-
-    return (slice_x, slice_y, slice_z, axes, colorbar)
-
-def plot_volumetric_current_allocation_condition_number_variation(calibration_model: common.OctomagCalibratedModel,
-                                                                    cond_threshold: float = 20,
-                                                                    cond_color_steps: float = 10,
-                                                                    cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                                    cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                                    cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                                    num_samples: int = 20,
-                                                                    display_interactive_pane : bool = True,
-                                                                    save_as: str = None,
-                                                                    save_dataset: bool = False,
-                                                                    vtk_dataset_save_kwargs: Dict = dict(),
-                                                                    **save_kwargs):
-    """
-    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
-    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
-
-    Apart from this, I use tvtk to save .vti data.
-    """
-    
-    # Sampling points according to the desired plot style.
-    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
-    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
-    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
-    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
-
-    @np.vectorize
-    def get_ma_condition(x, y, z):
-        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
-        return np.linalg.cond(A)
-    
-    cond = get_ma_condition(X, Y, Z)
-
-    # Volumetric rendering
-    cond_field = mlab.pipeline.scalar_field(cond)
-
-    ctf = ColorTransferFunction()
-
-    # # Add solid green color for very low values
-    ctf.add_rgb_point(0,   0, 1, 0)  # Green at lowest value
-    # ctf.add_rgb_point(cond_threshold - 0.1, 0, 1, 0)  # Green up to threshold
-
-    # Add colormap for values ≥ 20 (e.g., blue to red gradient)
-    ctf.add_rgb_point(cond_threshold,  0, 0, 1)  # Blue at threshold
-    ctf.add_rgb_point(cond_threshold + cond_color_steps,  1, 1, 0)  # Yellow for arbitrarily high
-    ctf.add_rgb_point(cond_threshold + 2*cond_color_steps,  1, 0, 0)  # Red until cond number steps from threshold
-
-
-    # Create opacity transfer function (OTF) by manipulating the _volume_property
-    opacity_function = tvtk.PiecewiseFunction()
-    # Set opacity for values below the threshold to be opaque (1.0)
-    opacity_function.add_point(1.0, 0.0)  # Fully opaque at lowest value
-    opacity_function.add_point(cond_threshold, 0.2)  # Less opaque at threshold
-    # Set opacity to 0.0 for higher values, making them fully transparent
-    opacity_function.add_point(cond_threshold + cond_color_steps, 0.1)
-    opacity_function.add_point(cond_threshold + 2*cond_color_steps, 0.01)
-
-    cond_vol = mlab.pipeline.volume(cond_field, vmin=0, vmax=0.8)
-
-    cond_vol._volume_property.set_color(ctf)  # Set custom color mapping
-    cond_vol._volume_property.set_scalar_opacity(opacity_function)
-    cond_vol.update_ctf = True  # Update color transfer function
-    # Add axes to the plot
-    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
-                                                                cube_x_lim[1], 
-                                                                cube_y_lim[0], 
-                                                                cube_y_lim[1],
-                                                                cube_z_lim[0],
-                                                                cube_z_lim[1]])*1e3)
-    mlab.outline()
-
-    if save_as is not None:
-        mlab.savefig(save_as, **save_kwargs)
-        if save_dataset:
-            base_name, _ = os.path.splitext(save_as)
-            vt_name = base_name + ".vti"
-            cond_field.save_output(vt_name, **vtk_dataset_save_kwargs)
-
-    if display_interactive_pane:
-        mlab.show()
-
-    return (cond_field, cond_vol, axes)
-
-def plot_slices_currnet_allocation_condition_number_variation(calibration_model: common.OctomagCalibratedModel,
-                                                                cond_range: np.ndarray = np.array([0.0, 50.0]),
-                                                                cube_x_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                                cube_y_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                                cube_z_lim: np.ndarray = np.array([-0.06, 0.06]),
-                                                                num_samples: int = 20,
-                                                                x_plane_idx : Optional[int] = None,
-                                                                y_plane_idx : Optional[int] = None,
-                                                                display_interactive_pane : bool = True,
-                                                                save_as: str = None,
-                                                                **save_kwargs):
-    """
-    For supported formats using mayavi'2 inbuilt save_fig functionality, refer to:
-    https://docs.enthought.com/mayavi/mayavi/auto/mlab_figure.html#savefig
-
-    Apart from this, I use tvtk to save .vti data.
-    """
-    
-    # Sampling points according to the desired plot style.
-    x_ticks = np.linspace(cube_x_lim[0], cube_x_lim[1], num_samples)
-    y_ticks = np.linspace(cube_y_lim[0], cube_y_lim[1], num_samples)
-    z_ticks = np.linspace(cube_z_lim[0], cube_z_lim[1], num_samples)
-    X, Y, Z = np.meshgrid(x_ticks, y_ticks, z_ticks)
-
-    @np.vectorize
-    def get_ma_condition(x, y, z):
-        A = calibration_model.get_actuation_matrix(np.array([x, y, z]))
-        return np.linalg.cond(A)
-    
-    cond = get_ma_condition(X, Y, Z)
-
-    # Render x and y aligned planes with a well defined colormap
-    if x_plane_idx is None:
-        x_plane_idx = num_samples // 2
-    if y_plane_idx is None:
-        y_plane_idx = num_samples // 2
-    slice_x = mlab.volume_slice(cond, plane_orientation='x_axes', slice_index=x_plane_idx, colormap="jet",
-                                    vmin=cond_range[0], vmax=cond_range[1])
-    slice_y = mlab.volume_slice(cond, plane_orientation='y_axes', slice_index=y_plane_idx, colormap="jet",
-                                    vmin=cond_range[0], vmax=cond_range[1])
-
-    axes = mlab.axes(xlabel='X (mm)', ylabel='Y (mm)', zlabel='Z (mm)', ranges=np.array([-cube_x_lim[0], 
-                                                                cube_x_lim[1], 
-                                                                cube_y_lim[0], 
-                                                                cube_y_lim[1],
-                                                                cube_z_lim[0],
-                                                                cube_z_lim[1]])*1e3)
-    colorbar = mlab.colorbar(orientation='vertical', nb_labels=5)
-    mlab.outline()
-
-    if save_as is not None:
-        mlab.savefig(save_as, **save_kwargs)
-
-    if display_interactive_pane:
-        mlab.show()
-
-    return (slice_x, slice_y, axes, colorbar)
 
 ######################################
 # UTILITY PLOTS LIKE COMPUTATION TIMES

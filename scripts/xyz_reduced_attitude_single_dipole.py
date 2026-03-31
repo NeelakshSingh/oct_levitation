@@ -214,9 +214,6 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
     def callback_control_logic(self, 
                                position : np.ndarray, 
                                quaternion: np.ndarray,
-                               rpy: np.ndarray,
-                               linear_velocity: np.ndarray = None, 
-                               angular_velocity: np.ndarray = None, 
                                sft_coeff: float = 1.0):
         
         
@@ -246,30 +243,26 @@ class SimpleCOMWrenchSingleDipoleController(ControlSessionNodeBase):
 
         ref_omega_local = R @ ref_omega_inertial
 
-        if linear_velocity is None or angular_velocity is None:
-            if self.__first_reading:
-                self.last_R = R
-                self.last_z = z_com
-                self.last_x = x_com
-                self.last_y = y_com
-                self.__first_reading = False
-
-            self.R_dot = self.diff_alpha_RA*(R - self.last_R) + self.diff_beta_RA*self.R_dot
-            self.z_dot = self.diff_alpha_z*(z_com - self.last_z) + self.diff_beta_z*self.z_dot
-            self.x_dot = self.diff_alpha_x*(x_com - self.last_x) + self.diff_beta_x*self.x_dot
-            self.y_dot = self.diff_alpha_y*(y_com - self.last_y) + self.diff_beta_y*self.y_dot
-            omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
-
-            self.x_dot, self.y_dot, self.z_dot = numerical.numba_clip(np.array([self.x_dot, self.y_dot, self.z_dot]), -self.MAX_LINEAR_VELOCITY, self.MAX_LINEAR_VELOCITY)
-            omega = numerical.numba_clip(omega, -self.MAX_ANGULAR_VELOCITY, self.MAX_ANGULAR_VELOCITY)
-
+        if self.__first_reading:
+            self.last_R = R
             self.last_z = z_com
             self.last_x = x_com
             self.last_y = y_com
-            self.last_R = R
-        else:
-            self.x_dot, self.y_dot, self.z_dot = linear_velocity
-            omega = angular_velocity
+            self.__first_reading = False
+
+        self.R_dot = self.diff_alpha_RA*(R - self.last_R) + self.diff_beta_RA*self.R_dot
+        self.z_dot = self.diff_alpha_z*(z_com - self.last_z) + self.diff_beta_z*self.z_dot
+        self.x_dot = self.diff_alpha_x*(x_com - self.last_x) + self.diff_beta_x*self.x_dot
+        self.y_dot = self.diff_alpha_y*(y_com - self.last_y) + self.diff_beta_y*self.y_dot
+        omega = geometry.angular_velocity_body_frame_from_rotation_matrix(R, self.R_dot)
+
+        self.x_dot, self.y_dot, self.z_dot = numerical.numba_clip(np.array([self.x_dot, self.y_dot, self.z_dot]), -self.MAX_LINEAR_VELOCITY, self.MAX_LINEAR_VELOCITY)
+        omega = numerical.numba_clip(omega, -self.MAX_ANGULAR_VELOCITY, self.MAX_ANGULAR_VELOCITY)
+
+        self.last_z = z_com
+        self.last_x = x_com
+        self.last_y = y_com
+        self.last_R = R
 
         self.velocity_msg.twist.linear = Vector3(self.x_dot, self.y_dot, self.z_dot)
         self.velocity_msg.twist.angular = Vector3(omega[0], omega[1], omega[2])

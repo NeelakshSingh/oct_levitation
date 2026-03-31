@@ -10,7 +10,7 @@ import sys
 import oct_levitation.plotting as plotting
 import oct_levitation.processing_utils as utils
 import oct_levitation.common as common
-import oct_levitation.geometry as geometry
+import oct_levitation.geometry_jit as geometry
 
 from oct_levitation.rigid_bodies import REGISTERED_BODIES
 

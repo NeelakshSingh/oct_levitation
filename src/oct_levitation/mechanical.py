@@ -1,7 +1,5 @@
 import numpy as np
 import numpy.typing as np_t
-import oct_levitation.geometry as geometry
-import tf.transformations as tr
 import tf2_ros
 import rospy
 import os

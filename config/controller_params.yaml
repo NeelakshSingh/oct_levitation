@@ -1,6 +1,7 @@
 oct_levitation:
   control_freq: 1000 # ALWAYS MATCH VICON's RATE
-  calibration_file: "mc3ao8s_md200_handp.yaml" # MPEM calibration file to use
+  calibration_base_path: "config/calibration_files/" # Base path for calibration files, which should be in the form of yaml files containing the coil positions and orientations, as well as the mapping from coil currents to forces and torques on the levitated object.
+  calibration_file: "octomag.yaml" # MPEM calibration file to use
   publish_computation_time: true # When true, publishes the control-loop's computation time at every feedback iteration. Useful for debugging issues related to timing.
   soft_start: true # Required because gravity compensation will request very high currents immediately.
   n_drivers: 9 # Number of coils supported by the system at the moment
@@ -26,11 +27,3 @@ oct_levitation:
     start_time: 5.0 # Time to start tracking the trajectory
     end_time: 1000.0 # Time to end the trajectory tracking, use a large number to effectively enable it indefinitely.
     trajectory_name: "z_boundary_pushing_sine_trajectory" # Should be a registered trajectory under the framework described in trajectories.py
-  
-  delay_compensation_kf: # The sampling time of the KF will be the same as the control frequency and the current sensor feedback.
-    enabled: false # KEEP THIS DISABLED. THERE IS NO DELAY COMPENSATING KF IN THIS RELEASE.
-    compensation_steps: 4 # The number of controller time steps worth of delay in the feedback to compensate for.
-    unit_dipole_wrench_noise_std_rpxyz: [3.67859457e-05, 3.15473097e-05, 5.24102267e-04, 5.79027093e-04, 6.19678450e-04]
-    vicon_noise_std_rpxyz: [2.37471348e-05, 8.75457449e-05, 1.01646014e-05, 4.16398263e-06, 6.27907061e-06]
-    publish_computation_time: true
-    warn_on_expected_delay_mismatch: true

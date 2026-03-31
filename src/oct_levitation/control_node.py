@@ -1,24 +1,29 @@
 import os
+import sys
 import rospy
+import rospkg
+import tf2_ros
+import time
+
+import numpy as np
 import oct_levitation.mechanical as mechanical
 import oct_levitation.geometry_jit as geometry
 import oct_levitation.numerical as numerical
-import oct_levitation.trajectories as trajectories
-from oct_levitation.rigid_bodies import REGISTERED_BODIES
-import tf2_ros
-import numpy as np
-import time
-import sys
 
 from geometry_msgs.msg import WrenchStamped, TransformStamped, Quaternion, Vector3, Pose, Twist, TwistStamped
-from oct_levitation.msg import RigidBodyStateEstimate, VectorStamped
 from std_msgs.msg import String
 from mag_manip import mag_manip
 from typing import List, Tuple
 from scipy.linalg import block_diag
+from oct_levitation.msg import VectorStamped
 
 from control_utils.general.utilities import init_system
+
 from oct_levitation.msg import ControllerDetails
+from oct_levitation.common import OCT_LEVITATION_PACKAGE_PATH
+from oct_levitation.trajectory_definitions import REGISTERED_TRAJECTORIES
+from oct_levitation.trajectories import TrajectoryCallable
+from oct_levitation.rigid_bodies import REGISTERED_BODIES
 
 class ControlSessionNodeBase:
     """
@@ -29,7 +34,7 @@ class ControlSessionNodeBase:
     def __init__(self):
         rospy.init_node("oct_levitation_controller_node")
 
-        self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(os.environ["HOME"], ".ros/cal"))
+        self.calfile_base_path = rospy.get_param("~calfile_base_path", os.path.join(OCT_LEVITATION_PACKAGE_PATH, 'config', 'calibration_files'))
         self.calibration_file = rospy.get_param('oct_levitation/calibration_file')
         self.RT_PRIORITY_ENABLED = rospy.get_param("~rtprio_controller", False)
         self.CONTROL_RATE = rospy.get_param("oct_levitation/control_freq") # Set it to the vicon frequency
@@ -59,8 +64,6 @@ class ControlSessionNodeBase:
         self.INITIAL_DESIRED_ORIENTATION_EXYZ = np.array([0.0, 0.0, 0.0])
         self.MAX_LINEAR_VELOCITY = rospy.get_param("oct_levitation/max_linear_velocity")
         self.MAX_ANGULAR_VELOCITY = rospy.get_param("oct_levitation/max_angular_velocity")
-
-        self.ENABLE_STATE_ESTIMATOR = rospy.get_param("oct_levitation/delay_compensation_kf/enabled")
 
         if self.publish_computation_time:
             self.computation_time_pub = rospy.Publisher(self.computation_time_topic, VectorStamped, queue_size=1)
@@ -96,7 +99,7 @@ class ControlSessionNodeBase:
         self.trajectory_pause_time = 0.0
         self.traj_params_start_time = self.TRAJECTORY_PARAMS["start_time"]
         self.traj_params_end_time = self.TRAJECTORY_PARAMS["end_time"]
-        self.__TRAJ_FUNC : trajectories.TrajectoryCallable = trajectories.REGISTERED_TRAJECTORIES[self.TRAJECTORY_PARAMS["trajectory_name"]]
+        self.__TRAJ_FUNC : TrajectoryCallable = REGISTERED_TRAJECTORIES[self.TRAJECTORY_PARAMS["trajectory_name"]]
 
         if self.enable_trajectory_tracking:
             # Will publish the trajectory in the world frame
@@ -124,7 +127,6 @@ class ControlSessionNodeBase:
         # Assuming that the dipole object has been set at this point. We will then start all the topics
         # and important subscribers.
         self.tf_sub_topic = self.rigid_body_dipole.pose_frame
-        self.state_est_sub_topic = self.tf_sub_topic + "/state_estimate"
 
         if self.publish_desired_com_wrenches:
             self.com_wrench_publisher = rospy.Publisher(self.rigid_body_dipole.com_wrench_topic,
@@ -147,15 +149,10 @@ class ControlSessionNodeBase:
                                         # have been advertised.
             self.main_timer = rospy.Timer(rospy.Duration(1/self.control_rate), self.main_timer_loop)
         else:
-            if not self.ENABLE_STATE_ESTIMATOR:
-                # Directly use thg vicon topic
-                self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
-                                            queue_size=1)
-                rospy.loginfo(f"Subscribing to {self.tf_sub_topic} topic. State estimator disabled.")
-            else:
-                rospy.loginfo(f"Subscribing to {self.state_est_sub_topic} topic. State estimator enabled.")
-                self.state_est_sub = rospy.Subscriber(self.state_est_sub_topic, RigidBodyStateEstimate,
-                                                      self.state_est_sub_callback, queue_size=1)
+            # Directly use thg vicon topic
+            self.tf_sub = rospy.Subscriber(self.tf_sub_topic, TransformStamped, self.tfsub_callback,
+                                        queue_size=1)
+            rospy.loginfo(f"Subscribing to {self.tf_sub_topic} topic.")
         
         self.tf_reference_sub = None
         # Type casting to float to make sure JIT functions work with initial values.
@@ -181,7 +178,6 @@ class ControlSessionNodeBase:
         self.metadata_msg.full_controller_class_state.data = str(self.__dict__)
         self.metadata_msg.metadata.data += f"\n HARDWARE_CONNECTED: {self.__HARDWARE_CONNECTED} \n"
         self.metadata_msg.metadata.data += f"\n SIM_MODE: {self.sim_mode} \n"
-        self.metadata_msg.metadata.data += f"\n ESTIMATOR_ENABLED: {self.ENABLE_STATE_ESTIMATOR} \n"
 
         self.metadata_pub.publish(self.metadata_msg)
 
@@ -328,7 +324,7 @@ class ControlSessionNodeBase:
         
     def tfsub_callback(self, tf_msg: TransformStamped):
         """
-        Used when the state estimator is not used. Direct vicon feedback is used.
+        Uses direct vicon feedback.
         """
         start_time = time.perf_counter()
         ## TODO: Maybe it makes more sense to smooth start Fz
@@ -345,38 +341,6 @@ class ControlSessionNodeBase:
         quaternion = geometry.numpy_quaternion_from_tf_msg(tf_msg.transform)
         rpy = geometry.euler_xyz_from_quaternion(quaternion)
         self.callback_control_logic(position, quaternion, rpy, sft_coeff=coeff)
-        self.publish_topics()
-        stop_time = time.perf_counter()
-        if self.publish_computation_time:
-            self.current_computation_time = (stop_time - start_time)
-            self.computation_time_msg.header.stamp = rospy.Time.now()
-            self.computation_time_msg.vector = [self.current_computation_time]
-            self.computation_time_pub.publish(self.computation_time_msg)
-
-    def state_est_sub_callback(self, state_est_msg: RigidBodyStateEstimate):
-        """
-        Used when the state estimator is enabled. Then the state estimator's velocity estimates are used.
-        """
-        start_time = time.perf_counter()
-        ## TODO: Maybe it makes more sense to smooth start Fz
-        self.check_shutdown_rt()
-        self.update_time()
-        self.update_trajectory()
-        coeff = 1
-        if self.__SOFT_START:
-            coeff = self.soft_starter(1/self.CONTROL_RATE)
-            if np.allclose(coeff, 1.0):
-                coeff = 1.0
-                self.__SOFT_START = False # Disable it from this point onwards
-        pose: Pose = state_est_msg.pose
-        position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        quaternion = np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
-        rpy = np.array([state_est_msg.eXYZ_rpy.x, state_est_msg.eXYZ_rpy.y, state_est_msg.eXYZ_rpy.z])
-        twist: Twist = state_est_msg.twist
-        linear_velocity = np.array([twist.linear.x, twist.linear.y, twist.linear.z])
-        angular_velocity = np.array([twist.angular.x, twist.angular.y, twist.angular.z])
-        self.callback_control_logic(position, quaternion, rpy, linear_velocity=linear_velocity,
-                                    angular_velocity=angular_velocity, sft_coeff=coeff)
         self.publish_topics()
         stop_time = time.perf_counter()
         if self.publish_computation_time:

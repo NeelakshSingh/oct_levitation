@@ -11,58 +11,62 @@
   <img src="images/control_diagram.png" alt="Cover Image" width="100%">
 </p>
 
-## Package Structure :toolbox:
+## Package Structure
 ```
-oct_levitation
-├─── config/
-│    ├── controller_params.yaml              : Parameters for the levitation controller
-│    ├── experiment_analysis_params.yaml     : Parameters for recording and plotting experiment data
-│    ├── general_params.yaml                 : Specifies the selected rigid body for levitation
-│    │
-│    ├── rqt_multiplot/                      : rqt_multiplot configuration files for live plotting experiment data
-│    │
-│    └── rviz/                               : RViz configuration files for visualizing states and inputs of the levitated rigid body
+├── config/
+│   ├── calibration_files/
+│   │   └── octomag.yaml                     : MPEM calibration file for the OctoMag eMNS
+│   ├── controller_params.yaml               : Parameters for the levitation controller
+│   ├── experiment_analysis_params.yaml      : Parameters for recording and plotting experiment data
+│   ├── general_params.yaml                  : Specifies the selected rigid body for levitation
+│   ├── rqt_multiplot/                       : rqt_multiplot configuration files for live plotting experiment data
+│   └── rviz/                                : RViz configuration files for visualizing states and inputs of the levitated rigid body
 │
-├─── docs/
-│    └── rtprio_permissions.md               : Instructions to set real-time permissions for the controller node on Linux
+├── docs/
+│   └── rtprio_permissions.md                : Instructions to set real-time permissions for the controller node on Linux
 │
-├─── launch/
-│    ├── control_pipeline_base.launch         : Launchfile for drivers and Vicon interface
-│    ├── experiment_analysis.launch           : Launchfile for recorded data plotting script
-│    ├── experiment_recording.launch          : Launchfile for recording experiment data
-│    └── xyz_normal_control_com_wrench.launch : Overall launchfile for the controller
+├── images/
+│   ├── control_diagram.png
+│   └── cover.png
 │
-├─── msg/                                   : Custom ROS message definitions
+├── launch/
+│   ├── control_pipeline_base.launch         : Launchfile for drivers, Vicon interface, and data recording
+│   ├── experiment_analysis.launch           : Launchfile for recorded data plotting script
+│   ├── experiment_recording.launch          : Launchfile for recording experiment data via rosbag
+│   └── xyz_normal_control_com_wrench.launch : Overall launchfile for the controller
 │
-├─── scripts/
-│    ├── xyz_reduced_attitude_single_dipole.py : Main controller script with LQR, allocation, and reduced attitude control
-│    │
-│    └── utils/
-│         ├── experiment_analysis.py              : Extracts and plots recorded experiment data for analysis
-│         ├── experiment_data_summarizer.py       : Summarizes key details from recorded experiments into a text file
-│         ├── experiment_recorder.py              : Records experiment data into a ROS bag
-│         └── rviz_visualizations.py              : Publishes RViz visualizations for the levitated rigid body
+├── msg/
+│   ├── ControllerDetails.msg                : Custom message for logging controller metadata
+│   └── VectorStamped.msg                    : Custom message for timestamped vector quantities
 │
-└─── src/
-     └── oct_levitation/
-          ├── common.py                    : Common definitions and utilities
-          ├── control_node.py              : ROS node base for the levitation controller
-          ├── geometry.py                  : Geometry functions and utilities
-          ├── geometry_jit.py              : JIT-compiled geometry functions for real-time performance
-          ├── mechanical.py                : Classes and functions related to rigid body’s mechanical and magnetic properties
-          ├── numerical.py                 : Common numerical methods and utilities
-          ├── plotting.py                  : Plotting functions used for experiment data analysis
-          ├── processing_utils.py          : Data extraction utilities
-          ├── rigid_bodies.py              : Definitions of different rigid bodies used in experiments
-          └── trajectories.py              : Functions defining trajectories used in experiments
+├── scripts/
+│   ├── xyz_reduced_attitude_single_dipole.py : Main controller script with LQR, allocation, and reduced attitude control
+│   └── utils/
+│       ├── experiment_analysis.py           : Extracts and plots recorded experiment data for analysis
+│       ├── experiment_data_summarizer.py    : Summarizes key details from recorded experiments into a text file
+│       ├── experiment_recorder.py           : Records experiment data into a ROS bag and backs up controller files
+│       └── rviz_visualizations.py           : Publishes RViz visualizations for the levitated rigid body
+│
+└── src/
+    └── oct_levitation/
+        ├── common.py                        : Common definitions and utilities for the OctoMag calibration model
+        ├── control_node.py                  : ROS node base class for the levitation controller
+        ├── geometry_jit.py                  : JIT-compiled geometry functions for real-time and offline use
+        ├── mechanical.py                    : Classes for rigid body mechanical and magnetic properties
+        ├── numerical.py                     : Numerical methods including LQR design and control allocation
+        ├── plotting.py                      : Plotting functions used for experiment data analysis
+        ├── processing_utils.py              : Data extraction utilities for ROSbag files
+        ├── rigid_bodies.py                  : Definitions of rigid bodies used in experiments
+        ├── trajectories.py                  : Trajectory infrastructure: base classes, chaining, and registration
+        └── trajectory_definitions.py        : Concrete trajectory definitions used in experiments
 
 ```
 
-## Installation Instructions :hammer_and_wrench:
+## Installation Instructions
 This package has been tested on Ubuntu 20.04 with ROS Noetic.
 The rest of this section assumes that you have a working ROS Noetic installation and the knowledge required to create and build a ROS workspace.
 
-### Dependencies :package:
+### Dependencies
 This package depends on the following ROS packages for building and running the levitation controller:
 
 #### Vicon Bridge
@@ -84,7 +88,7 @@ cd ~/catkin_ws/src
 git clone https://github.com/ethz-msrl/Tesla_core_public.git
 ```
 
-### Clone and Build :construction:
+### Clone and Build
 Simply clone this repository into your ROS workspace's source directory and build it as follows:
 ```bash
 cd ~/catkin_ws/src
@@ -96,9 +100,9 @@ Give real-time permissions to the controller node by following the instructions 
 To make complete use of the experiment analysis script, install `xterm`:
 ```bash
 sudo apt-get install xterm
-``` 
+```
 
-### Hardware Interface to eMNS :electric_plug:
+### Hardware Interface to eMNS
 To interface with the OctoMag eMNS hardware, you need to install the proprietary driver software provided by MagnebotiX.
 Since it is not publicly available, we cannot provide direct installation instructions here.
 However, note that the codebase provided can be made to work with any eMNS provided that a suitable hardware interface node is implemented.
@@ -111,7 +115,7 @@ The initialization of this interface is done in the following line in the contro
 self.desired_currents_msg, self.currents_publisher, self.publish_currents_impl, shutdown_hook = init_system("JECB", self.__HARDWARE_CONNECTED, coil_nrs=self.__ACTIVE_DRIVERS)
 
 ```
-The `self.currents_publisher` is the topic Publisher and `self.publish_currents_impl` is a function which takes in the message and publishes it using the publisher. 
+The `self.currents_publisher` is the topic Publisher and `self.publish_currents_impl` is a function which takes in the message and publishes it using the publisher.
 This interface is specific to OctoMag and the user can feel free to modify all concerned parts of the code to suit their hardware interface needs.
 Finally, note the following lines in the launchfile `launch/control_pipeline_base.launch`:
 ```xml
@@ -122,7 +126,7 @@ Finally, note the following lines in the launchfile `launch/control_pipeline_bas
 This line mentions `tnb_mns_driver.launch`, which used to launch the proprietary OctoMag driver software not included in this repository.
 Therefore, you must remove/replace this line as appropriate to launch your own hardware interface node otherwise the main launchfile `xyz_normal_control_com_wrench.launch` will fail to run.
 
-## Levitate a Rigid Body :magic_wand:
+## Levitate a Rigid Body
 Follow these steps to run the levitation controller on a rigid body with a single magnetic dipole:
 
 1. Describe the mechanical properties of your levitator in `src/rigid_bodies.py`. Objects used in the experiments included in the research paper and the video are already defined there for reference. Make sure to properly define the orientation of each magnet in the stack consisting of the dipole. Give the levitator a unique name and register it with the functions provided.
@@ -146,7 +150,26 @@ Note that all scripts make use of the rigid body name to find the right data fil
 The experiment analysis script extracts and plots data, and opens the editor of your choice (nano in xterm by default) so that you can note down key observations from the experiment.
 These behaviors can be modified using the parameters defined in the launchfiles and the rosparam files inside the `config/` directory.
 
-## The System in Action :clapper:
+### Disabling the Experiment Data Recorder
+The experiment data recorder is enabled by default and runs as a separate node that records ROS bag files and backs up controller scripts for reproducibility.
+To disable it, pass `record_data:=false` when launching:
+```bash
+roslaunch oct_levitation xyz_normal_control_com_wrench.launch sim:=false hardware_connected:=true description:="experiment" record_data:=false
+```
+This prevents the `experiment_data_recorder` node from being launched (controlled by a conditional `<group>` block in `launch/control_pipeline_base.launch`). The controller and all other nodes continue to function normally.
+
+## Utility Scripts
+The `scripts/utils/` directory contains standalone ROS nodes and scripts that support the experiment workflow:
+
+- **`experiment_recorder.py`**: Launched automatically during experiments (unless `record_data:=false`). Creates a timestamped folder under `data/experiment_data/`, records all ROS topics into a bag file using `experiment_recording.launch`, and backs up the controller script, rigid body definitions, and trajectory definitions for reproducibility.
+
+- **`experiment_analysis.py`**: Post-processing script launched via `experiment_analysis.launch`. Extracts data from recorded bag files and generates plots for currents, poses, velocities, wrenches, field/gradient data, and condition numbers. Opens a text editor for noting observations. Controlled by parameters in `config/experiment_analysis_params.yaml`.
+
+- **`experiment_data_summarizer.py`**: Aggregates experiment metadata and observation notes from multiple experiment folders into a single `summary.txt` file. Launched via `experiment_analysis.launch` with `summarize:=true`.
+
+- **`rviz_visualizations.py`**: Publishes RViz visualization data including reduced attitude vectors, Euler angles, and COM wrench markers. Runs alongside the controller as a separate node launched from `control_pipeline_base.launch`.
+
+## The System in Action
 <p align="center">
   <a href="https://youtu.be/2jLZ28T4uew?si=ZkWapzc_8Rndw5Ex">
     <img src="https://img.youtube.com/vi/2jLZ28T4uew/maxresdefault.jpg" alt="Watch the video" width="600">
@@ -154,11 +177,11 @@ These behaviors can be modified using the parameters defined in the launchfiles 
 </p>
 
 <p align="center">
-  🎥 <a href="https://youtu.be/2jLZ28T4uew?si=ZkWapzc_8Rndw5Ex">Watch the demo on YouTube</a>
+  <a href="https://youtu.be/2jLZ28T4uew?si=ZkWapzc_8Rndw5Ex">Watch the demo on YouTube</a>
 </p>
 
 
-## BibTex Citation :books:
+## BibTex Citation
 
 ```bibtex
 @article{Singh2025RemoteMagneticLevitation,
@@ -170,5 +193,5 @@ These behaviors can be modified using the parameters defined in the launchfiles 
 }
 ```
 
-## Acknowledgements :handshake:
+## Acknowledgements
 We thank Prof. Peter Berkelman for providing valuable insights based on his extensive experience in developing magnetic levitation systems. We also thank MagnebotiX AG for technical support with the OctoMag eMNS hardware. We gratefully acknowledge the support of the Max Planck Institute for Intelligent Systems, Tübingen, Germany, for providing access to their high-frequency motion capture system used in our experiments. A special thanks to Thomas Steinbrenner and Felix Grüninger for their help with hardware and electronics design and fabrication essential to the project. Finally, we thank the authors of all open-source software packages used in this work as mentioned in the installation instructions.
