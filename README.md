@@ -185,13 +185,17 @@ The `scripts/utils/` directory contains standalone ROS nodes and scripts that su
 
 ```bibtex
 @article{Singh2025RemoteMagneticLevitation,
-  author  = {Singh, Neelaksh and Zughaibi, Jasan and von Arx, Denis and Nelson, Bradley J. and Muehlebach, Michael},
-  title   = {Remote Magnetic Levitation Using Reduced Attitude Control and Parametric Field Models},
-  journal = {arXiv preprint arXiv:2512.15207},
-  year    = {2025},
-  url     = {https://arxiv.org/abs/2512.15207}
-}
+  author={Singh, Neelaksh and Zughaibi, Jasan and von Arx, Denis and Nelson, Bradley J. and Muehlebach, Michael},
+  journal={IEEE Robotics and Automation Letters}, 
+  title={Remote Magnetic Levitation Using Reduced Attitude Control and Parametric Field Models}, 
+  year={2026},
+  volume={11},
+  number={7},
+  pages={8028-8035},
+  doi={10.1109/LRA.2026.3692065}}
 ```
+
+Arxiv: https://arxiv.org/abs/2512.15207
 
 ## Acknowledgements
 We thank Prof. Peter Berkelman for providing valuable insights based on his extensive experience in developing magnetic levitation systems. We also thank MagnebotiX AG for technical support with the OctoMag eMNS hardware. We gratefully acknowledge the support of the Max Planck Institute for Intelligent Systems, Tübingen, Germany, for providing access to their high-frequency motion capture system used in our experiments. A special thanks to Thomas Steinbrenner and Felix Grüninger for their help with hardware and electronics design and fabrication essential to the project. Finally, we thank the authors of all open-source software packages used in this work as mentioned in the installation instructions.
